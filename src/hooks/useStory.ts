@@ -12,6 +12,7 @@ export function useStory(slug: string | null) {
   useEffect(() => {
     if (!slug) {
       setStory(null);
+      setRelatedStories([]);
       setIsLoading(false);
       return;
     }
@@ -22,29 +23,19 @@ export function useStory(slug: string | null) {
 
     const loadStory = async () => {
       try {
-        const found = await storyService.getStoryBySlug(slug);
+        const result = await storyService.getStoryBySlug(slug);
         if (!isMounted) return;
 
-        if (!found) {
+        if (!result.story) {
           setError('Story not found');
           setStory(null);
+          setRelatedStories([]);
         } else {
-          setStory(found);
-          // Increment view
-          storyService.incrementStoryViews(found.id).then((newViews) => {
-            if (isMounted && newViews) {
-              setStory((prev) => (prev ? { ...prev, views: newViews } : prev));
-            }
-          });
+          setStory(result.story);
+          setRelatedStories(result.relatedStories || []);
 
-          // Update SEO head
-          SEOService.updateHead(SEOService.generateStorySEO(found));
-
-          // Fetch related stories
-          const related = await storyService.getRelatedStories(found.category, found.slug, 3);
-          if (isMounted) {
-            setRelatedStories(related);
-          }
+          // Update SEO head metadata
+          SEOService.updateHead(SEOService.generateStorySEO(result.story));
         }
       } catch (err) {
         if (isMounted) {

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { BookOpen, Moon, Sun, Search, Sparkles } from 'lucide-react';
+import React from 'react';
+import { BookOpen, Moon, Sun, Sparkles, Lock } from 'lucide-react';
 import { Category, ReadingTheme } from '../../types/story';
 
 interface HeaderProps {
@@ -11,6 +11,7 @@ interface HeaderProps {
   onToggleTheme: () => void;
   onOpenSitemap: () => void;
   onOpenCompliance: (type: 'privacy' | 'terms' | 'ads') => void;
+  onOpenAdmin: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -19,6 +20,7 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleTheme,
   onOpenSitemap,
   onOpenCompliance,
+  onOpenAdmin,
 }) => {
   return (
     <header
@@ -66,6 +68,18 @@ export const Header: React.FC<HeaderProps> = ({
             className="text-xs font-medium px-2.5 py-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           >
             Sitemap
+          </button>
+
+          {/* Admin Panel Direct Action */}
+          <button
+            type="button"
+            id="header-admin-btn"
+            onClick={onOpenAdmin}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-indigo-600 hover:text-white dark:hover:bg-indigo-600 dark:hover:text-white text-xs font-semibold transition-all"
+            title="Admin Login & Dashboard"
+          >
+            <Lock className="w-3.5 h-3.5" />
+            <span className="hidden md:inline">Admin</span>
           </button>
 
           {/* Dark / Light Mode Toggle */}

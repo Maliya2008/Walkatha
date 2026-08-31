@@ -58,7 +58,7 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
       .filter((p) => p.length > 0);
   }, [story.fullContent]);
 
-  const formattedDate = new Date(story.uploadDate).toLocaleDateString('en-US', {
+  const formattedDate = new Date(story.uploadDate || story.uploadedDate || Date.now()).toLocaleDateString('en-US', {
     month: 'long',
     day: 'numeric',
     year: 'numeric',
@@ -121,9 +121,14 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
           </div>
         </div>
 
-        {/* Top Header Ad Placement (Monetag Leaderboard / Banner) */}
+        {/* Slot 1: Top Header Ad Placement (Monetag Leaderboard / Banner) */}
         <div className="my-4">
-          <MonetagAdSlot type="header" slotLabel="Header Sponsor (Monetag Top Unit)" />
+          <MonetagAdSlot
+            type="header"
+            slotIndex={1}
+            customAdCode={story.individualAdCode}
+            slotLabel="Header Sponsor (Monetag Top Unit)"
+          />
         </div>
 
         {/* Story Article Header */}
@@ -154,13 +159,13 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
           <div className="flex flex-wrap items-center justify-between gap-4 py-3 border-y border-slate-200 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400">
             <div className="flex items-center gap-3">
               <img
-                src={story.author.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80'}
-                alt={story.author.name}
+                src={story.author?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80'}
+                alt={story.author?.name || 'Author'}
                 className="w-10 h-10 rounded-full object-cover border border-slate-200 dark:border-slate-700"
               />
               <div>
                 <span className="block font-bold text-slate-900 dark:text-slate-100 text-sm">
-                  {story.author.name}
+                  {story.author?.name || 'Editorial Staff'}
                 </span>
                 <span className="text-[11px] text-slate-400">Published Author</span>
               </div>
@@ -177,7 +182,7 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
               </span>
               <span className="flex items-center gap-1">
                 <Eye className="w-3.5 h-3.5 text-slate-400" />
-                {story.views.toLocaleString()} views
+                {(story.views || 0).toLocaleString()} views
               </span>
             </div>
           </div>
@@ -211,22 +216,14 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
                   {paragraph}
                 </p>
 
-                {/* Monetag In-Article Ad Slot: Inserted automatically after paragraph 2 */}
+                {/* Slot 2: Monetag In-Article Ad Slot: Inserted automatically after paragraph 2 */}
                 {index === 1 && paragraphs.length > 2 && (
                   <div className="my-8">
                     <MonetagAdSlot
                       type="in-article"
+                      slotIndex={2}
+                      customAdCode={story.individualAdCode}
                       slotLabel="Sponsored Story Break (Monetag Mid-Article Unit 1)"
-                    />
-                  </div>
-                )}
-
-                {/* Second Monetag In-Article Ad Slot for longer stories (after paragraph 4) */}
-                {index === 3 && paragraphs.length > 4 && (
-                  <div className="my-8">
-                    <MonetagAdSlot
-                      type="in-article"
-                      slotLabel="Sponsored Story Break (Monetag Mid-Article Unit 2)"
                     />
                   </div>
                 )}
@@ -262,8 +259,8 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
           {/* Author Card Box */}
           <div className="my-8 p-5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-start gap-4">
             <img
-              src={story.author.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80'}
-              alt={story.author.name}
+              src={story.author?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80'}
+              alt={story.author?.name || 'Author'}
               className="w-12 h-12 rounded-full object-cover border border-slate-200 dark:border-slate-700"
             />
             <div>
@@ -271,18 +268,23 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
                 About the Author
               </span>
               <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                {story.author.name}
+                {story.author?.name || 'Editorial Staff'}
               </h4>
               <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
-                {story.author.bio || 'Author and creative writer sharing short stories on the web.'}
+                {story.author?.bio || 'Author and creative writer sharing short stories on the web.'}
               </p>
             </div>
           </div>
         </main>
 
-        {/* Footer Monetag Ad Placement */}
+        {/* Slot 3: Footer Monetag Ad Placement */}
         <div className="my-6">
-          <MonetagAdSlot type="footer" slotLabel="Footer Sponsor (Monetag Bottom Unit)" />
+          <MonetagAdSlot
+            type="footer"
+            slotIndex={3}
+            customAdCode={story.individualAdCode}
+            slotLabel="Footer Sponsor (Monetag Bottom Unit)"
+          />
         </div>
 
         {/* Related Stories Carousel/Grid */}

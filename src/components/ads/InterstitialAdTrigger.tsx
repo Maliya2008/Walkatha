@@ -34,7 +34,6 @@ export const InterstitialAdModal: React.FC<InterstitialAdModalProps> = ({ isOpen
     <div
       id="interstitial-ad-overlay"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in"
-      data-monetag-interstitial-zone={config.interstitialZoneId}
     >
       <div className="relative w-full max-w-lg rounded-2xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800 p-6 text-center">
         {/* Close Button / Countdown */}
@@ -70,7 +69,7 @@ export const InterstitialAdModal: React.FC<InterstitialAdModalProps> = ({ isOpen
 
           <div className="my-6 p-8 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 flex flex-col items-center justify-center">
             <span className="text-xs font-mono text-slate-600 dark:text-slate-400">
-              Zone: {config.interstitialZoneId}
+              {config.adsEnabled ? 'Status: Active Monetag Delivery' : 'Status: Ads Disabled'}
             </span>
             <span className="text-[11px] text-slate-400 mt-1">
               High eCPM Interstitial Placement

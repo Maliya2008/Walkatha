@@ -1,62 +1,99 @@
-import { MonetagAdConfig } from '../types/story';
+import { AdvertisementSettings } from '../types/admin';
 
-/**
- * Monetag Ad Service
- * Configures zone IDs, placeholder rendering, and provides future script injection hooks.
- * Does not hardcode fake or spam ads; provides dedicated container components
- * conforming to Monetag banner & in-page specifications.
- */
-
-const DEFAULT_CONFIG: MonetagAdConfig = {
-  headerZoneId: 'monetag-header-zone-728x90',
-  inArticleZoneId: 'monetag-inarticle-zone-300x250',
-  sidebarZoneId: 'monetag-sidebar-zone-300x600',
-  footerZoneId: 'monetag-footer-zone-728x90',
-  interstitialZoneId: 'monetag-interstitial-zone-vignette',
-  enabled: true,
-  testMode: true, // In testMode, subtle clean developer placeholders show where Monetag scripts render
+const DEFAULT_CONFIG: AdvertisementSettings = {
+  globalAdCode: '',
+  adsEnabled: true,
+  adsPerPage: 2,
+  headerAdCode: '',
+  inArticleAdCode: '',
+  footerAdCode: '',
+  testMode: true,
 };
 
 class AdService {
-  private config: MonetagAdConfig = { ...DEFAULT_CONFIG };
+  private config: AdvertisementSettings = { ...DEFAULT_CONFIG };
   private initialized = false;
+  private fetched = false;
 
-  public getConfig(): MonetagAdConfig {
+  constructor() {
+    this.fetchConfig();
+  }
+
+  public async fetchConfig(): Promise<AdvertisementSettings> {
+    try {
+      const res = await fetch('/api/public/ads/config');
+      if (res.ok) {
+        const data = await res.json();
+        this.config = {
+          ...this.config,
+          ...data,
+        };
+        this.fetched = true;
+      }
+    } catch {
+      // Use defaults if fetch fails
+    }
+    return this.config;
+  }
+
+  public getConfig(): AdvertisementSettings {
     return { ...this.config };
   }
 
-  public updateConfig(newConfig: Partial<MonetagAdConfig>): void {
+  public updateConfig(newConfig: Partial<AdvertisementSettings>): void {
     this.config = { ...this.config, ...newConfig };
   }
 
-  public toggleTestMode(): boolean {
-    this.config.testMode = !this.config.testMode;
-    return this.config.testMode;
+  public isAdsEnabled(): boolean {
+    return Boolean(this.config.adsEnabled);
+  }
+
+  public getAdsPerPage(): 1 | 2 | 3 {
+    return this.config.adsPerPage || 2;
+  }
+
+  public getGlobalAdCode(): string {
+    return this.config.globalAdCode || '';
   }
 
   /**
-   * Initializes Monetag SDK when real zone IDs are provided in production.
+   * Sanitizes and transforms raw ad HTML/Script to ensure all anchor links open externally
+   * with target="_blank" and rel="noopener noreferrer"
    */
-  public initMonetagSdk(): void {
-    if (this.initialized || !this.config.enabled || this.config.testMode) return;
-    
-    // In production with live Monetag scripts:
-    // e.g., dynamically loads Monetag script tag <script src="//monetag-sdk-url..."></script>
-    this.initialized = true;
-    console.info('[Monetag SDK] Initialized with zones:', this.config);
+  public sanitizeAndEnforceExternalLinks(html: string): string {
+    if (!html) return '';
+
+    // Replace or add target="_blank" and rel="noopener noreferrer" to all <a> tags
+    return html.replace(/<a\s+(?:[^>]*?\s+)?href=["']([^"']*)["']([^>]*)>/gi, (_match, href, rest) => {
+      const hasTarget = /target=["'][^"']*["']/i.test(rest);
+      const hasRel = /rel=["'][^"']*["']/i.test(rest);
+
+      let cleanRest = rest;
+      if (hasTarget) {
+        cleanRest = cleanRest.replace(/target=["'][^"']*["']/gi, 'target="_blank"');
+      } else {
+        cleanRest += ' target="_blank"';
+      }
+
+      if (hasRel) {
+        cleanRest = cleanRest.replace(/rel=["'][^"']*["']/gi, 'rel="noopener noreferrer"');
+      } else {
+        cleanRest += ' rel="noopener noreferrer"';
+      }
+
+      return `<a href="${href}"${cleanRest}>`;
+    });
   }
 
   /**
-   * Triggers an Interstitial ad on story transition if enabled
+   * Triggers an Interstitial/Vignette ad on story transition if master adsEnabled is ON
    */
   public triggerInterstitial(onComplete?: () => void): void {
-    if (!this.config.enabled) {
+    if (!this.config.adsEnabled) {
       if (onComplete) onComplete();
       return;
     }
 
-    // In production, invoke Monetag interstitial show function:
-    // window.showMonetagInterstitial?.()
     if (onComplete) {
       onComplete();
     }

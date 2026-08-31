@@ -90,5 +90,6 @@ export function useStories(initialParams: StoryFilterParams = {}) {
     setPage,
     setSortBy,
     refresh: fetchStories,
+    refreshStories: fetchStories,
   };
 }

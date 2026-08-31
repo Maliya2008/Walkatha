@@ -14,11 +14,17 @@ import { StoryReader } from './components/stories/StoryReader';
 import { SitemapModal } from './components/common/SitemapModal';
 import { PrivacyTermsModal } from './components/common/PrivacyTermsModal';
 import { InterstitialAdModal } from './components/ads/InterstitialAdTrigger';
+import { AdminRoot } from './components/admin/AdminRoot';
 import { SEOService } from './services/seoService';
 
 export default function App() {
+  const [isAdminView, setIsAdminView] = useState<boolean>(() => {
+    const path = window.location.pathname;
+    const hash = window.location.hash;
+    return path.startsWith('/admin') || hash === '#admin' || hash.startsWith('#/admin');
+  });
+
   const [currentSlug, setCurrentSlug] = useState<string | null>(() => {
-    // Check initial path (e.g. /story/the-lost-kingdom or #/story/the-lost-kingdom)
     const path = window.location.pathname;
     const match = path.match(/^\/story\/([a-zA-Z0-9-_]+)/);
     if (match) return match[1];
@@ -58,6 +64,7 @@ export default function App() {
     setSearch,
     setPage,
     setSortBy,
+    refreshStories,
   } = useStories();
 
   // Active single story hook
@@ -72,11 +79,20 @@ export default function App() {
   useEffect(() => {
     const handlePopState = () => {
       const path = window.location.pathname;
+      const hash = window.location.hash;
+
+      if (path.startsWith('/admin') || hash === '#admin' || hash.startsWith('#/admin')) {
+        setIsAdminView(true);
+        setCurrentSlug(null);
+        return;
+      }
+
+      setIsAdminView(false);
       const match = path.match(/^\/story\/([a-zA-Z0-9-_]+)/);
       if (match) {
         setCurrentSlug(match[1]);
       } else {
-        const hashMatch = window.location.hash.match(/^#\/story\/([a-zA-Z0-9-_]+)/);
+        const hashMatch = hash.match(/^#\/story\/([a-zA-Z0-9-_]+)/);
         if (hashMatch) {
           setCurrentSlug(hashMatch[1]);
         } else {
@@ -91,6 +107,11 @@ export default function App() {
 
   // Update default SEO tags when on Home / Gallery
   useEffect(() => {
+    if (isAdminView) {
+      document.title = 'Admin Portal - StoryHub Management';
+      return;
+    }
+
     if (!currentSlug) {
       SEOService.updateHead({
         title: params.category && params.category !== 'all'
@@ -102,10 +123,10 @@ export default function App() {
         canonicalUrl: window.location.origin,
       });
     }
-  }, [currentSlug, params.category]);
+  }, [isAdminView, currentSlug, params.category]);
 
   const handleReadStory = useCallback((slug: string) => {
-    // Clean URL pushState
+    setIsAdminView(false);
     try {
       window.history.pushState({ slug }, '', `/story/${slug}`);
     } catch {
@@ -116,18 +137,31 @@ export default function App() {
   }, []);
 
   const handleBackToGallery = useCallback(() => {
+    setIsAdminView(false);
     try {
       window.history.pushState({}, '', '/');
     } catch {
       window.location.hash = '';
     }
     setCurrentSlug(null);
+    refreshStories();
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }, [refreshStories]);
+
+  const handleOpenAdmin = useCallback(() => {
+    setIsAdminView(true);
+    setCurrentSlug(null);
+    try {
+      window.history.pushState({ admin: true }, '', '/admin');
+    } catch {
+      window.location.hash = '#admin';
+    }
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, []);
 
   const handleSelectCategory = (catSlug: string) => {
     setCategory(catSlug);
-    if (currentSlug) {
+    if (currentSlug || isAdminView) {
       handleBackToGallery();
     }
   };
@@ -135,6 +169,18 @@ export default function App() {
   const handleToggleTheme = () => {
     setTheme(theme === 'dark' ? 'light' : 'dark');
   };
+
+  // If Admin View is active, render the full admin experience
+  if (isAdminView) {
+    return (
+      <AdminRoot
+        onBackToPublic={handleBackToGallery}
+        onViewStoryPublic={(slug) => {
+          handleReadStory(slug);
+        }}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 selection:bg-indigo-500 selection:text-white transition-colors duration-150">
@@ -148,6 +194,7 @@ export default function App() {
         onToggleTheme={handleToggleTheme}
         onOpenSitemap={() => setIsSitemapOpen(true)}
         onOpenCompliance={(type) => setComplianceType(type)}
+        onOpenAdmin={handleOpenAdmin}
       />
 
       {/* Main Content Router View */}
@@ -189,7 +236,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={handleBackToGallery}
-                className="px-4 py-2 rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-xs font-semibold"
+                className="px-4 py-2 rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-xs font-semibold cursor-pointer"
               >
                 Return to Gallery
               </button>
@@ -222,6 +269,7 @@ export default function App() {
         onSelectCategory={handleSelectCategory}
         onOpenSitemap={() => setIsSitemapOpen(true)}
         onOpenCompliance={(type) => setComplianceType(type)}
+        onOpenAdmin={handleOpenAdmin}
       />
 
       {/* SEO Sitemap & Index Modal */}

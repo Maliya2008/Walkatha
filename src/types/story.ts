@@ -26,11 +26,13 @@ export interface Story {
   tags: string[];
   author: Author;
   uploadDate: string; // ISO String format (e.g. 2026-08-31T09:00:00Z)
+  uploadedDate?: string; // Database field alias
   updatedDate: string;
   readingTime: number; // in minutes
   views: number;
   featured: boolean;
   published: boolean;
+  individualAdCode?: string; // Per-story specific Monetag advertisement code
   metaTitle?: string;
   metaDescription?: string;
 }

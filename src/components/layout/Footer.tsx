@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookOpen, Heart, Shield } from 'lucide-react';
+import { BookOpen, Shield, Lock } from 'lucide-react';
 import { Category } from '../../types/story';
 
 interface FooterProps {
@@ -7,6 +7,7 @@ interface FooterProps {
   onSelectCategory: (categorySlug: string) => void;
   onOpenSitemap: () => void;
   onOpenCompliance: (type: 'privacy' | 'terms' | 'ads') => void;
+  onOpenAdmin: () => void;
 }
 
 export const Footer: React.FC<FooterProps> = ({
@@ -14,6 +15,7 @@ export const Footer: React.FC<FooterProps> = ({
   onSelectCategory,
   onOpenSitemap,
   onOpenCompliance,
+  onOpenAdmin,
 }) => {
   return (
     <footer
@@ -94,6 +96,15 @@ export const Footer: React.FC<FooterProps> = ({
                   className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
                 >
                   XML Sitemap / Index
+                </button>
+              </li>
+              <li className="pt-1">
+                <button
+                  onClick={onOpenAdmin}
+                  className="inline-flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400 font-semibold hover:underline"
+                >
+                  <Lock className="w-3 h-3" />
+                  <span>Admin Management Portal</span>
                 </button>
               </li>
             </ul>

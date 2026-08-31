@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  }
+
+  body {
+    @apply antialiased;
+    text-rendering: optimizeLegibility;
+  }
+}
+
+/* Custom Sepia Mode Styling for Comfortable Long-Form Reading */
+html.sepia {
+  background-color: #fbf7ee;
+  color: #423326;
+}
+
+html.sepia #main-app-header,
+html.sepia #main-app-footer {
+  background-color: #f4ebd9;
+  border-color: #e5d7bc;
+  color: #5b4636;
+}
+
+/* Hide scrollbar for category pill rows */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

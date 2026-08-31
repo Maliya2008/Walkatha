@@ -1,19 +1,60 @@
 <!doctype html>
-<html lang="en">
+<html lang="si" class="scroll-smooth">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Short Stories - Read Modern Short Stories Online</title>
-    <meta name="description" content="A modern, lightweight, responsive short story platform designed for seamless reading and monetization readiness." />
-    <meta property="og:title" content="Short Stories - Read Modern Short Stories Online" />
-    <meta property="og:description" content="A modern, lightweight, responsive short story platform designed for seamless reading and monetization readiness." />
+    <title>Walkathawa (වල් කතාව) | Sinhala Stories Online</title>
+    
+    <!-- Primary SEO Metadata -->
+    <meta name="description" content="Walkathawa (වල් කතාව) is a place to read Sinhala stories online. Discover new Sinhala katha, romantic stories, fictional stories, and interesting short stories updated regularly." />
+    <meta name="keywords" content="walkatha, walakatha, walkathawa, වල් කතා, වල්කතා, sinhala stories, sinhala katha, sinhala short stories, sinhala kathandara, sinhala love stories, sinhala romantic stories, sinhala novels, new sinhala stories, read sinhala stories online" />
+    <meta name="author" content="Walkathawa" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <link rel="canonical" href="https://walkatha-amber.vercel.app/" />
+
+    <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website" />
+    <meta property="og:title" content="Walkathawa (වල් කතාව) - Sinhala Stories Online" />
+    <meta property="og:description" content="Read and discover Sinhala stories, katha, and new story collections on Walkathawa." />
+    <meta property="og:url" content="https://walkatha-amber.vercel.app/" />
+    <meta property="og:site_name" content="Walkathawa (වල් කතාව)" />
+    <meta property="og:image" content="https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1200&q=80" />
+    <meta property="og:image:alt" content="Walkathawa Sinhala Stories Online" />
+    <meta property="og:locale" content="si_LK" />
+
+    <!-- Twitter Cards -->
     <meta name="twitter:card" content="summary_large_image" />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Merriweather:ital,wght@0,300;0,400;0,700;1,300&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <meta name="twitter:title" content="Walkathawa (වල් කතාව)" />
+    <meta name="twitter:description" content="Read Sinhala stories online." />
+    <meta name="twitter:image" content="https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1200&q=80" />
+
+    <!-- Fonts preconnect for performance -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Abhaya+Libre:wght@400;500;600;700;800&family=Noto+Sans+Sinhala:wght@300;400;500;600;700&family=Merriweather:ital,wght@0,300;0,400;0,700;1,300&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+    <!-- Schema.org WebSite Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "Walkathawa",
+      "alternateName": "වල් කතාව",
+      "url": "https://walkatha-amber.vercel.app/",
+      "description": "Walkathawa (වල් කතාව) is a place to read Sinhala stories online. Discover new Sinhala katha, romantic stories, fictional stories, and interesting short stories updated regularly.",
+      "inLanguage": "si",
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": {
+          "@type": "EntryPoint",
+          "urlTemplate": "https://walkatha-amber.vercel.app/?search={search_term_string}"
+        },
+        "query-input": "required name=search_term_string"
+      }
+    }
+    </script>
   </head>
-  <body>
+  <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased font-sans transition-colors duration-200">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

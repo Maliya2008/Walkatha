@@ -25,9 +25,18 @@ export interface PostAdvertisement {
 
 export interface SiteSettings {
   siteName: string;
+  alternateName?: string;
   logo: string;
   tagline: string;
   contactEmail: string;
+  // SEO Configuration
+  metaTitle: string;
+  metaDescription: string;
+  keywords: string;
+  ogImage: string;
+  googleAnalyticsId?: string;
+  searchConsoleVerification?: string;
+  publisherName?: string;
   defaultSettings?: Record<string, unknown>;
 }
 

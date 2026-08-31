@@ -106,10 +106,20 @@ function initDatabase(): void {
   };
 
   const defaultSettings: SiteSettings = {
-    siteName: 'Short Stories',
+    siteName: 'Walkathawa (වල් කතාව)',
+    alternateName: 'වල් කතාව',
     logo: '/icon.png',
-    tagline: 'Modern, high-speed short stories publication platform',
-    contactEmail: 'contact@storyhub.com',
+    tagline: 'A place to read Sinhala stories online',
+    contactEmail: 'contact@walkathawa.com',
+    metaTitle: 'Walkathawa (වල් කතාව) | Sinhala Stories Online',
+    metaDescription:
+      'Walkathawa (වල් කතාව) is a place to read Sinhala stories online. Discover new Sinhala katha, romantic stories, fictional stories, and interesting short stories updated regularly.',
+    keywords:
+      'walkatha, walakatha, walkathawa, වල් කතා, වල්කතා, sinhala stories, sinhala katha, sinhala short stories, sinhala kathandara, sinhala love stories, sinhala adult stories, sinhala romantic stories, sinhala fictional stories, sinhala novels, new sinhala stories, latest sinhala katha, online sinhala stories, read sinhala stories online',
+    ogImage: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1200&q=80',
+    googleAnalyticsId: '',
+    searchConsoleVerification: '',
+    publisherName: 'Walkathawa (වල් කතාව)',
   };
 
   if (fs.existsSync(DB_FILE)) {
@@ -289,6 +299,98 @@ app.get('/api/public/ads/config', (_req: Request, res: Response) => {
 // Public: Get Categories
 app.get('/api/public/categories', (_req: Request, res: Response) => {
   res.json(INITIAL_CATEGORIES);
+});
+
+// Public: Get Public Site & SEO Settings
+app.get('/api/public/settings', (_req: Request, res: Response) => {
+  res.json({
+    siteName: db.settings?.siteName || 'Walkathawa (වල් කතාව)',
+    alternateName: db.settings?.alternateName || 'වල් කතාව',
+    tagline: db.settings?.tagline || 'A place to read Sinhala stories online',
+    logo: db.settings?.logo || '/icon.png',
+    metaTitle: db.settings?.metaTitle || 'Walkathawa (වල් කතාව) | Sinhala Stories Online',
+    metaDescription: db.settings?.metaDescription || 'Walkathawa (වල් කතාව) is a place to read Sinhala stories online. Discover new Sinhala katha, romantic stories, fictional stories, and interesting short stories updated regularly.',
+    keywords: db.settings?.keywords || 'walkatha, walakatha, walkathawa, වල් කතා, වල්කතා, sinhala stories, sinhala katha, sinhala short stories, sinhala kathandara, sinhala love stories, sinhala romantic stories, sinhala novels, new sinhala stories, read sinhala stories online',
+    ogImage: db.settings?.ogImage || 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1200&q=80',
+    googleAnalyticsId: db.settings?.googleAnalyticsId || '',
+    searchConsoleVerification: db.settings?.searchConsoleVerification || '',
+    publisherName: db.settings?.publisherName || 'Walkathawa (වල් කතාව)',
+  });
+});
+
+// --- DYNAMIC SEO SITEMAP.XML ---
+app.get('/sitemap.xml', (req: Request, res: Response) => {
+  const host = req.get('host') || 'walkatha-amber.vercel.app';
+  const protocol = req.protocol === 'https' || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'https';
+  const baseUrl = `${protocol}://${host}`;
+
+  const publishedStories = db.stories.filter((s) => s.published);
+  const nowISO = new Date().toISOString();
+
+  let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+  xml += `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:news="http://www.google.com/schemas/sitemap-news/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n`;
+
+  // 1. Homepage
+  xml += `  <url>\n`;
+  xml += `    <loc>${baseUrl}/</loc>\n`;
+  xml += `    <lastmod>${nowISO}</lastmod>\n`;
+  xml += `    <changefreq>daily</changefreq>\n`;
+  xml += `    <priority>1.0</priority>\n`;
+  xml += `  </url>\n`;
+
+  // 2. Categories
+  INITIAL_CATEGORIES.filter((c) => c.slug !== 'all').forEach((cat) => {
+    xml += `  <url>\n`;
+    xml += `    <loc>${baseUrl}/?category=${cat.slug}</loc>\n`;
+    xml += `    <lastmod>${nowISO}</lastmod>\n`;
+    xml += `    <changefreq>weekly</changefreq>\n`;
+    xml += `    <priority>0.8</priority>\n`;
+    xml += `  </url>\n`;
+  });
+
+  // 3. Published Stories
+  publishedStories.forEach((story) => {
+    const modTime = story.updatedDate || story.uploadDate || story.uploadedDate || nowISO;
+    const storyUrl = `${baseUrl}/story/${story.slug}`;
+    xml += `  <url>\n`;
+    xml += `    <loc>${storyUrl}</loc>\n`;
+    xml += `    <lastmod>${new Date(modTime).toISOString()}</lastmod>\n`;
+    xml += `    <changefreq>weekly</changefreq>\n`;
+    xml += `    <priority>0.9</priority>\n`;
+    if (story.coverImage) {
+      xml += `    <image:image>\n`;
+      xml += `      <image:loc>${story.coverImage}</image:loc>\n`;
+      xml += `      <image:title>${story.title.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</image:title>\n`;
+      xml += `    </image:image>\n`;
+    }
+    xml += `  </url>\n`;
+  });
+
+  xml += `</urlset>`;
+
+  res.header('Content-Type', 'application/xml');
+  res.send(xml);
+});
+
+// --- ROBOTS.TXT ---
+app.get('/robots.txt', (req: Request, res: Response) => {
+  const host = req.get('host') || 'walkatha-amber.vercel.app';
+  const protocol = req.protocol === 'https' || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'https';
+  const baseUrl = `${protocol}://${host}`;
+
+  const robots = `# Robots.txt for Walkathawa (වල් කතාව)
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /api/admin
+Disallow: /api/auth
+
+# Sitemap Index
+Sitemap: ${baseUrl}/sitemap.xml
+`;
+
+  res.header('Content-Type', 'text/plain');
+  res.send(robots);
 });
 
 // --- AUTHENTICATION APIS ---
@@ -684,14 +786,35 @@ app.get('/api/admin/settings', requireAuth, (_req: AuthenticatedRequest, res: Re
 
 // PUT /api/admin/settings
 app.put('/api/admin/settings', requireAuth, (req: AuthenticatedRequest, res: Response) => {
-  const { siteName, logo, tagline, contactEmail } = req.body;
+  const {
+    siteName,
+    alternateName,
+    logo,
+    tagline,
+    contactEmail,
+    metaTitle,
+    metaDescription,
+    keywords,
+    ogImage,
+    googleAnalyticsId,
+    searchConsoleVerification,
+    publisherName,
+  } = req.body;
 
   db.settings = {
     ...db.settings,
-    siteName: siteName || db.settings.siteName,
-    logo: logo || db.settings.logo,
-    tagline: tagline || db.settings.tagline,
-    contactEmail: contactEmail || db.settings.contactEmail,
+    siteName: siteName !== undefined ? siteName : db.settings.siteName,
+    alternateName: alternateName !== undefined ? alternateName : db.settings.alternateName,
+    logo: logo !== undefined ? logo : db.settings.logo,
+    tagline: tagline !== undefined ? tagline : db.settings.tagline,
+    contactEmail: contactEmail !== undefined ? contactEmail : db.settings.contactEmail,
+    metaTitle: metaTitle !== undefined ? metaTitle : db.settings.metaTitle,
+    metaDescription: metaDescription !== undefined ? metaDescription : db.settings.metaDescription,
+    keywords: keywords !== undefined ? keywords : db.settings.keywords,
+    ogImage: ogImage !== undefined ? ogImage : db.settings.ogImage,
+    googleAnalyticsId: googleAnalyticsId !== undefined ? googleAnalyticsId : db.settings.googleAnalyticsId,
+    searchConsoleVerification: searchConsoleVerification !== undefined ? searchConsoleVerification : db.settings.searchConsoleVerification,
+    publisherName: publisherName !== undefined ? publisherName : db.settings.publisherName,
   };
 
   saveDatabase();

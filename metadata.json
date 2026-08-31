@@ -1,6 +1,7 @@
 {
-  "name": "Short Stories",
-  "description": "A modern, lightweight, responsive short story platform designed for seamless reading and monetization readiness.",
+  "name": "Walkathawa (වල් කතාව)",
+  "description": "Walkathawa (වල් කතාව) is a place to read Sinhala stories online. Discover new Sinhala katha, romantic stories, fictional stories, and interesting short stories updated regularly.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
+

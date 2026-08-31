@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookOpen, Moon, Sun, Sparkles, Lock } from 'lucide-react';
+import { BookOpen, Moon, Sun, Sparkles, Lock, Search } from 'lucide-react';
 import { Category, ReadingTheme } from '../../types/story';
 
 interface HeaderProps {
@@ -18,7 +18,6 @@ export const Header: React.FC<HeaderProps> = ({
   onHomeClick,
   theme,
   onToggleTheme,
-  onOpenSitemap,
   onOpenCompliance,
   onOpenAdmin,
 }) => {
@@ -39,10 +38,10 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
           <div>
             <span className="font-extrabold text-base sm:text-lg tracking-tight text-slate-900 dark:text-white block leading-none">
-              Short Stories
+              Walkathawa <span className="text-indigo-600 dark:text-indigo-400 text-sm font-semibold font-serif">(වල් කතාව)</span>
             </span>
-            <span className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider block mt-0.5">
-              Read & Discover
+            <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mt-0.5">
+              Sinhala Stories Online
             </span>
           </div>
         </div>
@@ -54,47 +53,32 @@ export const Header: React.FC<HeaderProps> = ({
             type="button"
             id="header-monetag-info-btn"
             onClick={() => onOpenCompliance('ads')}
-            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-200 dark:border-amber-900/60 bg-amber-50/70 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 text-xs font-semibold hover:bg-amber-100 transition-colors"
+            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-200 dark:border-amber-900/60 bg-amber-50/70 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 text-xs font-semibold hover:bg-amber-100 transition-colors cursor-pointer"
           >
             <Sparkles className="w-3.5 h-3.5" />
             <span>Monetag Ready</span>
           </button>
 
-          {/* Quick Sitemap Index */}
-          <button
-            type="button"
-            id="header-sitemap-btn"
-            onClick={onOpenSitemap}
-            className="text-xs font-medium px-2.5 py-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-          >
-            Sitemap
-          </button>
-
-          {/* Admin Panel Direct Action */}
-          <button
-            type="button"
-            id="header-admin-btn"
-            onClick={onOpenAdmin}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-indigo-600 hover:text-white dark:hover:bg-indigo-600 dark:hover:text-white text-xs font-semibold transition-all"
-            title="Admin Login & Dashboard"
-          >
-            <Lock className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">Admin</span>
-          </button>
-
-          {/* Dark / Light Mode Toggle */}
+          {/* Theme Toggle Button */}
           <button
             type="button"
             id="header-theme-toggle-btn"
             onClick={onToggleTheme}
-            aria-label="Toggle theme mode"
-            className="p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            aria-label="Toggle Color Theme"
+            className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
           >
-            {theme === 'dark' ? (
-              <Sun className="w-4 h-4 text-amber-400" />
-            ) : (
-              <Moon className="w-4 h-4 text-slate-700" />
-            )}
+            {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-700" />}
+          </button>
+
+          {/* Admin Login Shortcut Button */}
+          <button
+            type="button"
+            id="header-admin-login-btn"
+            onClick={onOpenAdmin}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-indigo-400 text-xs font-bold transition-all shadow-xs cursor-pointer"
+          >
+            <Lock className="w-3.5 h-3.5" />
+            <span>Admin</span>
           </button>
         </div>
       </div>

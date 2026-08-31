@@ -105,25 +105,35 @@ export default function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Update default SEO tags when on Home / Gallery
+  const [siteSettings, setSiteSettings] = useState<any>(null);
+
+  // Fetch live site settings for SEO & Meta
+  useEffect(() => {
+    fetch('/api/public/settings')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) setSiteSettings(data);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Update dynamic SEO metadata and Schema.org on route changes
   useEffect(() => {
     if (isAdminView) {
-      document.title = 'Admin Portal - StoryHub Management';
+      document.title = 'Admin Portal - Walkathawa (වල් කතාව)';
       return;
     }
 
-    if (!currentSlug) {
-      SEOService.updateHead({
-        title: params.category && params.category !== 'all'
-          ? `${params.category.toUpperCase()} Short Stories - Read Free Online`
-          : 'Short Stories - Read Modern Short Stories Online',
-        description:
-          'A modern, lightweight, responsive short story platform designed for seamless reading and monetization readiness.',
-        ogType: 'website',
-        canonicalUrl: window.location.origin,
-      });
+    if (currentSlug && activeStory) {
+      // Dynamic Story-specific SEO with Article Schema & Breadcrumbs
+      SEOService.updateHead(SEOService.generateStorySEO(activeStory), siteSettings);
+    } else if (!currentSlug) {
+      // Dynamic Catalog / Category / Search SEO
+      const catObj = categories.find((c) => c.slug === params.category);
+      const catName = catObj ? catObj.name : undefined;
+      SEOService.updateHead(SEOService.generateHomeSEO(catName, params.search), siteSettings);
     }
-  }, [isAdminView, currentSlug, params.category]);
+  }, [isAdminView, currentSlug, activeStory, params.category, params.search, categories, siteSettings]);
 
   const handleReadStory = useCallback((slug: string) => {
     setIsAdminView(false);

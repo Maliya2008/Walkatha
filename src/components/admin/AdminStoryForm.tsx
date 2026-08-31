@@ -23,14 +23,14 @@ interface AdminStoryFormProps {
 }
 
 const CATEGORIES = [
-  { slug: 'adventure', name: 'Adventure' },
-  { slug: 'sci-fi', name: 'Science Fiction' },
-  { slug: 'mystery', name: 'Mystery & Detective' },
-  { slug: 'fantasy', name: 'Fantasy & Myth' },
-  { slug: 'thriller', name: 'Psychological Thriller' },
-  { slug: 'inspirational', name: 'Inspirational & Life' },
-  { slug: 'horror', name: 'Supernatural Horror' },
-  { slug: 'romance', name: 'Contemporary Romance' },
+  { slug: 'romantic', name: 'ආදර කතා (Romantic Stories)' },
+  { slug: 'adventure', name: 'ත්‍රාසජනක (Adventure & Thriller)' },
+  { slug: 'fiction', name: 'ප්‍රබන්ධ කතා (Fictional Stories)' },
+  { slug: 'mystery', name: 'අභිරහස් (Mystery & Detective)' },
+  { slug: 'sci-fi', name: 'විද්‍යා ප්‍රබන්ධ (Science Fiction)' },
+  { slug: 'fantasy', name: 'මනඃකල්පිත (Fantasy & Myth)' },
+  { slug: 'horror', name: 'හොල්මන් / බියකරු (Supernatural Horror)' },
+  { slug: 'inspirational', name: 'ජීවිත ආදර්ශ (Inspirational & Life)' },
 ];
 
 export const AdminStoryForm: React.FC<AdminStoryFormProps> = ({

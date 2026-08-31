@@ -126,13 +126,15 @@ export const AdminStoriesList: React.FC<AdminStoriesListProps> = ({
             onChange={(e) => setCategoryFilter(e.target.value)}
             className="px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 capitalize"
           >
-            <option value="all">All Categories</option>
-            <option value="adventure">Adventure</option>
-            <option value="sci-fi">Science Fiction</option>
-            <option value="mystery">Mystery</option>
-            <option value="fantasy">Fantasy</option>
-            <option value="thriller">Thriller</option>
-            <option value="inspirational">Inspirational</option>
+            <option value="all">සියලුම වර්ග (All Categories)</option>
+            <option value="romantic">ආදර කතා (Romantic)</option>
+            <option value="adventure">ත්‍රාසජනක (Adventure)</option>
+            <option value="fiction">ප්‍රබන්ධ කතා (Fiction)</option>
+            <option value="mystery">අභිරහස් (Mystery)</option>
+            <option value="sci-fi">විද්‍යා ප්‍රබන්ධ (Sci-Fi)</option>
+            <option value="fantasy">මනඃකල්පිත (Fantasy)</option>
+            <option value="horror">හොල්මන් / බියකරු (Horror)</option>
+            <option value="inspirational">ජීවිත ආදර්ශ (Inspirational)</option>
           </select>
 
           {/* Status Filter */}

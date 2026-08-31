@@ -78,10 +78,10 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess, onBackToSite 
             <BookOpen className="w-7 h-7" />
           </div>
           <h2 className="text-2xl font-black tracking-tight text-white font-serif">
-            StoryHub Admin Portal
+            Walkathawa <span className="text-indigo-400 font-sans text-xl">(වල් කතාව)</span>
           </h2>
           <p className="mt-2 text-xs text-slate-400">
-            Secure administrative access for managing stories and Monetag ads
+            Secure administrative access for managing Sinhala stories, SEO, and Monetag monetization
           </p>
         </div>
 

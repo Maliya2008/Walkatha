@@ -20,8 +20,18 @@ class StoryService {
       // Fallback
     }
 
-    // Client-side fallback if server is loading
-    let filtered = INITIAL_STORIES.filter((s) => s.published);
+    // Check local store or seed stories fallback
+    let allStories = INITIAL_STORIES;
+    try {
+      const stored = localStorage.getItem('walkatha_stories_store_v1');
+      if (stored) {
+        allStories = JSON.parse(stored);
+      }
+    } catch {
+      // ignore
+    }
+
+    let filtered = allStories.filter((s) => s.published);
     if (params.category && params.category !== 'all') {
       filtered = filtered.filter((s) => s.category.toLowerCase() === params.category!.toLowerCase());
     }
@@ -58,9 +68,19 @@ class StoryService {
       // Fallback
     }
 
-    const story = INITIAL_STORIES.find((s) => s.slug === slug || s.id === slug) || null;
-    const relatedStories = INITIAL_STORIES.filter(
-      (s) => story && s.id !== story.id && s.category === story.category
+    let allStories = INITIAL_STORIES;
+    try {
+      const stored = localStorage.getItem('walkatha_stories_store_v1');
+      if (stored) {
+        allStories = JSON.parse(stored);
+      }
+    } catch {
+      // ignore
+    }
+
+    const story = allStories.find((s) => s.slug === slug || s.id === slug) || null;
+    const relatedStories = allStories.filter(
+      (s) => story && s.id !== story.id && s.category === story.category && s.published
     ).slice(0, 3);
 
     return { story, relatedStories };

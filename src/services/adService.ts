@@ -1,29 +1,24 @@
-import { AdvertisementSettings } from '../types/admin';
+import { DirectAdSettings } from '../types/admin';
 import { db } from '../lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 
-const DEFAULT_CONFIG: AdvertisementSettings = {
-  globalAdCode: '',
-  adsEnabled: true,
-  adsPerPage: 2,
-  headerAdCode: '',
-  inArticleAdCode: '',
-  footerAdCode: '',
-  testMode: true,
+const DEFAULT_CONFIG: DirectAdSettings = {
+  globalDirectLink: '',
+  enabled: true,
+  maxTriggers: 1,
 };
 
 class AdService {
-  private config: AdvertisementSettings = { ...DEFAULT_CONFIG };
-  private initialized = false;
+  private config: DirectAdSettings = { ...DEFAULT_CONFIG };
   private fetched = false;
 
   constructor() {
     this.fetchConfig();
   }
 
-  public async fetchConfig(): Promise<AdvertisementSettings> {
+  public async fetchConfig(): Promise<DirectAdSettings> {
     try {
-      const docRef = doc(db, 'advertisements', 'global');
+      const docRef = doc(db, 'advertisements', 'settings');
       const docSnap = await getDoc(docRef);
       if (docSnap.exists()) {
         this.config = {
@@ -38,66 +33,41 @@ class AdService {
     return this.config;
   }
 
-  public getConfig(): AdvertisementSettings {
+  public getConfig(): DirectAdSettings {
     return { ...this.config };
   }
 
-  public updateConfig(newConfig: Partial<AdvertisementSettings>): void {
+  public updateConfig(newConfig: Partial<DirectAdSettings>): void {
     this.config = { ...this.config, ...newConfig };
   }
 
   public isAdsEnabled(): boolean {
-    return Boolean(this.config.adsEnabled);
+    return Boolean(this.config.enabled);
   }
 
-  public getAdsPerPage(): 1 | 2 | 3 {
-    return this.config.adsPerPage || 2;
+  public getGlobalDirectLink(): string {
+    return this.config.globalDirectLink || '';
   }
 
-  public getGlobalAdCode(): string {
-    return this.config.globalAdCode || '';
-  }
+  public triggerDirectAd(storySpecificLink?: string): void {
+    if (!this.config.enabled) return;
+    
+    const adUrl = (storySpecificLink || this.config.globalDirectLink || '').trim();
+    if (!adUrl) return;
 
-  /**
-   * Sanitizes and transforms raw ad HTML/Script to ensure all anchor links open externally
-   * with target="_blank" and rel="noopener noreferrer"
-   */
-  public sanitizeAndEnforceExternalLinks(html: string): string {
-    if (!html) return '';
+    const SESSION_KEY = 'walkathawa_ad_triggers';
+    const currentTriggers = parseInt(sessionStorage.getItem(SESSION_KEY) || '0', 10);
+    const maxTriggers = this.config.maxTriggers || 1;
 
-    // Replace or add target="_blank" and rel="noopener noreferrer" to all <a> tags
-    return html.replace(/<a\s+(?:[^>]*?\s+)?href=["']([^"']*)["']([^>]*)>/gi, (_match, href, rest) => {
-      const hasTarget = /target=["'][^"']*["']/i.test(rest);
-      const hasRel = /rel=["'][^"']*["']/i.test(rest);
-
-      let cleanRest = rest;
-      if (hasTarget) {
-        cleanRest = cleanRest.replace(/target=["'][^"']*["']/gi, 'target="_blank"');
-      } else {
-        cleanRest += ' target="_blank"';
-      }
-
-      if (hasRel) {
-        cleanRest = cleanRest.replace(/rel=["'][^"']*["']/gi, 'rel="noopener noreferrer"');
-      } else {
-        cleanRest += ' rel="noopener noreferrer"';
-      }
-
-      return `<a href="${href}"${cleanRest}>`;
-    });
-  }
-
-  /**
-   * Triggers an Interstitial/Vignette ad on story transition if master adsEnabled is ON
-   */
-  public triggerInterstitial(onComplete?: () => void): void {
-    if (!this.config.adsEnabled) {
-      if (onComplete) onComplete();
-      return;
+    if (currentTriggers >= maxTriggers) {
+      return; 
     }
 
-    if (onComplete) {
-      onComplete();
+    try {
+      sessionStorage.setItem(SESSION_KEY, (currentTriggers + 1).toString());
+      window.open(adUrl, '_blank', 'noopener,noreferrer');
+    } catch (e) {
+      console.warn("Popup blocked or failed to open ad.", e);
     }
   }
 }

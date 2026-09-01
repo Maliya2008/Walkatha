@@ -53,7 +53,7 @@ export const AdminStoryForm: React.FC<AdminStoryFormProps> = ({
   const [readingTime, setReadingTime] = useState<number>(storyToEdit?.readingTime || 5);
   const [published, setPublished] = useState<boolean>(storyToEdit ? storyToEdit.published : true);
   const [featured, setFeatured] = useState<boolean>(storyToEdit ? storyToEdit.featured : false);
-  const [individualAdCode, setIndividualAdCode] = useState(storyToEdit?.individualAdCode || '');
+  const [directAdLink, setDirectAdLink] = useState(storyToEdit?.directAdLink || '');
 
   // UI state
   const [imageTab, setImageTab] = useState<'upload' | 'url'>('upload');
@@ -157,7 +157,7 @@ export const AdminStoryForm: React.FC<AdminStoryFormProps> = ({
           readingTime: Number(readingTime),
           published,
           featured,
-          individualAdCode: individualAdCode.trim(),
+          directAdLink: directAdLink.trim(),
         });
         setSuccessMessage('Story updated successfully!');
         onSaved(result.story);
@@ -173,7 +173,7 @@ export const AdminStoryForm: React.FC<AdminStoryFormProps> = ({
           readingTime: Number(readingTime),
           published,
           featured,
-          individualAdCode: individualAdCode.trim(),
+          directAdLink: directAdLink.trim(),
         });
         setSuccessMessage('Story published successfully! It is now live on the public website.');
         onSaved(result.story);
@@ -438,18 +438,18 @@ export const AdminStoryForm: React.FC<AdminStoryFormProps> = ({
             <div className="flex items-center justify-between">
               <label className="block text-xs font-bold text-indigo-300 uppercase tracking-wider flex items-center gap-1.5">
                 <FileCode className="w-4 h-4 text-indigo-400" />
-                <span>Individual Story Monetag Ad Code (Optional)</span>
+                <span>Direct Advertisement Link (Optional)</span>
               </label>
-              <span className="text-[11px] text-slate-400">Story-specific sponsor tag</span>
+              <span className="text-[11px] text-slate-400">Story-specific direct link</span>
             </div>
             <p className="text-[11px] text-slate-400 leading-relaxed">
-              If provided, this Monetag snippet will load exclusively on this story's reading page (overriding or supplementing global ads).
+              If provided, this Monetag direct link will be used exclusively for this story, overriding the global link.
             </p>
             <textarea
               rows={3}
-              value={individualAdCode}
-              onChange={(e) => setIndividualAdCode(e.target.value)}
-              placeholder="<script>/* Monetag Story Zone Tag */</script> or <a href='...' target='_blank'>...</a>"
+              value={directAdLink}
+              onChange={(e) => setDirectAdLink(e.target.value)}
+              placeholder="https://example-direct-link.com"
               className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-amber-300 font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none"
             />
           </div>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookOpen, Moon, Sun, Sparkles, Lock, Search } from 'lucide-react';
+import { BookOpen, Moon, Sun } from 'lucide-react';
 import { Category, ReadingTheme } from '../../types/story';
 
 interface HeaderProps {
@@ -9,17 +9,12 @@ interface HeaderProps {
   onHomeClick: () => void;
   theme: ReadingTheme;
   onToggleTheme: () => void;
-  onOpenSitemap: () => void;
-  onOpenCompliance: (type: 'privacy' | 'terms' | 'ads') => void;
-  onOpenAdmin: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   onHomeClick,
   theme,
   onToggleTheme,
-  onOpenCompliance,
-  onOpenAdmin,
 }) => {
   return (
     <header
@@ -48,17 +43,6 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Action Controls */}
         <div className="flex items-center gap-2 sm:gap-3">
-          {/* Quick Ad Network Specs / Docs button */}
-          <button
-            type="button"
-            id="header-monetag-info-btn"
-            onClick={() => onOpenCompliance('ads')}
-            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-200 dark:border-amber-900/60 bg-amber-50/70 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 text-xs font-semibold hover:bg-amber-100 transition-colors cursor-pointer"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Monetag Ready</span>
-          </button>
-
           {/* Theme Toggle Button */}
           <button
             type="button"
@@ -68,17 +52,6 @@ export const Header: React.FC<HeaderProps> = ({
             className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
           >
             {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-700" />}
-          </button>
-
-          {/* Admin Login Shortcut Button */}
-          <button
-            type="button"
-            id="header-admin-login-btn"
-            onClick={onOpenAdmin}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 hover:text-indigo-600 dark:hover:text-indigo-400 text-xs font-bold transition-all shadow-xs cursor-pointer"
-          >
-            <Lock className="w-3.5 h-3.5" />
-            <span>Admin</span>
           </button>
         </div>
       </div>

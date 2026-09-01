@@ -1,0 +1,21 @@
+--- server.ts
++++ server.ts
+@@ -736,15 +736,11 @@
+ 
+ // PUT /api/admin/ads - Update global and master ad settings
+ app.put('/api/admin/ads', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+-  const { globalAdCode, enabled, adsPerPage, headerAdCode, inArticleAdCode, footerAdCode, testMode } = req.body;
++  const { globalDirectLink, enabled, maxTriggers } = req.body;
+ 
+   db.advertisements = {
+-    globalAdCode: globalAdCode !== undefined ? String(globalAdCode) : db.advertisements.globalAdCode,
++    globalDirectLink: globalDirectLink !== undefined ? String(globalDirectLink) : db.advertisements.globalDirectLink,
+     enabled: enabled !== undefined ? Boolean(enabled) : db.advertisements.enabled,
+-    adsPerPage: adsPerPage !== undefined ? (Number(adsPerPage) as 1 | 2 | 3) : db.advertisements.adsPerPage,
+-    headerAdCode: headerAdCode !== undefined ? String(headerAdCode) : db.advertisements.headerAdCode,
+-    inArticleAdCode: inArticleAdCode !== undefined ? String(inArticleAdCode) : db.advertisements.inArticleAdCode,
+-    footerAdCode: footerAdCode !== undefined ? String(footerAdCode) : db.advertisements.footerAdCode,
+-    testMode: testMode !== undefined ? Boolean(testMode) : db.advertisements.testMode,
++    maxTriggers: maxTriggers !== undefined ? (Number(maxTriggers) as 1 | 2 | 3) : db.advertisements.maxTriggers,
+   };
+ 

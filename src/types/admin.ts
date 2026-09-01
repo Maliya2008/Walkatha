@@ -5,22 +5,19 @@ export interface User {
   createdAt: string;
 }
 
-export interface AdvertisementSettings {
-  globalAdCode: string;
-  adsEnabled: boolean;
-  adsPerPage: 1 | 2 | 3;
-  headerAdCode?: string;
-  inArticleAdCode?: string;
-  footerAdCode?: string;
-  interstitialCode?: string;
-  testMode?: boolean;
+export interface DirectAdSettings {
+  enabled: boolean;
+  globalDirectLink: string;
+  maxTriggers: 1 | 2 | 3;
+  updatedAt?: string;
 }
 
-export interface PostAdvertisement {
+export interface StoryAdvertisement {
+  id?: string;
   storyId: string;
-  adCode: string;
+  directLink: string;
   enabled: boolean;
-  updatedAt: string;
+  createdAt: string;
 }
 
 export interface SiteSettings {
@@ -46,8 +43,8 @@ export interface DashboardStats {
   publishedStories: number;
   draftStories: number;
   adsEnabled: boolean;
-  adsPerPage: number;
-  hasGlobalAdCode: boolean;
+  maxTriggers: number;
+  hasGlobalDirectLink: boolean;
   recentUploads: Array<{
     id: string;
     title: string;

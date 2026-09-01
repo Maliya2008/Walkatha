@@ -111,7 +111,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess, onBackToSite 
                   autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@storyhub.com"
+                  placeholder="admin@walkathawa.com"
                   className="block w-full pl-10 pr-3.5 py-2.5 bg-slate-900/90 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
                 />
               </div>
@@ -193,10 +193,10 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess, onBackToSite 
             </button>
           </form>
 
-          {/* Seed notice helper for preview */}
+          {/* Security notice */}
           <div className="mt-6 pt-5 border-t border-slate-700/60 text-center">
             <p className="text-[11px] text-slate-400">
-              Default Credentials: <code className="text-indigo-300 font-mono bg-slate-900/80 px-1.5 py-0.5 rounded">admin@storyhub.com</code> / <code className="text-indigo-300 font-mono bg-slate-900/80 px-1.5 py-0.5 rounded">AdminSecurePassword2026!</code>
+              Authorized administrator access only. Accounts are managed via Firebase Console.
             </p>
           </div>
         </div>

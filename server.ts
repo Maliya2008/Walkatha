@@ -1,11 +1,12 @@
 import express, { Request, Response, NextFunction } from 'express';
+import http from 'http';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { createServer as createViteServer } from 'vite';
 import { INITIAL_STORIES, INITIAL_CATEGORIES } from './src/data/seedStories';
 import { Story } from './src/types/story';
-import { AdvertisementSettings, SiteSettings, User } from './src/types/admin';
+import { DirectAdSettings, SiteSettings, User } from './src/types/admin';
 
 const app = express();
 const PORT = 3000;
@@ -21,7 +22,7 @@ const DB_FILE = path.join(DATA_DIR, 'database.json');
 interface DatabaseSchema {
   users: Array<User & { passwordHash: string; salt: string }>;
   stories: Story[];
-  advertisements: AdvertisementSettings;
+  advertisements: DirectAdSettings;
   postAdvertisements: Record<string, string>; // storyId -> adCode
   settings: SiteSettings;
   activeSessions: Record<string, { userId: string; email: string; role: string; expiresAt: number }>;
@@ -92,17 +93,13 @@ function initDatabase(): void {
   const defaultStories: Story[] = INITIAL_STORIES.map((s) => ({
     ...s,
     uploadedDate: s.uploadDate,
-    individualAdCode: '',
+    directAdLink: '',
   }));
 
-  const defaultAds: AdvertisementSettings = {
-    globalAdCode: '<!-- Monetag Global Tag -->\n<div class="monetag-global-banner p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded text-center text-xs text-amber-800 dark:text-amber-300 font-medium"><a href="https://monetag.com" target="_blank" rel="noopener noreferrer" class="hover:underline flex items-center justify-center gap-1.5">⚡ Sponsored Story Pick — Discover Global Content (Opens in new tab)</a></div>',
-    adsEnabled: true,
-    adsPerPage: 2,
-    headerAdCode: '',
-    inArticleAdCode: '',
-    footerAdCode: '',
-    testMode: true,
+  const defaultAds: DirectAdSettings = {
+    globalDirectLink: 'https://example.com/ad',
+    enabled: true,
+    maxTriggers: 1,
   };
 
   const defaultSettings: SiteSettings = {
@@ -273,7 +270,7 @@ app.get('/api/public/stories/:slug', (req: Request, res: Response) => {
   saveDatabase();
 
   // Attach individual story ad code from postAdvertisements if present
-  const individualAdCode = db.postAdvertisements[story.id] || story.individualAdCode || '';
+  const directAdLink = db.postAdvertisements[story.id] || story.directAdLink || '';
 
   // Get 3 related stories
   const relatedStories = db.stories
@@ -283,7 +280,7 @@ app.get('/api/public/stories/:slug', (req: Request, res: Response) => {
   res.json({
     story: {
       ...story,
-      individualAdCode,
+      directAdLink,
     },
     relatedStories,
   });
@@ -522,9 +519,9 @@ app.get('/api/admin/dashboard/stats', requireAuth, (_req: AuthenticatedRequest, 
     totalViews,
     publishedStories,
     draftStories,
-    adsEnabled: db.advertisements.adsEnabled,
-    adsPerPage: db.advertisements.adsPerPage,
-    hasGlobalAdCode: Boolean(db.advertisements.globalAdCode && db.advertisements.globalAdCode.trim()),
+    enabled: db.advertisements.enabled,
+    maxTriggers: db.advertisements.maxTriggers,
+    hasGlobalDirectLink: Boolean(db.advertisements.globalDirectLink && db.advertisements.globalDirectLink.trim()),
     recentUploads,
   });
 });
@@ -557,10 +554,10 @@ app.get('/api/admin/stories', requireAuth, (req: AuthenticatedRequest, res: Resp
 
   list.sort((a, b) => new Date(b.uploadDate || b.uploadedDate || 0).getTime() - new Date(a.uploadDate || a.uploadedDate || 0).getTime());
 
-  // Attach individualAdCode if stored in postAdvertisements mapping
+  // Attach directAdLink if stored in postAdvertisements mapping
   const enrichedList = list.map((s) => ({
     ...s,
-    individualAdCode: db.postAdvertisements[s.id] || s.individualAdCode || '',
+    directAdLink: db.postAdvertisements[s.id] || s.directAdLink || '',
   }));
 
   res.json({
@@ -598,7 +595,7 @@ app.post('/api/admin/stories', requireAuth, (req: AuthenticatedRequest, res: Res
     author,
     readingTime,
     published,
-    individualAdCode,
+    directAdLink,
     featured,
   } = req.body;
 
@@ -635,13 +632,13 @@ app.post('/api/admin/stories', requireAuth, (req: AuthenticatedRequest, res: Res
     views: 0,
     featured: Boolean(featured),
     published: Boolean(published),
-    individualAdCode: individualAdCode || '',
+    directAdLink: directAdLink || '',
   };
 
   db.stories.unshift(newStory);
 
-  if (individualAdCode) {
-    db.postAdvertisements[id] = individualAdCode;
+  if (directAdLink) {
+    db.postAdvertisements[id] = directAdLink;
   }
 
   saveDatabase();
@@ -672,7 +669,7 @@ app.put('/api/admin/stories/:id', requireAuth, (req: AuthenticatedRequest, res: 
     author,
     readingTime,
     published,
-    individualAdCode,
+    directAdLink,
     featured,
     slug,
   } = req.body;
@@ -694,14 +691,14 @@ app.put('/api/admin/stories/:id', requireAuth, (req: AuthenticatedRequest, res: 
     readingTime: computedReadingTime,
     published: published !== undefined ? Boolean(published) : current.published,
     featured: featured !== undefined ? Boolean(featured) : current.featured,
-    individualAdCode: individualAdCode !== undefined ? individualAdCode : current.individualAdCode,
+    directAdLink: directAdLink !== undefined ? directAdLink : current.directAdLink,
     updatedDate: now,
   };
 
   db.stories[index] = updatedStory;
 
-  if (individualAdCode !== undefined) {
-    db.postAdvertisements[id] = individualAdCode;
+  if (directAdLink !== undefined) {
+    db.postAdvertisements[id] = directAdLink;
   }
 
   saveDatabase();
@@ -738,16 +735,12 @@ app.get('/api/admin/ads', requireAuth, (_req: AuthenticatedRequest, res: Respons
 
 // PUT /api/admin/ads - Update global and master ad settings
 app.put('/api/admin/ads', requireAuth, (req: AuthenticatedRequest, res: Response) => {
-  const { globalAdCode, adsEnabled, adsPerPage, headerAdCode, inArticleAdCode, footerAdCode, testMode } = req.body;
+  const { globalDirectLink, enabled, maxTriggers } = req.body;
 
   db.advertisements = {
-    globalAdCode: globalAdCode !== undefined ? String(globalAdCode) : db.advertisements.globalAdCode,
-    adsEnabled: adsEnabled !== undefined ? Boolean(adsEnabled) : db.advertisements.adsEnabled,
-    adsPerPage: adsPerPage !== undefined ? (Number(adsPerPage) as 1 | 2 | 3) : db.advertisements.adsPerPage,
-    headerAdCode: headerAdCode !== undefined ? String(headerAdCode) : db.advertisements.headerAdCode,
-    inArticleAdCode: inArticleAdCode !== undefined ? String(inArticleAdCode) : db.advertisements.inArticleAdCode,
-    footerAdCode: footerAdCode !== undefined ? String(footerAdCode) : db.advertisements.footerAdCode,
-    testMode: testMode !== undefined ? Boolean(testMode) : db.advertisements.testMode,
+    globalDirectLink: globalDirectLink !== undefined ? String(globalDirectLink) : db.advertisements.globalDirectLink,
+    enabled: enabled !== undefined ? Boolean(enabled) : db.advertisements.enabled,
+    maxTriggers: maxTriggers !== undefined ? (Number(maxTriggers) as 1 | 2 | 3) : db.advertisements.maxTriggers,
   };
 
   saveDatabase();
@@ -769,7 +762,7 @@ app.put('/api/admin/stories/:id/ad', requireAuth, (req: AuthenticatedRequest, re
   }
 
   db.postAdvertisements[id] = adCode || '';
-  story.individualAdCode = adCode || '';
+  story.directAdLink = adCode || '';
   saveDatabase();
 
   res.json({
@@ -827,9 +820,15 @@ app.put('/api/admin/settings', requireAuth, (req: AuthenticatedRequest, res: Res
 
 // --- SERVER & VITE INTEGRATION ---
 async function startServer() {
+  const httpServer = http.createServer(app);
+
   if (process.env.NODE_ENV !== 'production') {
+    const isHmrDisabled = process.env.DISABLE_HMR === 'true';
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: isHmrDisabled ? false : { server: httpServer },
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);
@@ -841,7 +840,7 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`[StoryHub Server] Running on http://0.0.0.0:${PORT}`);
   });
 }

@@ -32,7 +32,7 @@ export interface Story {
   views: number;
   featured: boolean;
   published: boolean;
-  individualAdCode?: string; // Per-story specific Monetag advertisement code
+  directAdLink?: string; // Direct link URL for this specific story
   metaTitle?: string;
   metaDescription?: string;
 }

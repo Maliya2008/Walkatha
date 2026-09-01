@@ -1,11 +1,9 @@
 import React from 'react';
-import { Sparkles, SlidersHorizontal, BookOpen, Compass } from 'lucide-react';
 import { Category, Story } from '../../types/story';
 import { StoryCard } from './StoryCard';
 import { FeaturedStoryHero } from './FeaturedStoryHero';
 import { SearchBar } from '../common/SearchBar';
 import { Pagination } from '../common/Pagination';
-import { MonetagAdSlot } from '../ads/MonetagAdSlot';
 
 interface StoryGalleryProps {
   stories: Story[];
@@ -44,11 +42,6 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
 
   return (
     <div id="story-gallery-container" className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-      {/* Top Header Sponsor Ad */}
-      <div className="mb-6">
-        <MonetagAdSlot type="header" slotLabel="Header Sponsor (Monetag Top Leaderboard)" />
-      </div>
-
       {/* Featured Story Hero (Page 1 default) */}
       {showFeaturedHero && (
         <FeaturedStoryHero story={featuredStories[0]} onRead={onReadStory} />
@@ -65,10 +58,8 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
               placeholder="Search by title, genre, keyword, or author..."
             />
           </div>
-
           <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
             <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1">
-              <SlidersHorizontal className="w-3.5 h-3.5" />
               <span>Sort:</span>
             </span>
             <select
@@ -95,7 +86,6 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800/80 dark:text-slate-300 dark:hover:bg-slate-700'
             }`}
           >
-            <Compass className="w-3.5 h-3.5" />
             <span>All Categories</span>
           </button>
 
@@ -126,7 +116,6 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <BookOpen className="w-5 h-5 text-indigo-500" />
             <span>
               {searchTerm
                 ? `Search Results for "${searchTerm}"`
@@ -149,16 +138,11 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
               key={`skeleton-${idx}`}
               className="animate-pulse flex flex-col bg-slate-100 dark:bg-slate-800/50 rounded-2xl h-80 p-4 border border-slate-200/50 dark:border-slate-800"
             >
-              <div className="w-full h-44 bg-slate-200 dark:bg-slate-700 rounded-xl mb-4" />
-              <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-3/4 mb-2" />
-              <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-full mb-1" />
-              <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-2/3" />
             </div>
           ))}
         </div>
       ) : stories.length === 0 ? (
         <div className="text-center py-16 px-4 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 my-6">
-          <BookOpen className="w-10 h-10 text-slate-400 mx-auto mb-3" />
           <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">
             No stories found
           </h3>
@@ -179,24 +163,11 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
       ) : (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {stories.map((story, index) => (
-              <React.Fragment key={story.id}>
-                <StoryCard story={story} onRead={onReadStory} />
-
-                {/* Inject a Monetag Native In-Gallery Ad Card after story #3 on larger grids */}
-                {index === 2 && stories.length > 3 && (
-                  <div className="md:col-span-2 lg:col-span-3 my-2">
-                    <MonetagAdSlot
-                      type="header"
-                      slotLabel="In-Gallery Sponsor (Monetag Native Feed Unit)"
-                    />
-                  </div>
-                )}
-              </React.Fragment>
+            {stories.map((story) => (
+              <StoryCard key={story.id} story={story} onRead={onReadStory} />
             ))}
           </div>
 
-          {/* Pagination Navigation */}
           <Pagination
             currentPage={currentPage}
             totalPages={totalPages}
@@ -204,11 +175,6 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
           />
         </>
       )}
-
-      {/* Bottom Footer Ad */}
-      <div className="mt-8">
-        <MonetagAdSlot type="footer" slotLabel="Footer Sponsor (Monetag Bottom Leaderboard)" />
-      </div>
     </div>
   );
 };

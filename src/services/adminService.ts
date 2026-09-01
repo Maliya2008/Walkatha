@@ -1,5 +1,5 @@
 import { Story } from '../types/story';
-import { AdvertisementSettings, DashboardStats, SiteSettings } from '../types/admin';
+import { DirectAdSettings, DashboardStats, SiteSettings } from '../types/admin';
 import { authService } from './authService';
 import { db } from '../lib/firebase';
 import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, query, where, orderBy } from 'firebase/firestore';
@@ -40,10 +40,10 @@ class AdminService {
       stories.sort((a, b) => new Date(b.uploadDate || 0).getTime() - new Date(a.uploadDate || 0).getTime());
 
       // Get ads status
-      const adsDoc = await getDoc(doc(db, 'advertisements', 'global'));
+      const adsDoc = await getDoc(doc(db, 'advertisements', 'settings'));
       const adsEnabled = adsDoc.exists() ? adsDoc.data().enabled : true;
-      const adsPerPage = adsDoc.exists() ? adsDoc.data().adsPerPage : 2;
-      const hasGlobalAdCode = adsDoc.exists() ? !!adsDoc.data().globalCode : false;
+      const maxTriggers = adsDoc.exists() ? (adsDoc.data().maxTriggers || 1) : 1;
+      const hasGlobalDirectLink = adsDoc.exists() ? !!adsDoc.data().globalDirectLink : false;
 
       return {
         totalStories,
@@ -51,8 +51,8 @@ class AdminService {
         draftStories,
         totalViews,
         adsEnabled,
-        adsPerPage,
-        hasGlobalAdCode,
+        maxTriggers,
+        hasGlobalDirectLink,
         recentUploads: stories.slice(0, 5).map((s) => ({
           id: s.id,
           title: s.title,
@@ -117,7 +117,7 @@ class AdminService {
     readingTime?: number;
     published: boolean;
     featured?: boolean;
-    individualAdCode?: string;
+    directAdLink?: string;
   }): Promise<{ message: string; story: Story }> {
     this.requireAuth();
 
@@ -145,7 +145,7 @@ class AdminService {
         views: 0,
         published: storyData.published,
         featured: Boolean(storyData.featured),
-        individualAdCode: storyData.individualAdCode || '',
+        directAdLink: storyData.directAdLink || '',
       };
 
       const docRef = await addDoc(collection(db, 'stories'), newStory);
@@ -154,9 +154,9 @@ class AdminService {
         message: 'Story created successfully',
         story: { id: docRef.id, ...newStory } as Story,
       };
-    } catch (e) {
-      console.error(e);
-      throw new Error('Failed to publish story');
+    } catch (error: any) {
+      console.error('Firebase createStory Error:', error);
+      throw new Error(`Failed to publish story: ${error?.code || error?.message || 'unknown error'}`);
     }
   }
 
@@ -187,9 +187,9 @@ class AdminService {
         message: 'Story updated successfully',
         story: { id, ...existing, ...finalUpdates } as Story,
       };
-    } catch (e) {
-      console.error(e);
-      throw new Error('Failed to update story');
+    } catch (error: any) {
+      console.error('Firebase updateStory Error:', error);
+      throw new Error(`Failed to update story: ${error?.code || error?.message || 'unknown error'}`);
     }
   }
 
@@ -197,26 +197,22 @@ class AdminService {
     this.requireAuth();
     try {
       await deleteDoc(doc(db, 'stories', id));
-    } catch (e) {
-      console.error(e);
-      throw new Error('Failed to delete story');
+    } catch (error: any) {
+      console.error('Firebase deleteStory Error:', error);
+      throw new Error(`Failed to delete story: ${error?.code || error?.message || 'unknown error'}`);
     }
   }
 
   public async getAdvertisementSettings(): Promise<{
-    advertisements: AdvertisementSettings;
+    advertisements: DirectAdSettings;
     postAdvertisements: Record<string, string>;
   }> {
     try {
-      const adsDoc = await getDoc(doc(db, 'advertisements', 'global'));
-      let ads: AdvertisementSettings = {
-        globalAdCode: '',
-        adsEnabled: true,
-        adsPerPage: 2,
-        headerAdCode: '',
-        inArticleAdCode: '',
-        footerAdCode: '',
-        testMode: false,
+      const adsDoc = await getDoc(doc(db, 'advertisements', 'settings'));
+      let ads: DirectAdSettings = {
+        enabled: true,
+        globalDirectLink: '',
+        maxTriggers: 1,
       };
 
       if (adsDoc.exists()) {
@@ -229,8 +225,8 @@ class AdminService {
       const snapshot = await getDocs(storiesRef);
       snapshot.forEach(d => {
         const data = d.data();
-        if (data.individualAdCode) {
-          postAdvertisements[d.id] = data.individualAdCode;
+        if (data.directAdLink) {
+          postAdvertisements[d.id] = data.directAdLink;
         }
       });
 
@@ -242,50 +238,51 @@ class AdminService {
   }
 
   public async updateAdvertisementSettings(
-    settings: Partial<AdvertisementSettings>
-  ): Promise<{ message: string; advertisements: AdvertisementSettings }> {
+    settings: Partial<DirectAdSettings>
+  ): Promise<{ message: string; advertisements: DirectAdSettings }> {
     this.requireAuth();
     try {
-      const docRef = doc(db, 'advertisements', 'global');
+      const docRef = doc(db, 'advertisements', 'settings');
       const docSnap = await getDoc(docRef);
       
-      let updated: AdvertisementSettings = {
-        globalAdCode: '',
-        adsEnabled: true,
-        adsPerPage: 2,
-        headerAdCode: '',
-        inArticleAdCode: '',
-        footerAdCode: '',
-        testMode: false,
+      let updated: DirectAdSettings = {
+        enabled: true,
+        globalDirectLink: '',
+        maxTriggers: 1,
       };
 
       if (docSnap.exists()) {
         updated = { ...updated, ...docSnap.data() };
       }
       
-      updated = { ...updated, ...settings };
+      updated = { 
+        ...updated, 
+        ...settings, 
+        updatedAt: new Date().toISOString() 
+      };
       await setDoc(docRef, updated);
 
       return {
         message: 'Advertisement settings updated successfully',
         advertisements: updated,
       };
-    } catch (e) {
-      console.error(e);
-      throw new Error('Failed to update advertisement settings');
+    } catch (error: any) {
+      console.error('Firebase Advertisement Update Error:', error);
+      const code = error?.code || error?.message || 'unknown error';
+      throw new Error(`Failed to update advertisement settings: ${code}`);
     }
   }
 
-  public async updateStoryAd(storyId: string, adCode: string): Promise<{ message: string }> {
+  public async updateStoryAd(storyId: string, directLink: string): Promise<{ message: string }> {
     this.requireAuth();
     try {
       await updateDoc(doc(db, 'stories', storyId), {
-        individualAdCode: adCode
+        directAdLink: directLink
       });
       return { message: 'Story ad updated successfully' };
-    } catch (e) {
-      console.error(e);
-      throw new Error('Failed to update individual story ad code');
+    } catch (error: any) {
+      console.error('Firebase updateStoryAd Error:', error);
+      throw new Error(`Failed to update individual story ad code: ${error?.code || error?.message || 'unknown error'}`);
     }
   }
 
@@ -301,9 +298,9 @@ class AdminService {
       };
       const docRef = await addDoc(collection(db, 'categories'), newCat);
       return { message: 'Category created successfully', category: { id: docRef.id, ...newCat } };
-    } catch (e) {
-      console.error(e);
-      throw new Error('Failed to create category');
+    } catch (error: any) {
+      console.error('Firebase createCategory Error:', error);
+      throw new Error(`Failed to create category: ${error?.code || error?.message || 'unknown error'}`);
     }
   }
 
@@ -311,9 +308,9 @@ class AdminService {
     this.requireAuth();
     try {
       await deleteDoc(doc(db, 'categories', id));
-    } catch (e) {
-      console.error(e);
-      throw new Error('Failed to delete category');
+    } catch (error: any) {
+      console.error('Firebase deleteCategory Error:', error);
+      throw new Error(`Failed to delete category: ${error?.code || error?.message || 'unknown error'}`);
     }
   }
 
@@ -356,9 +353,9 @@ class AdminService {
       await setDoc(doc(db, 'settings', 'global'), updated);
       
       return updated;
-    } catch (e) {
-      console.error(e);
-      throw new Error('Failed to update site settings');
+    } catch (error: any) {
+      console.error('Firebase updateSiteSettings Error:', error);
+      throw new Error(`Failed to update site settings: ${error?.code || error?.message || 'unknown error'}`);
     }
   }
 }

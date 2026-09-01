@@ -55,6 +55,12 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
+    // Global advertisement settings collection
+    match /advertisement_settings/{docId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
     // Story-specific advertisements
     match /storyAdvertisements/{docId} {
       allow read: if true;

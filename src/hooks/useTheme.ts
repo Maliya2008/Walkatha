@@ -3,7 +3,14 @@ import { FontFamily, FontSize, ReadingTheme } from '../types/story';
 
 export function useTheme() {
   const [theme, setTheme] = useState<ReadingTheme>(() => {
-    return (localStorage.getItem('reader_theme') as ReadingTheme) || 'light';
+    const saved = localStorage.getItem('reader_theme') as ReadingTheme;
+    if (saved && (saved === 'light' || saved === 'dark' || saved === 'sepia')) {
+      return saved;
+    }
+    if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      return 'dark';
+    }
+    return 'light';
   });
   const [fontSize, setFontSize] = useState<FontSize>(() => {
     return (localStorage.getItem('reader_font_size') as FontSize) || 'md';

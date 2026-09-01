@@ -77,11 +77,11 @@ export async function optimizeImage(
         }
       }
 
-      const canvas萃 = document.createElement('canvas');
-      canvas萃.width = width;
-      canvas萃.height = height;
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
 
-      const ctx = canvas萃.getContext('2d');
+      const ctx = canvas.getContext('2d');
       if (!ctx) {
         resolve(file); // Fallback to raw file if canvas fails
         return;
@@ -92,7 +92,7 @@ export async function optimizeImage(
 
       // Prefer WebP if supported, fallback to JPEG
       const outputType = 'image/webp';
-      canvas萃.toBlob(
+      canvas.toBlob(
         (blob) => {
           if (blob && blob.size < file.size) {
             resolve(blob);

@@ -5,20 +5,26 @@ export interface User {
   createdAt: string;
 }
 
-export interface DirectAdSettings {
+export interface AdvertisementSettings {
+  id?: string;
   enabled: boolean;
-  globalDirectLink: string;
-  maxTriggers: 1 | 2 | 3;
+  globalAdCode: string;
+  redirectAmount: 1 | 2 | 3;
   updatedAt?: string;
+  globalDirectLink?: string;
+  maxTriggers?: 1 | 2 | 3;
 }
 
-export interface StoryAdvertisement {
-  id?: string;
-  storyId: string;
-  directLink: string;
+// Backward-compatible alias
+export type DirectAdSettings = {
   enabled: boolean;
-  createdAt: string;
-}
+  globalAdCode?: string;
+  redirectAmount?: 1 | 2 | 3;
+  globalDirectLink?: string;
+  maxTriggers?: 1 | 2 | 3;
+  id?: string;
+  updatedAt?: string;
+};
 
 export interface SiteSettings {
   siteName: string;
@@ -43,8 +49,10 @@ export interface DashboardStats {
   publishedStories: number;
   draftStories: number;
   adsEnabled: boolean;
-  maxTriggers: number;
-  hasGlobalDirectLink: boolean;
+  redirectAmount: number;
+  hasGlobalAdCode: boolean;
+  maxTriggers?: number;
+  hasGlobalDirectLink?: boolean;
   recentUploads: Array<{
     id: string;
     title: string;

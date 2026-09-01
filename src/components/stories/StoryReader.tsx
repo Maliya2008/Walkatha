@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { ArrowLeft, Clock, Calendar, Eye, Bookmark, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Calendar, Eye, Bookmark, CheckCircle2 } from 'lucide-react';
 import { Story, ReadingTheme, FontSize, FontFamily } from '../../types/story';
 import { Badge } from '../common/Badge';
 import { ReadingControls } from './ReadingControls';
@@ -38,7 +38,7 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
     const handleScroll = () => {
       const totalScroll = document.documentElement.scrollTop;
       const windowHeight = document.documentElement.scrollHeight - document.documentElement.clientHeight;
-      const scroll = `${(totalScroll / windowHeight) * 100}`;
+      const scroll = `${(totalScroll / (windowHeight || 1)) * 100}`;
       setScrollProgress(Number(scroll));
     };
 
@@ -46,11 +46,12 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  const contentToRender = story.fullContent || story.content || '';
   const paragraphs = useMemo(() => {
-    return story.fullContent.split('\n\n').filter(p => p.trim().length > 0);
-  }, [story.fullContent]);
+    return contentToRender.split('\n\n').filter((p) => p.trim().length > 0);
+  }, [contentToRender]);
 
-  const formattedDate = new Date(story.uploadDate).toLocaleDateString('en-US', {
+  const formattedDate = new Date(story.uploadDate || story.uploadedDate || 0).toLocaleDateString('en-US', {
     month: 'long',
     day: 'numeric',
     year: 'numeric',
@@ -80,25 +81,26 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
         />
       </div>
 
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
-        <div className="flex items-center justify-between gap-4 mb-6">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
+        {/* Navigation & Toolbar */}
+        <div className="flex items-center justify-between gap-4 mb-4">
           <button
             type="button"
             id="reader-back-btn"
             onClick={onBack}
-            className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold transition-colors shadow-xs"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-medium transition-colors cursor-pointer"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             <span>Back to Stories</span>
           </button>
-          
+
           <div className="flex items-center gap-2">
             <button
               type="button"
               id="reader-bookmark-btn"
               onClick={() => setIsBookmarked(!isBookmarked)}
               aria-label="Bookmark story"
-              className={`p-2 rounded-lg border text-xs font-medium transition-colors ${
+              className={`p-1.5 rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
                 isBookmarked
                   ? 'border-amber-300 bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400'
                   : 'border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 text-slate-600 dark:text-slate-400'
@@ -109,51 +111,30 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
           </div>
         </div>
 
-        <header className="mt-4 mb-8">
-          <div className="flex items-center gap-2 mb-3">
-            <Badge variant="accent" size="md">
+        {/* Story Header */}
+        <header className="max-w-[750px] mx-auto mt-2 mb-6">
+          <div className="flex items-center gap-2 mb-2">
+            <Badge variant="accent" size="sm">
               {story.categoryName || story.category}
             </Badge>
-            <span className="text-xs text-slate-400">•</span>
-            <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-              Short Fiction
-            </span>
           </div>
 
           <h1
             id="reader-story-title"
-            className="text-2xl sm:text-4xl font-extrabold tracking-tight mb-4 text-slate-900 dark:text-white"
+            className="text-2xl sm:text-3xl font-bold tracking-tight mb-3 text-slate-900 dark:text-white font-serif leading-snug"
           >
             {story.title}
           </h1>
 
-          <p className="text-base sm:text-lg text-slate-600 dark:text-slate-300 italic mb-6 leading-relaxed border-l-3 border-indigo-500 pl-4">
-            {story.shortDescription}
+          <p className="text-sm sm:text-base text-slate-600 dark:text-slate-300 italic mb-4 leading-relaxed border-l-2 border-indigo-500 pl-3">
+            {story.shortDescription || story.description}
           </p>
 
-          <div className="flex flex-wrap items-center justify-between gap-4 py-3 border-y border-slate-200 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400">
-            <div className="flex items-center gap-3">
-              <img
-                src={story.author?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80'}
-                alt={story.author?.name || 'Author'}
-                className="w-10 h-10 rounded-full object-cover border border-slate-200 dark:border-slate-700"
-              />
-              <div>
-                <span className="block font-bold text-slate-900 dark:text-slate-100 text-sm">
-                  {story.author?.name || 'Editorial Staff'}
-                </span>
-                <span className="text-[11px] text-slate-400">Published Author</span>
-              </div>
-            </div>
-
+          <div className="flex flex-wrap items-center justify-between gap-3 py-2.5 border-y border-slate-200 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400">
             <div className="flex items-center gap-4">
               <span className="flex items-center gap-1">
                 <Calendar className="w-3.5 h-3.5" />
                 {formattedDate}
-              </span>
-              <span className="flex items-center gap-1">
-                <Clock className="w-3.5 h-3.5" />
-                {story.readingTime} min read
               </span>
               <span className="flex items-center gap-1">
                 <Eye className="w-3.5 h-3.5" />
@@ -163,7 +144,8 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
           </div>
         </header>
 
-        <div className="relative aspect-video w-full rounded-2xl overflow-hidden mb-6 shadow-md bg-slate-100 dark:bg-slate-800">
+        {/* Story Cover Image */}
+        <div className="max-w-[750px] mx-auto relative aspect-[16/9] w-full rounded-xl overflow-hidden mb-5 shadow-sm bg-slate-100 dark:bg-slate-800">
           <img
             src={story.coverImage}
             alt={story.title}
@@ -171,34 +153,34 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
           />
         </div>
 
-        <ReadingControls
-          theme={theme}
-          onThemeChange={onThemeChange}
-          fontSize={fontSize}
-          onFontSizeChange={onFontSizeChange}
-          fontFamily={fontFamily}
-          onFontFamilyChange={onFontFamilyChange}
-        />
+        {/* Reading Customization Controls */}
+        <div className="max-w-[750px] mx-auto">
+          <ReadingControls
+            theme={theme}
+            onThemeChange={onThemeChange}
+            fontSize={fontSize}
+            onFontSizeChange={onFontSizeChange}
+            fontFamily={fontFamily}
+            onFontFamilyChange={onFontFamilyChange}
+          />
+        </div>
 
-        <main id="reader-story-body" className={`max-w-2xl mx-auto my-8 ${fontFamClass} ${fontSizes}`}>
-          {paragraphs.map((paragraph, index) => {
-            return (
-              <React.Fragment key={`p-${index}`}>
-                <p className="mb-6 text-justify text-slate-800 dark:text-slate-200">
-                  {paragraph}
-                </p>
-              </React.Fragment>
-            );
-          })}
+        {/* Main Content Body */}
+        <main id="reader-story-body" className={`max-w-[750px] mx-auto my-6 ${fontFamClass} ${fontSizes}`}>
+          {paragraphs.map((paragraph, index) => (
+            <p key={`p-${index}`} className="mb-5 text-left text-slate-800 dark:text-slate-200 leading-[1.8] sm:leading-loose">
+              {paragraph}
+            </p>
+          ))}
 
-          <div className="text-center my-10 flex flex-col items-center justify-center gap-2">
+          <div className="text-center my-8 flex flex-col items-center justify-center gap-2">
             <div className="flex items-center gap-1.5 text-xs text-slate-400 uppercase tracking-widest font-semibold">
-              <span>End of Story</span>
+              <span>- End of Story -</span>
             </div>
           </div>
 
           {story.tags && story.tags.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2 my-6 pt-4 border-t border-slate-200 dark:border-slate-800">
+            <div className="flex flex-wrap items-center gap-2 my-4 pt-3 border-t border-slate-200 dark:border-slate-800">
               <span className="text-xs font-semibold text-slate-400">Tags:</span>
               {story.tags.map((tag) => (
                 <Badge key={tag} variant="outline" size="sm">
@@ -209,25 +191,6 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
           )}
 
           <SocialShare story={story} />
-
-          <div className="my-8 p-5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-start gap-4">
-            <img
-              src={story.author?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80'}
-              alt={story.author?.name || 'Author'}
-              className="w-12 h-12 rounded-full object-cover border border-slate-200 dark:border-slate-700"
-            />
-            <div>
-              <span className="text-[11px] uppercase tracking-wider font-bold text-indigo-600 dark:text-indigo-400">
-                About the Author
-              </span>
-              <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                {story.author?.name || 'Editorial Staff'}
-              </h4>
-              <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
-                {story.author?.bio || 'Author and creative writer sharing short stories on the web.'}
-              </p>
-            </div>
-          </div>
         </main>
 
         <RelatedStories stories={relatedStories} onRead={onSelectStory} />

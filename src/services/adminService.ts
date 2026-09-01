@@ -1,8 +1,9 @@
 import { Story, Category } from '../types/story';
-import { DirectAdSettings, DashboardStats, SiteSettings } from '../types/admin';
+import { AdvertisementSettings, DashboardStats, SiteSettings } from '../types/admin';
 import { authService } from './authService';
 import { db } from '../lib/firebase';
 import { deleteImageFromStorage } from './storageService';
+import { adService } from './adService';
 import {
   collection,
   doc,
@@ -15,6 +16,7 @@ import {
   query,
   where,
   writeBatch,
+  deleteField,
 } from 'firebase/firestore';
 
 const DEFAULT_CATEGORIES: Array<{ name: string; slug: string; description: string }> = [
@@ -63,11 +65,16 @@ class AdminService {
       // Sort recent
       stories.sort((a, b) => new Date(b.uploadDate || b.uploadedDate || b.createdAt || 0).getTime() - new Date(a.uploadDate || a.uploadedDate || a.createdAt || 0).getTime());
 
-      // Get ads status
-      const adsDoc = await getDoc(doc(db, 'advertisements', 'settings'));
-      const adsEnabled = adsDoc.exists() ? adsDoc.data().enabled : true;
-      const maxTriggers = adsDoc.exists() ? (adsDoc.data().maxTriggers || 1) : 1;
-      const hasGlobalDirectLink = adsDoc.exists() ? !!adsDoc.data().globalDirectLink : false;
+      // Get ads status from advertisement_settings or fallback
+      let adsDoc = await getDoc(doc(db, 'advertisement_settings', 'global'));
+      if (!adsDoc.exists()) {
+        adsDoc = await getDoc(doc(db, 'advertisements', 'settings'));
+      }
+
+      const adsData = adsDoc.exists() ? adsDoc.data() : null;
+      const adsEnabled = adsData && typeof adsData.enabled === 'boolean' ? adsData.enabled : true;
+      const redirectAmount = adsData ? (adsData.redirectAmount || adsData.maxTriggers || 1) : 1;
+      const hasGlobalAdCode = adsData ? !!(adsData.globalAdCode || adsData.globalDirectLink) : false;
 
       return {
         totalStories,
@@ -75,8 +82,10 @@ class AdminService {
         draftStories,
         totalViews,
         adsEnabled,
-        maxTriggers,
-        hasGlobalDirectLink,
+        redirectAmount,
+        hasGlobalAdCode,
+        maxTriggers: redirectAmount,
+        hasGlobalDirectLink: hasGlobalAdCode,
         recentUploads: stories.slice(0, 5).map((s) => ({
           id: s.id,
           title: s.title,
@@ -112,21 +121,20 @@ class AdminService {
           title: data.title || '',
           slug: data.slug || '',
           coverImage: data.coverImage || '',
+          description: data.description || data.shortDescription || '',
           shortDescription: data.shortDescription || data.description || '',
+          content: data.content || data.fullContent || '',
           fullContent: data.fullContent || data.content || '',
           categoryId: data.categoryId || data.category || '',
           category: data.category || '',
           categoryName: data.categoryName || data.category || '',
           tags: data.tags || [],
-          author: data.author || { name: 'Editorial Staff' },
           uploadDate: data.uploadDate || data.uploadedDate || data.createdAt || new Date().toISOString(),
           uploadedDate: data.uploadedDate || data.uploadDate || data.createdAt || new Date().toISOString(),
           updatedDate: data.updatedDate || data.updatedAt || new Date().toISOString(),
-          readingTime: data.readingTime || 5,
           views: data.views || 0,
           featured: Boolean(data.featured),
           published: Boolean(data.published),
-          directAdLink: data.directAdLink || '',
         } as Story);
       });
 
@@ -135,7 +143,7 @@ class AdminService {
         stories = stories.filter(
           (s) =>
             s.category?.toLowerCase() === catFilter ||
-            (s as any).categoryId?.toLowerCase() === catFilter
+            s.categoryId?.toLowerCase() === catFilter
         );
       }
       if (params?.status && params.status !== 'all') {
@@ -146,7 +154,7 @@ class AdminService {
         stories = stories.filter(
           (s) =>
             s.title?.toLowerCase().includes(q) ||
-            s.shortDescription?.toLowerCase().includes(q) ||
+            s.description?.toLowerCase().includes(q) ||
             s.tags?.some((t) => t.toLowerCase().includes(q))
         );
       }
@@ -168,11 +176,8 @@ class AdminService {
     category: string;
     categoryId?: string;
     tags: string[];
-    author: string;
-    readingTime?: number;
     published: boolean;
     featured?: boolean;
-    directAdLink?: string;
   }): Promise<{ message: string; story: Story }> {
     this.requireAuth();
 
@@ -201,33 +206,25 @@ class AdminService {
       const categoryName = matchedCat?.name || storyData.category;
 
       const newStory = {
-        title: storyData.title,
+        title: storyData.title.trim(),
         slug,
-        coverImage: storyData.coverImage,
-        description: storyData.shortDescription,
-        shortDescription: storyData.shortDescription,
-        content: storyData.fullContent,
-        fullContent: storyData.fullContent,
+        coverImage: storyData.coverImage.trim(),
+        description: storyData.shortDescription.trim(),
+        shortDescription: storyData.shortDescription.trim(),
+        content: storyData.fullContent.trim(),
+        fullContent: storyData.fullContent.trim(),
         categoryId,
         category: categorySlug,
         categoryName,
         tags: storyData.tags || [],
-        author: {
-          id: authService.getCurrentUser()?.uid || 'auth_admin',
-          name: storyData.author || 'Editorial Staff',
-        },
         uploadDate: nowIso,
         uploadedDate: nowIso,
         updatedDate: nowIso,
         createdAt: nowIso,
         updatedAt: nowIso,
-        readingTime:
-          storyData.readingTime ||
-          Math.max(1, Math.ceil(storyData.fullContent.split(/\s+/).length / 200)),
         views: 0,
         published: storyData.published,
         featured: Boolean(storyData.featured),
-        directAdLink: storyData.directAdLink || '',
       };
 
       const docRef = await addDoc(collection(db, 'stories'), newStory);
@@ -244,7 +241,7 @@ class AdminService {
 
   public async updateStory(
     id: string,
-    updates: Partial<Story> & { author?: any; categoryId?: string }
+    updates: Partial<Story> & { categoryId?: string }
   ): Promise<{ message: string; story: Story }> {
     this.requireAuth();
 
@@ -288,23 +285,25 @@ class AdminService {
 
       const finalUpdates: any = {
         ...updates,
-        description: updates.shortDescription || updates.description || existing.shortDescription || existing.description,
+        description: updates.shortDescription || updates.description || existing.description || existing.shortDescription,
         shortDescription: updates.shortDescription || updates.description || existing.shortDescription,
-        content: updates.fullContent || updates.content || existing.fullContent || existing.content,
+        content: updates.fullContent || updates.content || existing.content || existing.fullContent,
         fullContent: updates.fullContent || updates.content || existing.fullContent,
         category: categorySlug,
         categoryId,
         categoryName,
         updatedDate: nowIso,
         updatedAt: nowIso,
-        author:
-          typeof updates.author === 'string'
-            ? { id: existing.author?.id || 'auth_admin', name: updates.author }
-            : updates.author || existing.author,
+        categories: deleteField(),
+        categoryIds: deleteField(),
       };
       
       // Prevent writing doc ID into document fields
       delete finalUpdates.id;
+      // Clean up legacy fields if present
+      delete finalUpdates.author;
+      delete finalUpdates.readingTime;
+      delete finalUpdates.directAdLink;
 
       await updateDoc(docRef, finalUpdates);
 
@@ -339,33 +338,31 @@ class AdminService {
   }
 
   public async getAdvertisementSettings(): Promise<{
-    advertisements: DirectAdSettings;
-    postAdvertisements: Record<string, string>;
+    advertisements: AdvertisementSettings;
   }> {
     try {
-      const adsDoc = await getDoc(doc(db, 'advertisements', 'settings'));
-      let ads: DirectAdSettings = {
+      let adsDoc = await getDoc(doc(db, 'advertisement_settings', 'global'));
+      if (!adsDoc.exists()) {
+        adsDoc = await getDoc(doc(db, 'advertisements', 'settings'));
+      }
+
+      let ads: AdvertisementSettings = {
         enabled: true,
-        globalDirectLink: '',
-        maxTriggers: 1,
+        globalAdCode: '',
+        redirectAmount: 1,
       };
 
       if (adsDoc.exists()) {
-        ads = { ...ads, ...adsDoc.data() };
+        const data = adsDoc.data();
+        ads = {
+          enabled: typeof data.enabled === 'boolean' ? data.enabled : true,
+          globalAdCode: data.globalAdCode || data.globalDirectLink || '',
+          redirectAmount: (data.redirectAmount || data.maxTriggers || 1) as 1 | 2 | 3,
+          updatedAt: data.updatedAt,
+        };
       }
-      
-      // Extract individual ad codes from stories
-      const postAdvertisements: Record<string, string> = {};
-      const storiesRef = collection(db, 'stories');
-      const snapshot = await getDocs(storiesRef);
-      snapshot.forEach((d) => {
-        const data = d.data();
-        if (data.directAdLink) {
-          postAdvertisements[d.id] = data.directAdLink;
-        }
-      });
 
-      return { advertisements: ads, postAdvertisements };
+      return { advertisements: ads };
     } catch (e) {
       console.error(e);
       throw new Error('Failed to load advertisement settings');
@@ -373,29 +370,31 @@ class AdminService {
   }
 
   public async updateAdvertisementSettings(
-    settings: Partial<DirectAdSettings>
-  ): Promise<{ message: string; advertisements: DirectAdSettings }> {
+    settings: Partial<AdvertisementSettings>
+  ): Promise<{ message: string; advertisements: AdvertisementSettings }> {
     this.requireAuth();
     try {
-      const docRef = doc(db, 'advertisements', 'settings');
-      const docSnap = await getDoc(docRef);
+      const current = (await this.getAdvertisementSettings()).advertisements;
       
-      let updated: DirectAdSettings = {
-        enabled: true,
-        globalDirectLink: '',
-        maxTriggers: 1,
+      const updated: AdvertisementSettings = {
+        enabled: typeof settings.enabled === 'boolean' ? settings.enabled : current.enabled,
+        globalAdCode: typeof settings.globalAdCode === 'string' ? settings.globalAdCode : current.globalAdCode,
+        redirectAmount: (settings.redirectAmount || current.redirectAmount || 1) as 1 | 2 | 3,
+        updatedAt: new Date().toISOString(),
       };
 
-      if (docSnap.exists()) {
-        updated = { ...updated, ...docSnap.data() };
-      }
-      
-      updated = { 
-        ...updated, 
-        ...settings, 
-        updatedAt: new Date().toISOString() 
-      };
-      await setDoc(docRef, updated);
+      // Save to primary collection
+      await setDoc(doc(db, 'advertisement_settings', 'global'), updated);
+
+      // Also sync to legacy document for backward compatibility
+      await setDoc(doc(db, 'advertisements', 'settings'), {
+        ...updated,
+        globalDirectLink: updated.globalAdCode,
+        maxTriggers: updated.redirectAmount,
+      });
+
+      // Update runtime adService config
+      adService.updateConfig(updated);
 
       return {
         message: 'Advertisement settings updated successfully',
@@ -405,19 +404,6 @@ class AdminService {
       console.error('Firebase Advertisement Update Error:', error);
       const code = error?.code || error?.message || 'unknown error';
       throw new Error(`Failed to update advertisement settings: ${code}`);
-    }
-  }
-
-  public async updateStoryAd(storyId: string, directLink: string): Promise<{ message: string }> {
-    this.requireAuth();
-    try {
-      await updateDoc(doc(db, 'stories', storyId), {
-        directAdLink: directLink
-      });
-      return { message: 'Story ad updated successfully' };
-    } catch (error: any) {
-      console.error('Firebase updateStoryAd Error:', error);
-      throw new Error(`Failed to update individual story ad code: ${error?.code || error?.message || 'unknown error'}`);
     }
   }
 
@@ -692,6 +678,105 @@ class AdminService {
     } catch (error: any) {
       console.error('Firebase updateSiteSettings Error:', error);
       throw new Error(`Failed to update site settings: ${error?.code || error?.message || 'unknown error'}`);
+    }
+  }
+  public async migrateStoryCategories(): Promise<number> {
+    try {
+      const storiesRef = collection(db, 'stories');
+      const snapshot = await getDocs(storiesRef);
+      let migratedCount = 0;
+
+      const categories = await this.getCategories();
+
+      for (const docSnap of snapshot.docs) {
+        const data = docSnap.data();
+        let needsUpdate = false;
+        let targetCatId = data.categoryId;
+        let targetCatSlug = data.category;
+        let targetCatName = data.categoryName;
+
+        // Check if categories array exists
+        if (Array.isArray(data.categories) && data.categories.length > 0) {
+          const firstCat = data.categories[0];
+          if (typeof firstCat === 'string') {
+            const matched = categories.find(
+              (c) => c.id === firstCat || c.slug.toLowerCase() === firstCat.toLowerCase() || c.name.toLowerCase() === firstCat.toLowerCase()
+            );
+            if (matched) {
+              targetCatId = matched.id;
+              targetCatSlug = matched.slug;
+              targetCatName = matched.name;
+            } else {
+              targetCatId = firstCat;
+              targetCatSlug = firstCat;
+              targetCatName = firstCat;
+            }
+          } else if (firstCat && typeof firstCat === 'object') {
+            targetCatId = firstCat.id || firstCat.categoryId || targetCatId;
+            targetCatSlug = firstCat.slug || firstCat.category || targetCatSlug;
+            targetCatName = firstCat.name || firstCat.categoryName || targetCatName;
+          }
+          needsUpdate = true;
+        }
+
+        // Check if categoryIds array exists
+        if (Array.isArray(data.categoryIds) && data.categoryIds.length > 0) {
+          const firstId = data.categoryIds[0];
+          const matched = categories.find((c) => c.id === firstId || c.slug.toLowerCase() === firstId.toLowerCase());
+          if (matched) {
+            targetCatId = matched.id;
+            targetCatSlug = matched.slug;
+            targetCatName = matched.name;
+          } else if (!targetCatId) {
+            targetCatId = firstId;
+          }
+          needsUpdate = true;
+        }
+
+        // Check if category field is an array
+        if (Array.isArray(data.category) && data.category.length > 0) {
+          const firstCat = data.category[0];
+          const matched = categories.find((c) => c.id === firstCat || c.slug.toLowerCase() === firstCat.toLowerCase());
+          if (matched) {
+            targetCatId = matched.id;
+            targetCatSlug = matched.slug;
+            targetCatName = matched.name;
+          } else {
+            targetCatSlug = String(firstCat);
+          }
+          needsUpdate = true;
+        }
+
+        // Ensure categoryId is set if missing
+        if (!targetCatId && targetCatSlug) {
+          const matched = categories.find((c) => c.slug.toLowerCase() === targetCatSlug.toLowerCase());
+          if (matched) {
+            targetCatId = matched.id;
+            targetCatName = matched.name;
+            needsUpdate = true;
+          } else {
+            targetCatId = targetCatSlug;
+            needsUpdate = true;
+          }
+        }
+
+        if (needsUpdate || 'categories' in data || 'categoryIds' in data) {
+          const updatePayload: any = {
+            categoryId: targetCatId || 'romantic',
+            category: targetCatSlug || 'romantic',
+            categoryName: targetCatName || 'Romantic Stories',
+            categories: deleteField(),
+            categoryIds: deleteField(),
+          };
+          await updateDoc(docSnap.ref, updatePayload);
+          migratedCount++;
+        }
+      }
+
+      return migratedCount;
+    } catch (err) {
+      console.warn('Story category migration notice:', err);
+      return 0;
     }
   }
 }

@@ -3,53 +3,35 @@ import {
   Megaphone,
   Power,
   Layers,
-  FileCode,
-  Globe,
+  Code2,
   CheckCircle2,
   ExternalLink,
   ShieldCheck,
   AlertCircle,
   Save,
+  Sparkles,
 } from 'lucide-react';
 import { adminService } from '../../services/adminService';
-import { DirectAdSettings } from '../../types/admin';
-import { Story } from '../../types/story';
+import { AdvertisementSettings } from '../../types/admin';
 
 export const AdminAdsManager: React.FC = () => {
-  const [adsSettings, setAdsSettings] = useState<DirectAdSettings>({
-    globalDirectLink: '',
+  const [adsSettings, setAdsSettings] = useState<AdvertisementSettings>({
     enabled: true,
-    maxTriggers: 1,
+    globalAdCode: '',
+    redirectAmount: 1,
   });
 
-  const [postAds, setPostAds] = useState<Record<string, string>>({});
-  const [stories, setStories] = useState<Story[]>([]);
-  const [selectedStoryId, setSelectedStoryId] = useState<string>('');
-  const [directAdLink, setDirectAdLink] = useState<string>('');
-
   const [isLoading, setIsLoading] = useState(true);
-  const [isSavingGlobal, setIsSavingGlobal] = useState(false);
-  const [isSavingPostAd, setIsSavingPostAd] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const fetchAdsData = async () => {
     try {
       setIsLoading(true);
-      const [adsData, storiesList] = await Promise.all([
-        adminService.getAdvertisementSettings(),
-        adminService.getStories(),
-      ]);
-      setAdsSettings(adsData.advertisements);
-      setPostAds(adsData.postAdvertisements || {});
-      setStories(storiesList);
-
-      if (storiesList.length > 0) {
-        const firstId = storiesList[0].id;
-        setSelectedStoryId(firstId);
-        setDirectAdLink(adsData.postAdvertisements?.[firstId] || storiesList.find(s => s.id === firstId)?.directAdLink || '');
-      }
+      const data = await adminService.getAdvertisementSettings();
+      setAdsSettings(data.advertisements);
     } catch (err: any) {
-      setFeedback({ type: 'error', message: err.message || 'Failed to load ad settings' });
+      setFeedback({ type: 'error', message: err.message || 'Failed to load advertisement settings' });
     } finally {
       setIsLoading(false);
     }
@@ -59,60 +41,24 @@ export const AdminAdsManager: React.FC = () => {
     fetchAdsData();
   }, []);
 
-  const handleStorySelectionChange = (storyId: string) => {
-    setSelectedStoryId(storyId);
-    const link = postAds[storyId] || stories.find((s) => s.id === storyId)?.directAdLink || '';
-    setDirectAdLink(link);
-  };
-
-  const handleSaveGlobalAds = async () => {
-    setIsSavingGlobal(true);
+  const handleSaveAds = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSaving(true);
     setFeedback(null);
     try {
-      // Validate URLs
-      if (adsSettings.globalDirectLink) {
-        new URL(adsSettings.globalDirectLink);
-      }
-      
       const res = await adminService.updateAdvertisementSettings(adsSettings);
       setAdsSettings(res.advertisements);
-      setFeedback({ type: 'success', message: 'Global direct link settings saved successfully!' });
-    } catch (err: any) {
-      if (err instanceof TypeError) {
-        setFeedback({ type: 'error', message: 'Invalid URL format for global direct link.' });
-      } else {
-        setFeedback({ type: 'error', message: err.message || 'Failed to save settings' });
-      }
-    } finally {
-      setIsSavingGlobal(false);
-    }
-  };
-
-  const handleSaveIndividualStoryAd = async () => {
-    if (!selectedStoryId) return;
-    setIsSavingPostAd(true);
-    setFeedback(null);
-    try {
-      if (directAdLink) {
-        new URL(directAdLink);
-      }
-
-      await adminService.updateStoryAd(selectedStoryId, directAdLink);
-      setPostAds((prev) => ({ ...prev, [selectedStoryId]: directAdLink }));
-      const targetStory = stories.find((s) => s.id === selectedStoryId);
-      
       setFeedback({
         type: 'success',
-        message: `Direct link for "${targetStory?.title || 'selected story'}" saved successfully!`,
+        message: 'Global advertisement settings saved successfully in the database!',
       });
     } catch (err: any) {
-      if (err instanceof TypeError) {
-        setFeedback({ type: 'error', message: 'Invalid URL format for story direct link.' });
-      } else {
-        setFeedback({ type: 'error', message: err.message || 'Failed to save individual ad link' });
-      }
+      setFeedback({
+        type: 'error',
+        message: err?.message || 'Failed to save advertisement settings',
+      });
     } finally {
-      setIsSavingPostAd(false);
+      setIsSaving(false);
     }
   };
 
@@ -126,16 +72,16 @@ export const AdminAdsManager: React.FC = () => {
   }
 
   return (
-    <div className="space-y-8 max-w-5xl mx-auto pb-12">
+    <div className="space-y-8 max-w-4xl mx-auto pb-12">
       {/* Top Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 p-6 rounded-3xl border border-slate-800 shadow-xl">
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-3">
             <Megaphone className="w-6 h-6 text-indigo-400" />
-            Direct Link Monetization
+            Global Monetag Advertisement System
           </h1>
           <p className="text-sm text-slate-400 mt-1">
-            Manage your global redirection links, frequency limits, and story-specific overrides.
+            Configure the single global advertisement code and session redirection limit for all stories across the website.
           </p>
         </div>
         <a
@@ -166,163 +112,116 @@ export const AdminAdsManager: React.FC = () => {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column - Global Settings */}
-        <div className="lg:col-span-2 space-y-6">
-          
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl relative overflow-hidden group hover:border-slate-700 transition-colors">
-            
-            <div className="flex items-start gap-4 mb-8 relative z-10">
-              <div className="p-3 bg-indigo-500/10 rounded-2xl">
-                <ShieldCheck className="w-6 h-6 text-indigo-400" />
-              </div>
+      {/* Main Global Advertisement Settings Card */}
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl relative overflow-hidden">
+        <div className="flex items-start gap-4 mb-6">
+          <div className="p-3 bg-indigo-500/10 rounded-2xl">
+            <ShieldCheck className="w-6 h-6 text-indigo-400" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-white">Global Advertisement Configuration</h2>
+            <p className="text-xs text-slate-400 mt-1">
+              Settings configured here apply automatically to all stories, story pages, and visitors.
+            </p>
+          </div>
+        </div>
+
+        <form onSubmit={handleSaveAds} className="space-y-6">
+          {/* Master ON/OFF Switch */}
+          <div className="flex items-center justify-between p-5 bg-slate-950/60 rounded-2xl border border-slate-800">
+            <div className="flex items-center gap-3">
+              <Power className={`w-6 h-6 ${adsSettings.enabled ? 'text-emerald-400' : 'text-slate-500'}`} />
               <div>
-                <h2 className="text-lg font-bold text-white">Global Direct Ad Settings</h2>
-                <p className="text-xs text-slate-400 mt-1">
-                  Configure default link routing and frequency caps.
-                </p>
+                <span className="text-sm font-bold text-white block">
+                  Advertisements: {adsSettings.enabled ? 'ON' : 'OFF'}
+                </span>
+                <span className="text-xs text-slate-400">
+                  {adsSettings.enabled
+                    ? 'Monetag code and direct redirects are active'
+                    : 'All advertisements and redirects are completely disabled'}
+                </span>
               </div>
             </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                className="sr-only peer"
+                checked={adsSettings.enabled}
+                onChange={(e) => setAdsSettings({ ...adsSettings, enabled: e.target.checked })}
+              />
+              <div className="w-12 h-7 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[3px] after:left-[3px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5.5 after:w-5.5 after:transition-all peer-checked:bg-emerald-500"></div>
+            </label>
+          </div>
 
-            <div className="space-y-6 relative z-10">
-              {/* Master Switch */}
-              <div className="flex items-center justify-between p-4 bg-slate-950/50 rounded-2xl border border-slate-800/60">
-                <div className="flex items-center gap-3">
-                  <Power className={`w-5 h-5 ${adsSettings.enabled ? 'text-emerald-400' : 'text-slate-500'}`} />
-                  <div>
-                    <span className="text-sm font-medium text-white block">Direct Link Ads</span>
-                    <span className="text-[11px] text-slate-500">Enable or disable all link redirects globally</span>
-                  </div>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    className="sr-only peer"
-                    checked={adsSettings.enabled}
-                    onChange={(e) => setAdsSettings({ ...adsSettings, enabled: e.target.checked })}
-                  />
-                  <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
-                </label>
-              </div>
-
-              {/* Global Link Input */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-2 uppercase tracking-wider">
-                  Global Direct Link
-                </label>
-                <div className="relative">
-                  <Globe className="absolute left-4 top-3.5 w-5 h-5 text-slate-500" />
-                  <input
-                    type="url"
-                    value={adsSettings.globalDirectLink}
-                    onChange={(e) => setAdsSettings({ ...adsSettings, globalDirectLink: e.target.value })}
-                    placeholder="https://example-ad-link.com"
-                    className="w-full pl-12 pr-4 py-3 bg-slate-950/50 border border-slate-800/60 rounded-2xl text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all font-mono"
-                  />
-                </div>
-                <p className="text-[11px] text-slate-500 mt-2">
-                  This link will be used when no story-specific link is configured.
-                </p>
-              </div>
-
-              {/* Max Triggers per session */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-2 uppercase tracking-wider">
-                  Maximum Ad Triggers per User Session
-                </label>
-                <div className="relative">
-                  <Layers className="absolute left-4 top-3.5 w-5 h-5 text-slate-500" />
-                  <select
-                    value={adsSettings.maxTriggers}
-                    onChange={(e) => setAdsSettings({ ...adsSettings, maxTriggers: parseInt(e.target.value, 10) as 1 | 2 | 3 })}
-                    className="w-full pl-12 pr-10 py-3 bg-slate-950/50 border border-slate-800/60 rounded-2xl text-sm text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all appearance-none"
-                  >
-                    <option value={1}>1 - Only first eligible click redirects</option>
-                    <option value={2}>2 - Allow two ad redirects</option>
-                    <option value={3}>3 - Allow three ad redirects</option>
-                  </select>
-                </div>
-              </div>
-
+          {/* Global Advertisement Code Textarea */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                <Code2 className="w-4 h-4 text-indigo-400" />
+                <span>Global Advertisement Code / Direct Link</span>
+              </label>
+              <span className="text-[11px] text-slate-400">
+                Monetag Direct Link URL or Script Tag
+              </span>
             </div>
+            <textarea
+              rows={6}
+              value={adsSettings.globalAdCode}
+              onChange={(e) => setAdsSettings({ ...adsSettings, globalAdCode: e.target.value })}
+              placeholder="Paste your Monetag direct link (e.g. https://...) or JavaScript snippet code here..."
+              className="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-2xl text-xs text-amber-300 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono leading-relaxed resize-y"
+            />
+            <p className="text-[11px] text-slate-400 mt-2">
+              This code will automatically be executed for all stories and pages across the website when advertisements are turned ON.
+            </p>
+          </div>
 
-            <div className="mt-8 flex justify-end">
-              <button
-                onClick={handleSaveGlobalAds}
-                disabled={isSavingGlobal}
-                className="flex items-center gap-2 px-6 py-2.5 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors"
-              >
-                {isSavingGlobal ? (
+          {/* Advertisement Redirection Amount Dropdown */}
+          <div>
+            <label className="block text-xs font-bold text-white uppercase tracking-wider mb-2 flex items-center gap-2">
+              <Layers className="w-4 h-4 text-indigo-400" />
+              <span>Advertisement Redirection Amount</span>
+            </label>
+            <select
+              value={adsSettings.redirectAmount}
+              onChange={(e) =>
+                setAdsSettings({
+                  ...adsSettings,
+                  redirectAmount: parseInt(e.target.value, 10) as 1 | 2 | 3,
+                })
+              }
+              className="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-2xl text-sm font-semibold text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer"
+            >
+              <option value={1}>1 - Redirect once per user session</option>
+              <option value={2}>2 - Redirect twice per user session</option>
+              <option value={3}>3 - Redirect three times per user session</option>
+            </select>
+            <p className="text-[11px] text-slate-400 mt-2">
+              Controls how many times an individual user is automatically redirected to the advertisement direct link during their session.
+            </p>
+          </div>
+
+          {/* Submit Button */}
+          <div className="pt-4 border-t border-slate-800 flex justify-end">
+            <button
+              type="submit"
+              disabled={isSaving}
+              className="flex items-center gap-2 px-8 py-3 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-indigo-600/30 cursor-pointer"
+            >
+              {isSaving ? (
+                <>
                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                ) : (
+                  <span>Saving Settings...</span>
+                </>
+              ) : (
+                <>
                   <Save className="w-4 h-4" />
-                )}
-                Save Global Settings
-              </button>
-            </div>
+                  <span>Save Advertisement Settings</span>
+                </>
+              )}
+            </button>
           </div>
-        </div>
-
-        {/* Right Column - Per Story Overrides */}
-        <div className="lg:col-span-1">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl sticky top-6">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-2.5 bg-sky-500/10 rounded-xl">
-                <FileCode className="w-5 h-5 text-sky-400" />
-              </div>
-              <h2 className="text-base font-bold text-white">Story Overrides</h2>
-            </div>
-
-            <div className="space-y-5">
-              <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">
-                  Select Story
-                </label>
-                <select
-                  value={selectedStoryId}
-                  onChange={(e) => handleStorySelectionChange(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-950/50 border border-slate-800/60 rounded-xl text-sm text-white focus:outline-none focus:border-sky-500 transition-all"
-                >
-                  {stories.length === 0 && <option value="">No stories available</option>}
-                  {stories.map((story) => (
-                    <option key={story.id} value={story.id}>
-                      {story.title}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">
-                  Direct Ad Link
-                </label>
-                <textarea
-                  value={directAdLink}
-                  onChange={(e) => setDirectAdLink(e.target.value)}
-                  placeholder="https://example-story-link.com"
-                  rows={4}
-                  className="w-full px-4 py-3 bg-slate-950/50 border border-slate-800/60 rounded-xl text-xs text-slate-300 placeholder:text-slate-600 focus:outline-none focus:border-sky-500 transition-all font-mono resize-none leading-relaxed"
-                />
-                <p className="text-[10px] text-slate-500 mt-2">
-                  Use this to override the global link for this specific story. Leave blank to fallback to global.
-                </p>
-              </div>
-
-              <button
-                onClick={handleSaveIndividualStoryAd}
-                disabled={!selectedStoryId || isSavingPostAd}
-                className="w-full flex items-center justify-center gap-2 px-6 py-2.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-colors"
-              >
-                {isSavingPostAd ? (
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                ) : (
-                  <Save className="w-4 h-4 text-sky-400" />
-                )}
-                Save Story Override
-              </button>
-            </div>
-          </div>
-        </div>
+        </form>
       </div>
     </div>
   );

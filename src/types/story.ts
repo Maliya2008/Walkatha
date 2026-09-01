@@ -1,10 +1,3 @@
-export interface Author {
-  id: string;
-  name: string;
-  avatar?: string;
-  bio?: string;
-}
-
 export interface Category {
   id: string;
   name: string;
@@ -23,25 +16,26 @@ export interface Story {
   coverImage: string;
   shortDescription: string;
   description?: string;
-  fullContent: string; // Markdown or clean formatted HTML/paragraphs
+  fullContent: string;
   content?: string;
-  category: string; // Category slug
   categoryId?: string;
+  category: string; // Category slug
   categoryName?: string;
   tags: string[];
-  author: Author;
-  uploadDate: string; // ISO String format (e.g. 2026-08-31T09:00:00Z)
-  uploadedDate?: string; // Database field alias
+  uploadDate: string; // ISO String format
+  uploadedDate?: string;
   updatedDate: string;
   createdAt?: any;
   updatedAt?: any;
-  readingTime: number; // in minutes
   views: number;
   featured: boolean;
   published: boolean;
-  directAdLink?: string; // Direct link URL for this specific story
   metaTitle?: string;
   metaDescription?: string;
+  // Optional backwards-compatible fields for external seed data
+  author?: any;
+  readingTime?: number;
+  directAdLink?: string;
 }
 
 export interface StoryFilterParams {
@@ -51,7 +45,7 @@ export interface StoryFilterParams {
   featuredOnly?: boolean;
   page?: number;
   limit?: number;
-  sortBy?: 'latest' | 'popular' | 'readingTime';
+  sortBy?: 'latest' | 'popular';
 }
 
 export interface PaginatedResponse<T> {

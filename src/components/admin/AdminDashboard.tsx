@@ -171,7 +171,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </span>
           </div>
           <div className="mt-2 text-[11px] text-slate-400">
-            {stats.adsPerPage} ads / page &bull; {stats.hasGlobalAdCode ? 'Tag Set' : 'No Tag'}
+            {stats.redirectAmount || stats.maxTriggers || 1} redirect{(stats.redirectAmount || stats.maxTriggers || 1) > 1 ? 's' : ''}/session &bull; {stats.hasGlobalAdCode || stats.hasGlobalDirectLink ? 'Code Set' : 'No Code'}
           </div>
         </div>
       </div>

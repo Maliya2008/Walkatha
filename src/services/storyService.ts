@@ -81,8 +81,6 @@ class StoryService {
       // Sort by selected criteria
       if (params.sortBy === 'popular') {
         allStories.sort((a, b) => (b.views || 0) - (a.views || 0));
-      } else if (params.sortBy === 'readingTime') {
-        allStories.sort((a, b) => (a.readingTime || 0) - (b.readingTime || 0));
       } else {
         // Default latest
         allStories.sort(

@@ -12,7 +12,7 @@ import {
   BookOpen,
   AlertTriangle,
 } from 'lucide-react';
-import { Story } from '../../types/story';
+import { Category, Story } from '../../types/story';
 import { adminService } from '../../services/adminService';
 
 interface AdminStoriesListProps {
@@ -27,12 +27,19 @@ export const AdminStoriesList: React.FC<AdminStoriesListProps> = ({
   onViewPublicStory,
 }) => {
   const [stories, setStories] = useState<Story[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft'>('all');
   const [storyToDelete, setStoryToDelete] = useState<Story | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    adminService.getCategories().then((cats) => {
+      setCategories(cats.filter((c) => c.slug !== 'all'));
+    }).catch(() => {});
+  }, []);
 
   const fetchStories = async () => {
     try {
@@ -127,14 +134,11 @@ export const AdminStoriesList: React.FC<AdminStoriesListProps> = ({
             className="px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 capitalize"
           >
             <option value="all">සියලුම වර්ග (All Categories)</option>
-            <option value="romantic">ආදර කතා (Romantic)</option>
-            <option value="adventure">ත්‍රාසජනක (Adventure)</option>
-            <option value="fiction">ප්‍රබන්ධ කතා (Fiction)</option>
-            <option value="mystery">අභිරහස් (Mystery)</option>
-            <option value="sci-fi">විද්‍යා ප්‍රබන්ධ (Sci-Fi)</option>
-            <option value="fantasy">මනඃකල්පිත (Fantasy)</option>
-            <option value="horror">හොල්මන් / බියකරු (Horror)</option>
-            <option value="inspirational">ජීවිත ආදර්ශ (Inspirational)</option>
+            {categories.map((cat) => (
+              <option key={cat.id} value={cat.slug}>
+                {cat.name}
+              </option>
+            ))}
           </select>
 
           {/* Status Filter */}
@@ -179,7 +183,6 @@ export const AdminStoriesList: React.FC<AdminStoriesListProps> = ({
                 <tr className="border-b border-slate-800 bg-slate-950/50 text-slate-400 uppercase text-[10px] tracking-wider">
                   <th className="py-3.5 px-4">Story & Cover</th>
                   <th className="py-3.5 px-4">Category</th>
-                  <th className="py-3.5 px-4">Author</th>
                   <th className="py-3.5 px-4">Views</th>
                   <th className="py-3.5 px-4">Status</th>
                   <th className="py-3.5 px-4">Uploaded</th>
@@ -207,13 +210,8 @@ export const AdminStoriesList: React.FC<AdminStoriesListProps> = ({
                     {/* Category */}
                     <td className="py-3 px-4">
                       <span className="px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 capitalize text-[11px]">
-                        {story.category}
+                        {story.categoryName || story.category}
                       </span>
-                    </td>
-
-                    {/* Author */}
-                    <td className="py-3 px-4 text-slate-300">
-                      {story.author?.name || 'Staff'}
                     </td>
 
                     {/* Views */}

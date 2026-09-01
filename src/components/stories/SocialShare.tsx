@@ -2,14 +2,16 @@ import React, { useState } from 'react';
 import { Share2, Twitter, Facebook, MessageCircle, Link2, Check } from 'lucide-react';
 
 interface SocialShareProps {
-  title: string;
+  title?: string;
+  story?: any;
   url?: string;
 }
 
-export const SocialShare: React.FC<SocialShareProps> = ({ title, url }) => {
+export const SocialShare: React.FC<SocialShareProps> = ({ title, story, url }) => {
   const [copied, setCopied] = useState(false);
+  const shareTitle = title || story?.title || 'Walkathawa Story';
   const shareUrl = url || (typeof window !== 'undefined' ? window.location.href : '');
-  const encodedTitle = encodeURIComponent(title);
+  const encodedTitle = encodeURIComponent(shareTitle);
   const encodedUrl = encodeURIComponent(shareUrl);
 
   const handleCopyLink = async () => {

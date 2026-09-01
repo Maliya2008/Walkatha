@@ -11,22 +11,6 @@ import { SEOService } from './services/seoService';
 import { adService } from './services/adService';
 
 export default function App() {
-  const [isAdminView, setIsAdminView] = useState<boolean>(() => {
-    const path = window.location.pathname;
-    const hash = window.location.hash;
-    return path.startsWith('/admin') || hash === '#admin' || hash.startsWith('#/admin');
-  });
-
-  const [currentSlug, setCurrentSlug] = useState<string | null>(() => {
-    const path = window.location.pathname;
-    const match = path.match(/^\/story\/([a-zA-Z0-9-_]+)/);
-    if (match) return match[1];
-    const hash = window.location.hash;
-    const hashMatch = hash.match(/^#\/story\/([a-zA-Z0-9-_]+)/);
-    if (hashMatch) return hashMatch[1];
-    return null;
-  });
-
   const { theme, setTheme, fontSize, setFontSize, fontFamily, setFontFamily } = useTheme();
 
   const {
@@ -45,6 +29,9 @@ export default function App() {
     refreshStories,
   } = useStories();
 
+  const [isAdminView, setIsAdminView] = useState<boolean>(false);
+  const [currentSlug, setCurrentSlug] = useState<string | null>(null);
+
   const {
     story: activeStory,
     relatedStories,
@@ -52,33 +39,100 @@ export default function App() {
     error: storyError,
   } = useStory(currentSlug);
 
-  useEffect(() => {
-    const handlePopState = () => {
-      const path = window.location.pathname;
-      const hash = window.location.hash;
-      if (path.startsWith('/admin') || hash === '#admin' || hash.startsWith('#/admin')) {
-        setIsAdminView(true);
-        setCurrentSlug(null);
-        return;
+  const [siteSettings, setSiteSettings] = useState<any>(null);
+
+  // Helper to change URL and trigger route sync
+  const navigateTo = useCallback((urlPath: string, searchParams?: Record<string, string>) => {
+    let finalUrl = urlPath;
+    if (searchParams) {
+      const queryStr = new URLSearchParams(searchParams).toString();
+      if (queryStr) {
+        finalUrl += `?${queryStr}`;
       }
-      setIsAdminView(false);
-      const match = path.match(/^\/story\/([a-zA-Z0-9-_]+)/);
-      if (match) {
-        setCurrentSlug(match[1]);
-      } else {
-        const hashMatch = hash.match(/^#\/story\/([a-zA-Z0-9-_]+)/);
-        if (hashMatch) {
-          setCurrentSlug(hashMatch[1]);
-        } else {
-          setCurrentSlug(null);
-        }
-      }
-    };
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    }
+    try {
+      window.history.pushState({}, '', finalUrl);
+    } catch {
+      window.location.hash = finalUrl;
+    }
+    // Dispatch popstate to notify our route listener
+    window.dispatchEvent(new Event('popstate'));
   }, []);
 
-  const [siteSettings, setSiteSettings] = useState<any>(null);
+  // Unified routing parser
+  const syncRoute = useCallback(() => {
+    const path = window.location.pathname;
+    const hash = window.location.hash;
+    const searchParams = new URLSearchParams(window.location.search);
+
+    // 1. Admin Gating
+    const isAdmin = path.startsWith('/admin') || hash === '#admin' || hash.startsWith('#/admin');
+    setIsAdminView(isAdmin);
+
+    if (isAdmin) {
+      setCurrentSlug(null);
+      return;
+    }
+
+    // 2. Story Reader Check
+    let storySlug: string | null = null;
+    const storyMatch = path.match(/^\/story\/([a-zA-Z0-9-_]+)/);
+    if (storyMatch) {
+      storySlug = storyMatch[1];
+    } else {
+      const hashStoryMatch = hash.match(/^#\/story\/([a-zA-Z0-9-_]+)/);
+      if (hashStoryMatch) {
+        storySlug = hashStoryMatch[1];
+      }
+    }
+    setCurrentSlug(storySlug);
+
+    // 3. Category Page Check
+    let categorySlug = 'all';
+    const categoryMatch = path.match(/^\/category\/([a-zA-Z0-9-_]+)/);
+    if (categoryMatch) {
+      categorySlug = categoryMatch[1];
+    } else {
+      const hashCategoryMatch = hash.match(/^#\/category\/([a-zA-Z0-9-_]+)/);
+      if (hashCategoryMatch) {
+        categorySlug = hashCategoryMatch[1];
+      }
+    }
+
+    // 4. Search Query Check
+    let searchVal = '';
+    const isSearchRoute = path.startsWith('/search') || hash.startsWith('#/search') || hash === '#search';
+    if (isSearchRoute) {
+      searchVal = searchParams.get('q') || '';
+    } else {
+      searchVal = searchParams.get('q') || '';
+    }
+
+    // 5. Page Number Check
+    let pageNum = 1;
+    const pageParam = searchParams.get('page');
+    if (pageParam) {
+      pageNum = parseInt(pageParam, 10) || 1;
+    }
+
+    // Synchronize useStories parameters to prevent double fetches
+    if (params.category !== categorySlug) {
+      setCategory(categorySlug);
+    }
+    if ((params.search || '') !== searchVal) {
+      setSearch(searchVal);
+    }
+    if (page !== pageNum) {
+      setPage(pageNum);
+    }
+  }, [params.category, params.search, page, setCategory, setSearch, setPage]);
+
+  // Sync on mount and popstate
+  useEffect(() => {
+    syncRoute();
+    window.addEventListener('popstate', syncRoute);
+    return () => window.removeEventListener('popstate', syncRoute);
+  }, [syncRoute]);
 
   useEffect(() => {
     import('./services/adminService').then(({ adminService }) => {
@@ -103,42 +157,21 @@ export default function App() {
   }, [isAdminView, currentSlug, activeStory, params.category, params.search, categories, siteSettings]);
 
   const handleReadStory = useCallback((slug: string) => {
-    setIsAdminView(false);
-
-    const targetStory = stories.find(s => s.slug === slug);
-    adService.triggerDirectAd(targetStory?.directAdLink);
-
-    try {
-      window.history.pushState({ slug }, '', `/story/${slug}`);
-    } catch {
-      window.location.hash = `/story/${slug}`;
-    }
-    setCurrentSlug(slug);
+    adService.triggerDirectAd();
+    navigateTo(`/story/${slug}`);
     window.scrollTo({ top: 0, behavior: 'instant' });
-  }, [stories]);
+  }, [navigateTo]);
 
   const handleBackToGallery = useCallback(() => {
-    setIsAdminView(false);
-    try {
-      window.history.pushState({}, '', '/');
-    } catch {
-      window.location.hash = '/';
-    }
-    setCurrentSlug(null);
+    navigateTo('/');
     window.scrollTo({ top: 0, behavior: 'instant' });
-  }, []);
+  }, [navigateTo]);
 
   const handleSelectCategory = useCallback((catSlug: string) => {
-    setIsAdminView(false);
-    try {
-      window.history.pushState({}, '', '/');
-    } catch {
-      window.location.hash = '/';
-    }
-    setCurrentSlug(null);
-    setCategory(catSlug);
+    const targetPath = catSlug === 'all' ? '/' : `/category/${catSlug}`;
+    navigateTo(targetPath);
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [setCategory]);
+  }, [navigateTo]);
 
   if (isAdminView) {
     return <AdminRoot />;
@@ -155,7 +188,7 @@ export default function App() {
         onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
       />
 
-      <main className="flex-grow pt-16">
+      <main className="flex-grow">
         {currentSlug ? (
           activeStory ? (
             <StoryReader
@@ -194,14 +227,27 @@ export default function App() {
             categories={categories}
             featuredStories={featuredStories}
             selectedCategory={params.category || 'all'}
-            onSelectCategory={setCategory}
+            onSelectCategory={handleSelectCategory}
             searchTerm={params.search || ''}
-            onSearchChange={setSearch}
+            onSearchChange={(val) => {
+              if (val) {
+                navigateTo('/search', { q: val });
+              } else {
+                navigateTo(params.category && params.category !== 'all' ? `/category/${params.category}` : '/');
+              }
+            }}
             sortBy={params.sortBy || 'latest'}
             onSortChange={setSortBy}
             currentPage={page}
             totalPages={totalPages}
-            onPageChange={setPage}
+            onPageChange={(pageNum) => {
+              const currentPath = window.location.pathname;
+              const queryObj: Record<string, string> = { page: String(pageNum) };
+              if (params.search) {
+                queryObj.q = params.search;
+              }
+              navigateTo(currentPath, queryObj);
+            }}
             onReadStory={handleReadStory}
             isLoading={isStoriesLoading}
           />

@@ -137,12 +137,22 @@ export default function App() {
     setPage(pageNum);
   }, [setCategory, setSearch, setPage]);
 
+  const previousSlugRef = React.useRef<string | null>(null);
+
   // Sync on mount and popstate
   useEffect(() => {
     syncRoute();
     window.addEventListener('popstate', syncRoute);
     return () => window.removeEventListener('popstate', syncRoute);
   }, [syncRoute]);
+
+  // Refresh stories when returning from a story page so view counts update
+  useEffect(() => {
+    if (previousSlugRef.current && !currentSlug) {
+      refreshStories();
+    }
+    previousSlugRef.current = currentSlug;
+  }, [currentSlug, refreshStories]);
 
   useEffect(() => {
     import('./services/adminService').then(({ adminService }) => {

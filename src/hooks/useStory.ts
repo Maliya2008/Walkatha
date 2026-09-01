@@ -52,20 +52,23 @@ export function useStory(slug: string | null) {
           // Protected against duplicate React renders / StrictMode via realDocId tracking
           if (!isAdmin && isPublished && realDocId) {
             const now = Date.now();
-            // Count as a duplicate render if it's the exact same story incremented within the last 5 seconds
-            const isDuplicateRender = lastIncrementedStoryId === realDocId && (now - lastIncrementTime < 5000);
+            // Count as a duplicate render if it's the exact same story incremented within the last 2 seconds
+            const isDuplicateRender = lastIncrementedStoryId === realDocId && (now - lastIncrementTime < 2000);
 
             if (!isDuplicateRender) {
               lastIncrementedStoryId = realDocId;
               lastIncrementTime = now;
 
-              // Immediately update displayed count on the story screen
-              loadedStory.views = (loadedStory.views || 0) + 1;
-
               // Atomically increment the Firestore counter in the background
               storyService.incrementStoryViews(realDocId).catch((err) => {
                 console.warn('[StoryView] Background view increment error:', err);
               });
+            }
+
+            // Always apply the optimistic +1 for recent increments to prevent UI flickering back to 0
+            // during React StrictMode double-renders or fast unmount/remounts.
+            if (lastIncrementedStoryId === realDocId && (now - lastIncrementTime < 2000)) {
+              loadedStory.views = (loadedStory.views || 0) + 1;
             }
           }
 

@@ -35,11 +35,8 @@ service cloud.firestore {
       allow update: if isAdmin() || (
         resource.data.published == true &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views']) &&
-        (request.resource.data.views is int || request.resource.data.views is number) &&
-        (
-          (!resource.data.keys().hasAny(['views']) && request.resource.data.views == 1) ||
-          (resource.data.keys().hasAny(['views']) && request.resource.data.views == resource.data.views + 1)
-        )
+        request.resource.data.views is number &&
+        request.resource.data.views == resource.data.get('views', 0) + 1
       );
     }
 

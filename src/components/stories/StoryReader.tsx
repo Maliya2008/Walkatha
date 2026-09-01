@@ -105,6 +105,12 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
     dark: 'text-slate-100',
   }[theme];
 
+  const metaTextClasses = {
+    light: 'text-slate-600 border-slate-200',
+    sepia: 'text-[#6b5544] border-[#e8dfcf]',
+    dark: 'text-slate-400 border-slate-800',
+  }[theme];
+
   const fontFamClass = fontFamily === 'serif' ? 'font-serif' : 'font-sans';
 
   return (
@@ -175,13 +181,13 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
             {story.shortDescription || story.description}
           </p>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 py-2.5 border-y border-slate-200 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400">
+          <div className={`flex flex-wrap items-center justify-between gap-3 py-2.5 border-y text-xs font-medium ${metaTextClasses}`}>
             <div className="flex items-center gap-4">
-              <span className="flex items-center gap-1">
-                <Calendar className="w-3.5 h-3.5" />
+              <span id="story-date-display" className="flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 opacity-75" />
                 {formattedDate}
               </span>
-              <span className="flex items-center gap-1">
+              <span id="story-view-count" className="flex items-center gap-1.5 text-indigo-600 dark:text-amber-400 font-semibold">
                 <Eye className="w-3.5 h-3.5" />
                 {(story.views || 0).toLocaleString()} views
               </span>

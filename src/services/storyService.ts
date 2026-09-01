@@ -165,15 +165,17 @@ class StoryService {
    * Atomic Firestore view increment for story views
    * Operates without requiring user login
    */
-  public async incrementStoryViews(storyId: string): Promise<void> {
-    if (!storyId) return;
+  public async incrementStoryViews(storyId: string): Promise<boolean> {
+    if (!storyId) return false;
     try {
       const storyRef = doc(db, 'stories', storyId);
       await updateDoc(storyRef, {
         views: increment(1),
       });
+      return true;
     } catch (error) {
-      console.warn('Atomic story view increment notice:', error);
+      console.warn('[StoryView] Atomic story view increment warning:', error);
+      return false;
     }
   }
 

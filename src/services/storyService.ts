@@ -61,12 +61,19 @@ class StoryService {
 
       // Filter and sort
       if (params.category && params.category !== 'all') {
-        const catFilter = params.category.toLowerCase();
-        allStories = allStories.filter(
-          (s) =>
-            s.category?.toLowerCase() === catFilter ||
-            (s as any).categoryId?.toLowerCase() === catFilter
-        );
+        const catFilter = params.category.toLowerCase().trim();
+        allStories = allStories.filter((s) => {
+          const cat = (s.category || '').toLowerCase().trim();
+          const catId = ((s as any).categoryId || '').toLowerCase().trim();
+          const catName = ((s as any).categoryName || '').toLowerCase().trim();
+          const catSlug = ((s as any).categorySlug || '').toLowerCase().trim();
+          return (
+            cat === catFilter ||
+            catId === catFilter ||
+            catName === catFilter ||
+            catSlug === catFilter
+          );
+        });
       }
       if (params.search && params.search.trim()) {
         const queryText = params.search.toLowerCase().trim();
@@ -204,12 +211,37 @@ class StoryService {
       let categories: Category[] = [];
 
       snapshot.forEach((docSnap) => {
-        categories.push({ id: docSnap.id, ...docSnap.data() } as Category);
+        const data = docSnap.data();
+        let rawSlug = (data.slug || '').toString().trim();
+        if (!rawSlug || rawSlug === 'all') {
+          rawSlug = docSnap.id;
+        }
+        categories.push({
+          id: docSnap.id,
+          name: (data.name || 'Category').toString().trim(),
+          slug: rawSlug,
+          description: data.description || '',
+          storyCount: data.storyCount || 0,
+        });
       });
-      
+
       if (categories.length === 0) {
         return DEFAULT_FALLBACK_CATEGORIES;
       }
+
+      // Ensure every category has a strictly unique slug
+      const seenSlugs = new Set<string>();
+      categories = categories.map((cat) => {
+        let uniqueSlug = cat.slug;
+        let counter = 1;
+        while (seenSlugs.has(uniqueSlug.toLowerCase())) {
+          counter++;
+          uniqueSlug = `${cat.slug}-${cat.id ? cat.id.substring(0, 4) : counter}`;
+        }
+        seenSlugs.add(uniqueSlug.toLowerCase());
+        return { ...cat, slug: uniqueSlug };
+      });
+
       return categories;
     } catch (e) {
       console.error('Error fetching categories:', e);

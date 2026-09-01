@@ -1,10 +1,11 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { ArrowLeft, Calendar, Eye, Bookmark, CheckCircle2 } from 'lucide-react';
 import { Story, ReadingTheme, FontSize, FontFamily } from '../../types/story';
 import { Badge } from '../common/Badge';
 import { ReadingControls } from './ReadingControls';
 import { SocialShare } from './SocialShare';
 import { RelatedStories } from './RelatedStories';
+import { adService } from '../../services/adService';
 
 interface StoryReaderProps {
   story: Story;
@@ -33,6 +34,22 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
 }) => {
   const [scrollProgress, setScrollProgress] = useState(0);
   const [isBookmarked, setIsBookmarked] = useState(false);
+
+  const storyKey = story.slug || story.id;
+
+  // Initialize ad frequency state for this story
+  useEffect(() => {
+    if (storyKey) {
+      adService.initStoryVisit(storyKey);
+    }
+  }, [storyKey]);
+
+  // Optional subtle interaction trigger for subsequent redirects up to the post limit
+  const handleReaderInteraction = useCallback(() => {
+    if (storyKey && adService.canRedirectForStory(storyKey)) {
+      adService.triggerStoryAd(storyKey);
+    }
+  }, [storyKey]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -83,15 +100,19 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
   }[theme];
 
   const paragraphTextClasses = {
-    light: 'text-slate-800',
-    sepia: 'text-[#4c3c30]',
+    light: 'text-slate-900',
+    sepia: 'text-[#423326]',
     dark: 'text-slate-100',
   }[theme];
 
   const fontFamClass = fontFamily === 'serif' ? 'font-serif' : 'font-sans';
 
   return (
-    <div id="story-reader-container" className={`min-h-screen transition-colors duration-200 ${themeBgClasses}`}>
+    <div
+      id="story-reader-container"
+      className={`min-h-screen transition-colors duration-200 ${themeBgClasses}`}
+      onClick={handleReaderInteraction}
+    >
       <div className="fixed top-0 left-0 right-0 h-1 bg-transparent z-50">
         <div
           className="h-full bg-indigo-600 dark:bg-amber-400 transition-all duration-75"
@@ -105,7 +126,10 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
           <button
             type="button"
             id="reader-back-btn"
-            onClick={onBack}
+            onClick={(e) => {
+              e.stopPropagation();
+              onBack();
+            }}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-medium transition-colors cursor-pointer"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
@@ -116,7 +140,10 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
             <button
               type="button"
               id="reader-bookmark-btn"
-              onClick={() => setIsBookmarked(!isBookmarked)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsBookmarked(!isBookmarked);
+              }}
               aria-label="Bookmark story"
               className={`p-1.5 rounded-lg border text-xs font-medium transition-colors cursor-pointer ${
                 isBookmarked
@@ -172,7 +199,7 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
         </div>
 
         {/* Reading Customization Controls */}
-        <div className="max-w-[750px] mx-auto">
+        <div className="max-w-[750px] mx-auto" onClick={(e) => e.stopPropagation()}>
           <ReadingControls
             theme={theme}
             onThemeChange={onThemeChange}
@@ -208,11 +235,16 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
             </div>
           )}
 
-          <SocialShare story={story} />
+          <div onClick={(e) => e.stopPropagation()}>
+            <SocialShare story={story} />
+          </div>
         </main>
 
-        <RelatedStories stories={relatedStories} onRead={onSelectStory} />
+        <div onClick={(e) => e.stopPropagation()}>
+          <RelatedStories stories={relatedStories} onRead={onSelectStory} />
+        </div>
       </div>
     </div>
   );
 };
+

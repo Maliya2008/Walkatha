@@ -173,7 +173,7 @@ export default function App() {
   }, [isAdminView, currentSlug, activeStory, params.category, params.search, categories, siteSettings]);
 
   const handleReadStory = useCallback((slug: string) => {
-    adService.triggerDirectAd();
+    adService.triggerStoryAd(slug);
     navigateTo(`/story/${slug}`);
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, [navigateTo]);
@@ -202,9 +202,6 @@ export default function App() {
         : 'bg-slate-50 text-slate-900'
     }`}>
       <Header
-        categories={categories}
-        selectedCategory={params.category || 'all'}
-        onSelectCategory={handleSelectCategory}
         onHomeClick={handleBackToGallery}
         theme={theme}
         onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}

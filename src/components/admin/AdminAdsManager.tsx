@@ -192,12 +192,12 @@ export const AdminAdsManager: React.FC = () => {
               }
               className="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-2xl text-sm font-semibold text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer"
             >
-              <option value={1}>1 - Redirect once per user session</option>
-              <option value={2}>2 - Redirect twice per user session</option>
-              <option value={3}>3 - Redirect three times per user session</option>
+              <option value={1}>1 - 1 ad redirect per story post visit</option>
+              <option value={2}>2 - 2 ad redirects per story post visit</option>
+              <option value={3}>3 - 3 ad redirects per story post visit</option>
             </select>
             <p className="text-[11px] text-slate-400 mt-2">
-              Controls how many times an individual user is automatically redirected to the advertisement direct link during their session.
+              Controls how many advertisement redirects are allowed/triggered for each individual story post visit. Each post has its own independent frequency allowance.
             </p>
           </div>
 

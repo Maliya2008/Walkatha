@@ -70,9 +70,10 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
         <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
           <button
             type="button"
+            id="category-btn-all"
             onClick={() => onSelectCategory('all')}
             className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
-              selectedCategory === 'all'
+              selectedCategory === 'all' || !selectedCategory
                 ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 shadow-xs'
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800/80 dark:text-slate-300 dark:hover:bg-slate-700'
             }`}
@@ -83,13 +84,21 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
           {categories
             .filter((c) => c.slug !== 'all')
             .map((cat) => {
-              const isSelected = selectedCategory === cat.slug;
+              const catKey = cat.slug || cat.id;
+              const isSelected =
+                selectedCategory !== 'all' &&
+                Boolean(selectedCategory) &&
+                (
+                  (Boolean(cat.slug) && selectedCategory.toLowerCase() === cat.slug.toLowerCase()) ||
+                  (Boolean(cat.id) && selectedCategory.toLowerCase() === cat.id.toLowerCase())
+                );
+
               return (
                 <button
-                  key={cat.id}
+                  key={cat.id || cat.slug}
                   type="button"
-                  id={`category-btn-${cat.slug}`}
-                  onClick={() => onSelectCategory(cat.slug)}
+                  id={`category-btn-${catKey}`}
+                  onClick={() => onSelectCategory(catKey)}
                   className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
                     isSelected
                       ? 'bg-indigo-600 text-white shadow-xs dark:bg-indigo-500'

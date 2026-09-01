@@ -484,7 +484,19 @@ class AdminService {
       let categories: Category[] = [];
 
       snapshot.forEach((docSnap) => {
-        categories.push({ id: docSnap.id, ...docSnap.data() } as Category);
+        const data = docSnap.data();
+        let rawSlug = (data.slug || '').toString().trim();
+        if (!rawSlug || rawSlug === 'all') {
+          rawSlug = docSnap.id;
+        }
+        categories.push({
+          id: docSnap.id,
+          name: (data.name || 'Category').toString().trim(),
+          slug: rawSlug,
+          description: data.description || '',
+          storyCount: data.storyCount || 0,
+          createdAt: data.createdAt || new Date().toISOString(),
+        } as Category);
       });
 
       // If categories collection is empty in Firestore, bootstrap default categories
@@ -502,6 +514,19 @@ class AdminService {
           }
         }
       }
+
+      // Ensure every category has a strictly unique slug
+      const seenSlugs = new Set<string>();
+      categories = categories.map((cat) => {
+        let uniqueSlug = cat.slug;
+        let counter = 1;
+        while (seenSlugs.has(uniqueSlug.toLowerCase())) {
+          counter++;
+          uniqueSlug = `${cat.slug}-${cat.id ? cat.id.substring(0, 4) : counter}`;
+        }
+        seenSlugs.add(uniqueSlug.toLowerCase());
+        return { ...cat, slug: uniqueSlug };
+      });
 
       // Count stories dynamically per category for accurate statistics
       try {
@@ -539,9 +564,14 @@ class AdminService {
       let count = 0;
       snap.forEach((docSnap) => {
         const data = docSnap.data();
+        const cat = (data.category || '').toLowerCase();
+        const catId = data.categoryId || '';
+        const catSlug = (data.categorySlug || '').toLowerCase();
         if (
-          data.categoryId === categoryId ||
-          data.category?.toLowerCase() === categorySlug.toLowerCase()
+          catId === categoryId ||
+          cat === categorySlug.toLowerCase() ||
+          catSlug === categorySlug.toLowerCase() ||
+          docSnap.id === categoryId
         ) {
           count++;
         }
@@ -559,10 +589,22 @@ class AdminService {
   }): Promise<{ message: string; category: Category }> {
     this.requireAuth();
     try {
+      const trimmedName = categoryData.name.trim();
+      let generatedSlug = (categoryData.slug || '').toLowerCase().trim();
+      if (!generatedSlug) {
+        generatedSlug = trimmedName
+          .toLowerCase()
+          .replace(/[^a-z0-9\u0D80-\u0DFF]+/g, '-')
+          .replace(/(^-|-$)+/g, '');
+      }
+      if (!generatedSlug) {
+        generatedSlug = `category-${Date.now().toString(36)}`;
+      }
+
       const newCat = {
-        name: categoryData.name.trim(),
-        slug: categoryData.slug.toLowerCase().trim(),
-        description: categoryData.description?.trim() || `${categoryData.name} stories and tales`,
+        name: trimmedName,
+        slug: generatedSlug,
+        description: categoryData.description?.trim() || `${trimmedName} stories and tales`,
         createdAt: new Date().toISOString(),
         storyCount: 0,
       };

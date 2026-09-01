@@ -177,7 +177,6 @@ export default function App() {
   }, [isAdminView, currentSlug, activeStory, params.category, params.search, categories, siteSettings]);
 
   const handleReadStory = useCallback((slug: string) => {
-    adService.triggerStoryAd(slug);
     navigateTo(`/story/${slug}`);
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, [navigateTo]);

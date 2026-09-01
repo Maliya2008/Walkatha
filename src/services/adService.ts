@@ -134,6 +134,21 @@ class AdService {
   }
 
   /**
+   * Forcibly initializes advertisement state for a story, resetting its redirect allowance.
+   * Used when a genuine new view event is recorded.
+   */
+  public forceInitStoryVisit(storyKey: string): void {
+    if (!storyKey) return;
+    const cleanKey = storyKey.trim();
+    if (!cleanKey) return;
+
+    this.activeStoryState = {
+      storyId: cleanKey,
+      redirectsUsed: 0,
+    };
+  }
+
+  /**
    * Checks if an ad redirect is currently allowed for the given story
    */
   public canRedirectForStory(storyKey: string): boolean {

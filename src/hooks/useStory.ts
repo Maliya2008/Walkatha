@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Story } from '../types/story';
 import { storyService } from '../services/storyService';
+import { authService } from '../services/authService';
 import { SEOService } from '../services/seoService';
 
 export function useStory(slug: string | null) {
@@ -31,11 +32,27 @@ export function useStory(slug: string | null) {
           setStory(null);
           setRelatedStories([]);
         } else {
-          setStory(result.story);
+          const loadedStory = { ...result.story };
+
+          // Record public view count with atomic Firestore increment
+          // Exclude admin session previews and deduplicate within browser session
+          const isAdmin = authService.isAuthenticated();
+          const sessionKey = `walkathawa_viewed_${loadedStory.id}`;
+          const isAlreadyViewedInSession = sessionStorage.getItem(sessionKey);
+
+          if (!isAdmin && !isAlreadyViewedInSession) {
+            sessionStorage.setItem(sessionKey, Date.now().toString());
+            // Atomic update to Firestore
+            storyService.incrementStoryViews(loadedStory.id);
+            // Optimistically increment local display count
+            loadedStory.views = (loadedStory.views || 0) + 1;
+          }
+
+          setStory(loadedStory);
           setRelatedStories(result.relatedStories || []);
 
           // Update SEO head metadata
-          SEOService.updateHead(SEOService.generateStorySEO(result.story));
+          SEOService.updateHead(SEOService.generateStorySEO(loadedStory));
         }
       } catch (err) {
         if (isMounted) {
@@ -62,3 +79,4 @@ export function useStory(slug: string | null) {
     error,
   };
 }
+

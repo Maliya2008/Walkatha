@@ -11,9 +11,11 @@ import {
   AlertCircle,
   FileCode,
   Eye,
+  Loader2,
 } from 'lucide-react';
-import { Story } from '../../types/story';
+import { Category, Story } from '../../types/story';
 import { adminService } from '../../services/adminService';
+import { uploadStoryCover, validateImageFile } from '../../services/storageService';
 
 interface AdminStoryFormProps {
   storyToEdit?: Story | null;
@@ -21,17 +23,6 @@ interface AdminStoryFormProps {
   onCancel: () => void;
   onViewPublic: (slug: string) => void;
 }
-
-const CATEGORIES = [
-  { slug: 'romantic', name: 'ආදර කතා (Romantic Stories)' },
-  { slug: 'adventure', name: 'ත්‍රාසජනක (Adventure & Thriller)' },
-  { slug: 'fiction', name: 'ප්‍රබන්ධ කතා (Fictional Stories)' },
-  { slug: 'mystery', name: 'අභිරහස් (Mystery & Detective)' },
-  { slug: 'sci-fi', name: 'විද්‍යා ප්‍රබන්ධ (Science Fiction)' },
-  { slug: 'fantasy', name: 'මනඃකල්පිත (Fantasy & Myth)' },
-  { slug: 'horror', name: 'හොල්මන් / බියකරු (Supernatural Horror)' },
-  { slug: 'inspirational', name: 'ජීවිත ආදර්ශ (Inspirational & Life)' },
-];
 
 export const AdminStoryForm: React.FC<AdminStoryFormProps> = ({
   storyToEdit,
@@ -47,7 +38,7 @@ export const AdminStoryForm: React.FC<AdminStoryFormProps> = ({
   const [coverImage, setCoverImage] = useState(storyToEdit?.coverImage || '');
   const [shortDescription, setShortDescription] = useState(storyToEdit?.shortDescription || '');
   const [fullContent, setFullContent] = useState(storyToEdit?.fullContent || '');
-  const [category, setCategory] = useState(storyToEdit?.category || 'adventure');
+  const [category, setCategory] = useState(storyToEdit?.category || 'romantic');
   const [tagsInput, setTagsInput] = useState(storyToEdit?.tags ? storyToEdit.tags.join(', ') : '');
   const [authorName, setAuthorName] = useState(storyToEdit?.author?.name || 'Editorial Staff');
   const [readingTime, setReadingTime] = useState<number>(storyToEdit?.readingTime || 5);
@@ -55,11 +46,31 @@ export const AdminStoryForm: React.FC<AdminStoryFormProps> = ({
   const [featured, setFeatured] = useState<boolean>(storyToEdit ? storyToEdit.featured : false);
   const [directAdLink, setDirectAdLink] = useState(storyToEdit?.directAdLink || '');
 
-  // UI state
+  // Dynamic Categories from Firestore
+  const [categoriesList, setCategoriesList] = useState<Category[]>([]);
+
+  // Image Upload State
   const [imageTab, setImageTab] = useState<'upload' | 'url'>('upload');
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+
+  // UI state
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // Load available categories from Firestore
+  useEffect(() => {
+    adminService
+      .getCategories()
+      .then((cats) => {
+        setCategoriesList(cats);
+        if (!storyToEdit && cats.length > 0) {
+          setCategory(cats[0].slug);
+        }
+      })
+      .catch((err) => console.error('Failed to load categories', err));
+  }, [storyToEdit]);
 
   // Auto-calculate reading time when content changes
   useEffect(() => {
@@ -72,42 +83,37 @@ export const AdminStoryForm: React.FC<AdminStoryFormProps> = ({
     }
   }, [fullContent, isEditing, storyToEdit]);
 
-  // Handle local image file upload to Firebase Storage
-  const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > 8 * 1024 * 1024) {
-      setError('Selected image exceeds 8MB. Please choose a smaller image.');
+  // Handle local image file upload directly to Firebase Storage
+  const handleImageFileChange迷 = async (file: File) => {
+    const validation = validateImageFile(file);
+    if (!validation.valid) {
+      setError(validation.error || 'Invalid image file.');
       return;
     }
 
     try {
-      const { storage } = await import('../../lib/firebase');
-      const { ref, uploadBytesResumable, getDownloadURL } = await import('firebase/storage');
-      
-      const fileName = `covers/${Date.now()}_${file.name}`;
-      const storageRef = ref(storage, fileName);
-      
-      // We do a simple upload. For progress, could use uploadBytesResumable
-      const snapshot = await uploadBytesResumable(storageRef, file);
-      const downloadURL = await getDownloadURL(snapshot.ref);
-      
-      setCoverImage(downloadURL);
+      setIsUploadingImage(true);
+      setUploadProgress(0);
+      setError(null);
+
+      const downloadUrl = await uploadStoryCover(file, (progress) => {
+        setUploadProgress(progress);
+      });
+
+      setCoverImage(downloadUrl);
       setError(null);
     } catch (err: any) {
-      console.error(err);
-      setError('Failed to upload image to Storage. Using base64 fallback.');
-      
-      // Fallback
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setCoverImage(event.target.result as string);
-          setError(null);
-        }
-      };
-      reader.readAsDataURL(file);
+      console.error('Image upload failed:', err);
+      setError(`Failed to upload image to Firebase Storage: ${err?.message || 'Please check network connection.'}`);
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
+  const handleImageInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleImageFileChange迷(file);
     }
   };
 
@@ -127,7 +133,11 @@ export const AdminStoryForm: React.FC<AdminStoryFormProps> = ({
       return;
     }
     if (!coverImage.trim()) {
-      setError('Cover image is required. Please upload an image or provide a valid image URL.');
+      setError('Cover image is required. Please upload an image to Firebase Storage or provide a valid URL.');
+      return;
+    }
+    if (coverImage.startsWith('data:image')) {
+      setError('Base64 image data is not allowed. Please upload a file to Firebase Storage.');
       return;
     }
 
@@ -135,12 +145,16 @@ export const AdminStoryForm: React.FC<AdminStoryFormProps> = ({
     setError(null);
     setSuccessMessage(null);
 
-    const parsedTags = tagsInput
+    const parsedTags迷 = tagsInput
       .split(',')
       .map((t) => t.trim())
       .filter(Boolean);
 
     try {
+      const matchedCat = categoriesList.find(
+        (c) => c.slug.toLowerCase() === category.toLowerCase() || c.id === category
+      );
+
       if (isEditing && storyToEdit) {
         const result = await adminService.updateStory(storyToEdit.id, {
           title: title.trim(),
@@ -148,38 +162,45 @@ export const AdminStoryForm: React.FC<AdminStoryFormProps> = ({
           coverImage: coverImage.trim(),
           shortDescription: shortDescription.trim(),
           fullContent: fullContent.trim(),
-          category: category.trim(),
-          tags: parsedTags,
+          category: matchedCat ? matchedCat.slug : category,
+          categoryId: matchedCat ? matchedCat.id : undefined,
+          categoryName: matchedCat ? matchedCat.name : undefined,
+          tags: parsedTags迷,
           author: {
-            ...storyToEdit.author,
-            name: authorName.trim(),
+            id: storyToEdit.author?.id || 'admin',
+            name: authorName.trim() || 'Editorial Staff',
           },
           readingTime: Number(readingTime),
           published,
           featured,
           directAdLink: directAdLink.trim(),
         });
-        setSuccessMessage('Story updated successfully!');
-        onSaved(result.story);
+        setSuccessMessage('Story updated successfully in Firestore!');
+        setTimeout(() => {
+          onSaved(result.story);
+        }, 600);
       } else {
-        const result = await adminService.createStory({
+        const result纯 = await adminService.createStory({
           title: title.trim(),
           coverImage: coverImage.trim(),
           shortDescription: shortDescription.trim(),
           fullContent: fullContent.trim(),
-          category: category.trim(),
-          tags: parsedTags,
-          author: authorName.trim(),
+          category: matchedCat ? matchedCat.slug : category,
+          categoryId: matchedCat ? matchedCat.id : undefined,
+          tags: parsedTags迷,
+          author: authorName.trim() || 'Editorial Staff',
           readingTime: Number(readingTime),
           published,
           featured,
           directAdLink: directAdLink.trim(),
         });
-        setSuccessMessage('Story published successfully! It is now live on the public website.');
-        onSaved(result.story);
+        setSuccessMessage('Story published successfully in Firestore!');
+        setTimeout(() => {
+          onSaved(result纯.story);
+        }, 600);
       }
     } catch (err: any) {
-      setError(err.message || 'An error occurred while saving the story.');
+      setError(err?.message || 'An error occurred while saving the story.');
     } finally {
       setIsSubmitting(false);
     }
@@ -237,12 +258,17 @@ export const AdminStoryForm: React.FC<AdminStoryFormProps> = ({
         )}
 
         <form onSubmit={handleSubmit} className="space-y-8">
-          {/* SECTION 1: COVER IMAGE */}
+          {/* SECTION 1: COVER IMAGE VIA FIREBASE STORAGE */}
           <div className="p-5 rounded-2xl bg-slate-950/60 border border-slate-800/80 space-y-4">
             <div className="flex items-center justify-between">
-              <label className="block text-xs font-bold text-white uppercase tracking-wider">
-                Story Cover Image <span className="text-rose-400">*</span>
-              </label>
+              <div>
+                <label className="block text-xs font-bold text-white uppercase tracking-wider">
+                  Story Cover Image <span className="text-rose-400">*</span>
+                </label>
+                <span className="text-[11px] text-slate-400">
+                  Direct Firebase Storage
+                </span>
+              </div>
               <div className="flex rounded-lg bg-slate-800 p-0.5 text-xs">
                 <button
                   type="button"
@@ -267,18 +293,36 @@ export const AdminStoryForm: React.FC<AdminStoryFormProps> = ({
 
             {imageTab === 'upload' ? (
               <div className="flex flex-col sm:flex-row items-center gap-6">
-                <label className="flex-1 w-full flex flex-col items-center justify-center p-6 border-2 border-dashed border-slate-700 hover:border-indigo-500 rounded-2xl bg-slate-900/60 cursor-pointer transition-colors group text-center">
-                  <Upload className="w-8 h-8 text-slate-400 group-hover:text-indigo-400 mb-2 transition-colors" />
-                  <span className="text-xs font-semibold text-slate-200">
-                    Click to browse or drop an image here
-                  </span>
-                  <span className="text-[11px] text-slate-500 mt-1">
-                    Supports JPG, PNG, WebP (Max 8MB)
-                  </span>
+                <label className="flex-1 w-full flex flex-col items-center justify-center p-6 border-2 border-dashed border-slate-700 hover:border-indigo-500 rounded-2xl bg-slate-900/60 cursor-pointer transition-colors group text-center relative overflow-hidden">
+                  {isUploadingImage ? (
+                    <div className="flex flex-col items-center justify-center py-2 space-y-2">
+                      <Loader2 className="w-8 h-8 text-indigo-400 animate-spin" />
+                      <span className="text-xs font-semibold text-slate-200">
+                        Uploading to Firebase Storage ({uploadProgress}%)...
+                      </span>
+                      <div className="w-48 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-indigo-500 transition-all duration-200"
+                          style={{ width: `${uploadProgress}%` }}
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <Upload className="w-8 h-8 text-slate-400 group-hover:text-indigo-400 mb-2 transition-colors" />
+                      <span className="text-xs font-semibold text-slate-200">
+                        Click to browse or drop an image file
+                      </span>
+                      <span className="text-[11px] text-slate-500 mt-1">
+                        Supports JPEG, PNG, WebP, AVIF (Max 8MB)
+                      </span>
+                    </>
+                  )}
                   <input
                     type="file"
-                    accept="image/*"
-                    onChange={handleImageFileChange}
+                    accept="image/jpeg,image/png,image/webp,image/avif,image/gif"
+                    disabled={isUploadingImage}
+                    onChange={handleImageInputChange}
                     className="hidden"
                   />
                 </label>
@@ -293,7 +337,7 @@ export const AdminStoryForm: React.FC<AdminStoryFormProps> = ({
                       />
                     </div>
                     <span className="text-[10px] text-emerald-400 font-semibold mt-1.5 flex items-center gap-1">
-                      <CheckCircle2 className="w-3 h-3" /> Image Ready
+                      <CheckCircle2 className="w-3 h-3" /> Storage URL Saved
                     </span>
                   </div>
                 )}
@@ -327,7 +371,7 @@ export const AdminStoryForm: React.FC<AdminStoryFormProps> = ({
                 required
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. The Whispering Forest of Eldoria"
+                placeholder="e.g. සඳ පහන් වූ රැයක (A Moonlit Night Tale)"
                 className="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-xl text-sm font-semibold text-white placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
               />
             </div>
@@ -341,11 +385,15 @@ export const AdminStoryForm: React.FC<AdminStoryFormProps> = ({
                 onChange={(e) => setCategory(e.target.value)}
                 className="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-xl text-xs font-medium text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none capitalize"
               >
-                {CATEGORIES.map((cat) => (
-                  <option key={cat.slug} value={cat.slug}>
-                    {cat.name}
-                  </option>
-                ))}
+                {categoriesList.length > 0 ? (
+                  categoriesList.map((cat) => (
+                    <option key={cat.id || cat.slug} value={cat.slug}>
+                      {cat.name}
+                    </option>
+                  ))
+                ) : (
+                  <option value="romantic">ආදර කතා (Romantic Stories)</option>
+                )}
               </select>
             </div>
           </div>
@@ -506,7 +554,7 @@ export const AdminStoryForm: React.FC<AdminStoryFormProps> = ({
               <button
                 id="submit-story-btn"
                 type="submit"
-                disabled={isSubmitting}
+                disabled={isSubmitting || isUploadingImage}
                 className="flex-1 sm:flex-initial px-8 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white text-xs font-bold uppercase tracking-wider shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
               >
                 {isSubmitting ? (

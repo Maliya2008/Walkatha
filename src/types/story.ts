@@ -12,6 +12,8 @@ export interface Category {
   description?: string;
   icon?: string;
   storyCount?: number;
+  createdAt?: any;
+  updatedAt?: any;
 }
 
 export interface Story {
@@ -20,14 +22,19 @@ export interface Story {
   slug: string;
   coverImage: string;
   shortDescription: string;
+  description?: string;
   fullContent: string; // Markdown or clean formatted HTML/paragraphs
-  category: string; // Category slug or ID
+  content?: string;
+  category: string; // Category slug
+  categoryId?: string;
   categoryName?: string;
   tags: string[];
   author: Author;
   uploadDate: string; // ISO String format (e.g. 2026-08-31T09:00:00Z)
   uploadedDate?: string; // Database field alias
   updatedDate: string;
+  createdAt?: any;
+  updatedAt?: any;
   readingTime: number; // in minutes
   views: number;
   featured: boolean;

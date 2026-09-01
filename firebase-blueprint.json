@@ -11,29 +11,42 @@
     },
     {
       "name": "stories",
-      "description": "Store all stories",
+      "description": "Store all public and draft stories",
       "schema": {
+        "id": "string",
         "title": "string",
         "slug": "string",
         "coverImage": "string",
         "description": "string",
+        "shortDescription": "string",
         "content": "string",
+        "fullContent": "string",
+        "categoryId": "string",
         "category": "string",
+        "categoryName": "string",
         "tags": "array",
         "author": "map",
         "uploadDate": "string",
+        "uploadedDate": "string",
         "updatedDate": "string",
+        "createdAt": "string",
+        "updatedAt": "string",
+        "readingTime": "number",
         "views": "number",
-        "published": "boolean"
+        "published": "boolean",
+        "featured": "boolean",
+        "directAdLink": "string"
       }
     },
     {
       "name": "categories",
-      "description": "Store story categories",
+      "description": "Store story categories and genres",
       "schema": {
         "name": "string",
         "slug": "string",
-        "createdAt": "string"
+        "description": "string",
+        "createdAt": "string",
+        "storyCount": "number"
       }
     },
     {
@@ -41,20 +54,27 @@
       "description": "Global settings. Use document ID 'global'",
       "schema": {
         "siteName": "string",
+        "alternateName": "string",
         "logo": "string",
-        "description": "string",
-        "seoTitle": "string",
-        "seoDescription": "string",
-        "seoKeywords": "string"
+        "tagline": "string",
+        "contactEmail": "string",
+        "metaTitle": "string",
+        "metaDescription": "string",
+        "keywords": "string",
+        "ogImage": "string",
+        "googleAnalyticsId": "string",
+        "searchConsoleVerification": "string",
+        "publisherName": "string"
       }
     },
     {
       "name": "advertisements",
-      "description": "Global ads. Use document ID 'global'",
+      "description": "Global ads. Use document ID 'settings'",
       "schema": {
-        "globalCode": "string",
         "enabled": "boolean",
-        "adsPerPage": "number"
+        "globalDirectLink": "string",
+        "maxTriggers": "number",
+        "updatedAt": "string"
       }
     },
     {

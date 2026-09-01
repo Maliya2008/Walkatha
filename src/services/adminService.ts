@@ -1,127 +1,109 @@
 import { Story } from '../types/story';
 import { AdvertisementSettings, DashboardStats, SiteSettings } from '../types/admin';
 import { authService } from './authService';
-import { INITIAL_STORIES } from '../data/seedStories';
-
-const LOCAL_STORIES_KEY = 'walkatha_stories_store_v1';
-const LOCAL_ADS_KEY = 'walkatha_ads_store_v1';
-const LOCAL_SETTINGS_KEY = 'walkatha_settings_store_v1';
-const LOCAL_POST_ADS_KEY = 'walkatha_post_ads_store_v1';
+import { db } from '../lib/firebase';
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, query, where, orderBy } from 'firebase/firestore';
 
 class AdminService {
-  private getHeaders(): HeadersInit {
-    const token = authService.getToken();
-    return {
-      'Content-Type': 'application/json',
-      Authorization: token ? `Bearer ${token}` : '',
-    };
-  }
-
-  private getLocalStories(): Story[] {
-    try {
-      const stored = localStorage.getItem(LOCAL_STORIES_KEY);
-      if (stored) return JSON.parse(stored);
-    } catch {
-      // ignore
-    }
-    return INITIAL_STORIES;
-  }
-
-  private saveLocalStories(stories: Story[]): void {
-    try {
-      localStorage.setItem(LOCAL_STORIES_KEY, JSON.stringify(stories));
-    } catch {
-      // ignore
+  private requireAuth() {
+    if (!authService.isAuthenticated()) {
+      throw new Error('Unauthorized session. Please log in again.');
     }
   }
 
   public async getDashboardStats(): Promise<DashboardStats> {
+    this.requireAuth();
+
     try {
-      const res = await fetch('/api/admin/dashboard/stats', {
-        headers: this.getHeaders(),
+      const storiesRef = collection(db, 'stories');
+      const snapshot = await getDocs(storiesRef);
+      
+      let totalStories = 0;
+      let publishedStories = 0;
+      let draftStories = 0;
+      let totalViews = 0;
+      
+      const stories: Story[] = [];
+
+      snapshot.forEach(doc => {
+        const data = doc.data() as Story;
+        data.id = doc.id;
+        stories.push(data);
+        
+        totalStories++;
+        if (data.published) publishedStories++;
+        else draftStories++;
+        totalViews += (data.views || 0);
       });
 
-      if (res.ok) {
-        return await res.json();
-      }
-      if (res.status === 401) {
-        authService.logout();
-        throw new Error('Unauthorized session. Please log in again.');
-      }
+      // Sort recent
+      stories.sort((a, b) => new Date(b.uploadDate || 0).getTime() - new Date(a.uploadDate || 0).getTime());
+
+      // Get ads status
+      const adsDoc = await getDoc(doc(db, 'advertisements', 'global'));
+      const adsEnabled = adsDoc.exists() ? adsDoc.data().enabled : true;
+      const adsPerPage = adsDoc.exists() ? adsDoc.data().adsPerPage : 2;
+      const hasGlobalAdCode = adsDoc.exists() ? !!adsDoc.data().globalCode : false;
+
+      return {
+        totalStories,
+        publishedStories,
+        draftStories,
+        totalViews,
+        adsEnabled,
+        adsPerPage,
+        hasGlobalAdCode,
+        recentUploads: stories.slice(0, 5).map((s) => ({
+          id: s.id,
+          title: s.title,
+          slug: s.slug,
+          category: s.category || '',
+          uploadedDate: s.uploadDate || s.uploadedDate || new Date().toISOString(),
+          views: s.views || 0,
+          published: s.published,
+        })),
+      };
     } catch (err: any) {
-      if (err.message && err.message.includes('Unauthorized')) throw err;
+      console.error(err);
+      throw new Error('Failed to fetch dashboard metrics');
     }
-
-    // Static fallback stats calculation
-    const stories = this.getLocalStories();
-    const totalStories = stories.length;
-    const publishedStories = stories.filter((s) => s.published).length;
-    const draftStories = stories.filter((s) => !s.published).length;
-    const totalViews = stories.reduce((sum, s) => sum + (s.views || 0), 0);
-
-    return {
-      totalStories,
-      publishedStories,
-      draftStories,
-      totalViews,
-      adsEnabled: true,
-      adsPerPage: 2,
-      hasGlobalAdCode: true,
-      recentUploads: stories.slice(0, 5).map((s) => ({
-        id: s.id,
-        title: s.title,
-        slug: s.slug,
-        category: s.category,
-        uploadedDate: s.uploadDate || s.uploadedDate || new Date().toISOString(),
-        views: s.views || 0,
-        published: s.published,
-      })),
-    };
   }
 
   public async getStories(params?: { search?: string; category?: string; status?: 'published' | 'draft' | 'all' }): Promise<Story[]> {
-    try {
-      const query = new URLSearchParams();
-      if (params?.search) query.set('search', params.search);
-      if (params?.category && params.category !== 'all') query.set('category', params.category);
-      if (params?.status && params.status !== 'all') query.set('status', params.status);
+    this.requireAuth();
 
-      const res = await fetch(`/api/admin/stories?${query.toString()}`, {
-        headers: this.getHeaders(),
+    try {
+      const storiesRef = collection(db, 'stories');
+      const snapshot = await getDocs(storiesRef);
+      
+      let stories: Story[] = [];
+      snapshot.forEach(doc => {
+        stories.push({ id: doc.id, ...doc.data() } as Story);
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        const serverStories = data.stories || [];
-        this.saveLocalStories(serverStories);
-        return serverStories;
+      if (params?.category && params.category !== 'all') {
+        stories = stories.filter((s) => s.category?.toLowerCase() === params.category!.toLowerCase());
       }
-      if (res.status === 401) {
-        authService.logout();
-        throw new Error('Unauthorized session.');
+      if (params?.status && params.status !== 'all') {
+        stories = stories.filter((s) => (params.status === 'published' ? s.published : !s.published));
       }
-    } catch (err: any) {
-      if (err.message && err.message.includes('Unauthorized')) throw err;
+      if (params?.search && params.search.trim()) {
+        const q = params.search.toLowerCase().trim();
+        stories = stories.filter(
+          (s) =>
+            s.title?.toLowerCase().includes(q) ||
+            s.shortDescription?.toLowerCase().includes(q) ||
+            s.tags?.some((t) => t.toLowerCase().includes(q))
+        );
+      }
+      
+      stories.sort((a, b) => new Date(b.uploadDate || 0).getTime() - new Date(a.uploadDate || 0).getTime());
+      
+      return stories;
+    } catch (e: any) {
+      console.error(e);
+      throw new Error('Failed to fetch stories list');
     }
-
-    // Static fallback
-    let stories = this.getLocalStories();
-    if (params?.category && params.category !== 'all') {
-      stories = stories.filter((s) => s.category.toLowerCase() === params.category!.toLowerCase());
-    }
-    if (params?.status && params.status !== 'all') {
-      stories = stories.filter((s) => (params.status === 'published' ? s.published : !s.published));
-    }
-    if (params?.search && params.search.trim()) {
-      const q = params.search.toLowerCase().trim();
-      stories = stories.filter(
-        (s) =>
-          s.title.toLowerCase().includes(q) ||
-          s.shortDescription.toLowerCase().includes(q) ||
-          s.tags.some((t) => t.toLowerCase().includes(q))
-      );
-    }
-    return stories;
   }
 
   public async createStory(storyData: {
@@ -137,129 +119,88 @@ class AdminService {
     featured?: boolean;
     individualAdCode?: string;
   }): Promise<{ message: string; story: Story }> {
+    this.requireAuth();
+
     try {
-      const res = await fetch('/api/admin/stories', {
-        method: 'POST',
-        headers: this.getHeaders(),
-        body: JSON.stringify(storyData),
-      });
+      const slug = storyData.title
+        .toLowerCase()
+        .replace(/[^a-z0-9\u0D80-\u0DFF]+/g, '-')
+        .replace(/(^-|-$)+/g, '') || `story-${Date.now()}`;
 
-      if (res.ok) {
-        const data = await res.json();
-        const current = this.getLocalStories();
-        this.saveLocalStories([data.story, ...current]);
-        return data;
-      }
-      if (res.status === 400 || res.status === 401) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Failed to publish story');
-      }
-    } catch (err: any) {
-      if (err.message && !err.message.includes('fetch') && !err.message.includes('Failed to fetch')) {
-        throw err;
-      }
+      const newStory = {
+        title: storyData.title,
+        slug,
+        coverImage: storyData.coverImage,
+        shortDescription: storyData.shortDescription,
+        fullContent: storyData.fullContent,
+        category: storyData.category,
+        tags: storyData.tags || [],
+        author: {
+          id: authService.getCurrentUser()?.uid || 'auth_admin',
+          name: storyData.author || 'Editorial Staff',
+        },
+        uploadDate: new Date().toISOString(),
+        updatedDate: new Date().toISOString(),
+        readingTime: storyData.readingTime || Math.max(1, Math.ceil(storyData.fullContent.split(/\s+/).length / 200)),
+        views: 0,
+        published: storyData.published,
+        featured: Boolean(storyData.featured),
+        individualAdCode: storyData.individualAdCode || '',
+      };
+
+      const docRef = await addDoc(collection(db, 'stories'), newStory);
+      
+      return {
+        message: 'Story created successfully',
+        story: { id: docRef.id, ...newStory } as Story,
+      };
+    } catch (e) {
+      console.error(e);
+      throw new Error('Failed to publish story');
     }
-
-    // Static fallback creation
-    const slug = storyData.title
-      .toLowerCase()
-      .replace(/[^a-z0-9\u0D80-\u0DFF]+/g, '-')
-      .replace(/(^-|-$)+/g, '') || `story-${Date.now()}`;
-
-    const newStory: Story = {
-      id: `story-${Date.now()}`,
-      title: storyData.title,
-      slug,
-      coverImage: storyData.coverImage,
-      shortDescription: storyData.shortDescription,
-      fullContent: storyData.fullContent,
-      category: storyData.category,
-      tags: storyData.tags,
-      author: {
-        id: 'auth_admin',
-        name: storyData.author || 'Editorial Staff',
-      },
-      uploadDate: new Date().toISOString(),
-      updatedDate: new Date().toISOString(),
-      readingTime: storyData.readingTime || Math.max(1, Math.ceil(storyData.fullContent.split(/\s+/).length / 200)),
-      views: 0,
-      published: storyData.published,
-      featured: Boolean(storyData.featured),
-      individualAdCode: storyData.individualAdCode || '',
-    };
-
-    const current = this.getLocalStories();
-    this.saveLocalStories([newStory, ...current]);
-
-    return {
-      message: 'Story created successfully (Saved to store)',
-      story: newStory,
-    };
   }
 
   public async updateStory(
     id: string,
     updates: Partial<Story> & { author?: any }
   ): Promise<{ message: string; story: Story }> {
+    this.requireAuth();
+
     try {
-      const res = await fetch(`/api/admin/stories/${id}`, {
-        method: 'PUT',
-        headers: this.getHeaders(),
-        body: JSON.stringify(updates),
-      });
+      const docRef = doc(db, 'stories', id);
+      const docSnap = await getDoc(docRef);
+      if (!docSnap.exists()) throw new Error('Story not found');
+      
+      const existing = docSnap.data() as Story;
+      const finalUpdates = {
+        ...updates,
+        updatedDate: new Date().toISOString(),
+        author: typeof updates.author === 'string' ? { id: existing.author?.id || 'auth_admin', name: updates.author } : updates.author || existing.author,
+      };
+      
+      // Remove id from updates to prevent writing it into the document fields
+      delete finalUpdates.id;
 
-      if (res.ok) {
-        const data = await res.json();
-        const current = this.getLocalStories();
-        this.saveLocalStories(current.map((s) => (s.id === id ? data.story : s)));
-        return data;
-      }
-      if (res.status === 400 || res.status === 401) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Failed to update story');
-      }
-    } catch (err: any) {
-      if (err.message && !err.message.includes('fetch') && !err.message.includes('Failed to fetch')) {
-        throw err;
-      }
+      await updateDoc(docRef, finalUpdates);
+
+      return {
+        message: 'Story updated successfully',
+        story: { id, ...existing, ...finalUpdates } as Story,
+      };
+    } catch (e) {
+      console.error(e);
+      throw new Error('Failed to update story');
     }
-
-    // Static fallback update
-    const current = this.getLocalStories();
-    const existing = current.find((s) => s.id === id);
-    if (!existing) throw new Error('Story not found');
-
-    const updated: Story = {
-      ...existing,
-      ...updates,
-      author: typeof updates.author === 'string' ? { name: updates.author } : updates.author || existing.author,
-    };
-
-    this.saveLocalStories(current.map((s) => (s.id === id ? updated : s)));
-    return {
-      message: 'Story updated successfully',
-      story: updated,
-    };
   }
 
   public async deleteStory(id: string): Promise<void> {
+    this.requireAuth();
     try {
-      const res = await fetch(`/api/admin/stories/${id}`, {
-        method: 'DELETE',
-        headers: this.getHeaders(),
-      });
-
-      if (res.ok) {
-        const current = this.getLocalStories();
-        this.saveLocalStories(current.filter((s) => s.id !== id));
-        return;
-      }
-    } catch {
-      // ignore
+      await deleteDoc(doc(db, 'stories', id));
+    } catch (e) {
+      console.error(e);
+      throw new Error('Failed to delete story');
     }
-
-    const current = this.getLocalStories();
-    this.saveLocalStories(current.filter((s) => s.id !== id));
   }
 
   public async getAdvertisementSettings(): Promise<{
@@ -267,177 +208,159 @@ class AdminService {
     postAdvertisements: Record<string, string>;
   }> {
     try {
-      const res = await fetch('/api/admin/ads', {
-        headers: this.getHeaders(),
+      const adsDoc = await getDoc(doc(db, 'advertisements', 'global'));
+      let ads: AdvertisementSettings = {
+        globalAdCode: '',
+        adsEnabled: true,
+        adsPerPage: 2,
+        headerAdCode: '',
+        inArticleAdCode: '',
+        footerAdCode: '',
+        testMode: false,
+      };
+
+      if (adsDoc.exists()) {
+        ads = { ...ads, ...adsDoc.data() };
+      }
+      
+      // Extract individual ad codes from stories
+      const postAdvertisements: Record<string, string> = {};
+      const storiesRef = collection(db, 'stories');
+      const snapshot = await getDocs(storiesRef);
+      snapshot.forEach(d => {
+        const data = d.data();
+        if (data.individualAdCode) {
+          postAdvertisements[d.id] = data.individualAdCode;
+        }
       });
 
-      if (res.ok) {
-        return await res.json();
-      }
-    } catch {
-      // ignore
+      return { advertisements: ads, postAdvertisements };
+    } catch (e) {
+      console.error(e);
+      throw new Error('Failed to load advertisement settings');
     }
-
-    // Static fallback ads
-    let ads: AdvertisementSettings = {
-      globalAdCode: '<!-- Monetag Global Tag -->\n<div class="monetag-global-banner p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded text-center text-xs text-amber-800 dark:text-amber-300 font-medium"><a href="https://monetag.com" target="_blank" rel="noopener noreferrer" class="hover:underline flex items-center justify-center gap-1.5">⚡ Sponsored Story Pick — Discover Global Content (Opens in new tab)</a></div>',
-      adsEnabled: true,
-      adsPerPage: 2,
-      headerAdCode: '',
-      inArticleAdCode: '',
-      footerAdCode: '',
-      testMode: true,
-    };
-    try {
-      const stored = localStorage.getItem(LOCAL_ADS_KEY);
-      if (stored) ads = JSON.parse(stored);
-    } catch {}
-
-    let postAds: Record<string, string> = {};
-    try {
-      const stored = localStorage.getItem(LOCAL_POST_ADS_KEY);
-      if (stored) postAds = JSON.parse(stored);
-    } catch {}
-
-    return { advertisements: ads, postAdvertisements: postAds };
   }
 
   public async updateAdvertisementSettings(
     settings: Partial<AdvertisementSettings>
   ): Promise<{ message: string; advertisements: AdvertisementSettings }> {
+    this.requireAuth();
     try {
-      const res = await fetch('/api/admin/ads', {
-        method: 'PUT',
-        headers: this.getHeaders(),
-        body: JSON.stringify(settings),
-      });
+      const docRef = doc(db, 'advertisements', 'global');
+      const docSnap = await getDoc(docRef);
+      
+      let updated: AdvertisementSettings = {
+        globalAdCode: '',
+        adsEnabled: true,
+        adsPerPage: 2,
+        headerAdCode: '',
+        inArticleAdCode: '',
+        footerAdCode: '',
+        testMode: false,
+      };
 
-      if (res.ok) {
-        const data = await res.json();
-        try {
-          localStorage.setItem(LOCAL_ADS_KEY, JSON.stringify(data.advertisements));
-        } catch {}
-        return data;
+      if (docSnap.exists()) {
+        updated = { ...updated, ...docSnap.data() };
       }
-    } catch {
-      // ignore
+      
+      updated = { ...updated, ...settings };
+      await setDoc(docRef, updated);
+
+      return {
+        message: 'Advertisement settings updated successfully',
+        advertisements: updated,
+      };
+    } catch (e) {
+      console.error(e);
+      throw new Error('Failed to update advertisement settings');
     }
-
-    const { advertisements: current } = await this.getAdvertisementSettings();
-    const updated: AdvertisementSettings = {
-      ...current,
-      ...settings,
-    };
-    try {
-      localStorage.setItem(LOCAL_ADS_KEY, JSON.stringify(updated));
-    } catch {}
-
-    return {
-      message: 'Advertisement settings updated successfully',
-      advertisements: updated,
-    };
   }
 
   public async updateStoryAd(storyId: string, adCode: string): Promise<{ message: string }> {
+    this.requireAuth();
     try {
-      const res = await fetch(`/api/admin/stories/${storyId}/ad`, {
-        method: 'PUT',
-        headers: this.getHeaders(),
-        body: JSON.stringify({ adCode }),
+      await updateDoc(doc(db, 'stories', storyId), {
+        individualAdCode: adCode
       });
-
-      if (res.ok) {
-        return await res.json();
-      }
-    } catch {
-      // ignore
+      return { message: 'Story ad updated successfully' };
+    } catch (e) {
+      console.error(e);
+      throw new Error('Failed to update individual story ad code');
     }
+  }
 
-    let postAds: Record<string, string> = {};
+  public async createCategory(categoryData: { name: string; slug: string; description?: string }): Promise<{ message: string; category: any }> {
+    this.requireAuth();
     try {
-      const stored = localStorage.getItem(LOCAL_POST_ADS_KEY);
-      if (stored) postAds = JSON.parse(stored);
-    } catch {}
+      const newCat = {
+        name: categoryData.name,
+        slug: categoryData.slug,
+        description: categoryData.description || `${categoryData.name} stories and tales`,
+        createdAt: new Date().toISOString(),
+        storyCount: 0
+      };
+      const docRef = await addDoc(collection(db, 'categories'), newCat);
+      return { message: 'Category created successfully', category: { id: docRef.id, ...newCat } };
+    } catch (e) {
+      console.error(e);
+      throw new Error('Failed to create category');
+    }
+  }
 
-    postAds[storyId] = adCode;
+  public async deleteCategory(id: string): Promise<void> {
+    this.requireAuth();
     try {
-      localStorage.setItem(LOCAL_POST_ADS_KEY, JSON.stringify(postAds));
-    } catch {}
-
-    return { message: 'Story ad updated successfully' };
+      await deleteDoc(doc(db, 'categories', id));
+    } catch (e) {
+      console.error(e);
+      throw new Error('Failed to delete category');
+    }
   }
 
   public async getSiteSettings(): Promise<SiteSettings> {
     try {
-      const res = await fetch('/api/admin/settings', {
-        headers: this.getHeaders(),
-      });
+      const docRef = doc(db, 'settings', 'global');
+      const docSnap = await getDoc(docRef);
+      
+      const defaultSettings: SiteSettings = {
+        siteName: 'Walkathawa (වල් කතාව)',
+        alternateName: 'වල් කතාව',
+        logo: '/icon.png',
+        tagline: 'A place to read Sinhala stories online',
+        contactEmail: 'contact@walkathawa.com',
+        metaTitle: 'Walkathawa (වල් කතාව) | Sinhala Stories Online',
+        metaDescription: 'Walkathawa (වල් කතාව) is a place to read Sinhala stories online. Discover new Sinhala katha, romantic stories, fictional stories, and interesting short stories updated regularly.',
+        keywords: 'walkatha, walakatha, walkathawa, වල් කතා, වල්කතා, sinhala stories, sinhala katha, sinhala short stories, sinhala kathandara, sinhala love stories, sinhala adult stories, sinhala romantic stories, sinhala fictional stories, sinhala novels, new sinhala stories, latest sinhala katha, online sinhala stories, read sinhala stories online',
+        ogImage: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1200&q=80',
+        googleAnalyticsId: '',
+        searchConsoleVerification: '',
+        publisherName: 'Walkathawa (වල් කතාව)',
+      };
 
-      if (res.ok) {
-        const data = await res.json();
-        try {
-          localStorage.setItem(LOCAL_SETTINGS_KEY, JSON.stringify(data));
-        } catch {}
-        return data;
+      if (docSnap.exists()) {
+        return { ...defaultSettings, ...docSnap.data() };
       }
-    } catch {
-      // ignore
+      return defaultSettings;
+    } catch (e) {
+      console.error(e);
+      throw new Error('Failed to fetch site settings');
     }
-
-    try {
-      const stored = localStorage.getItem(LOCAL_SETTINGS_KEY);
-      if (stored) return JSON.parse(stored);
-    } catch {}
-
-    return {
-      siteName: 'Walkathawa (වල් කතාව)',
-      alternateName: 'වල් කතාව',
-      logo: '/icon.png',
-      tagline: 'A place to read Sinhala stories online',
-      contactEmail: 'contact@walkathawa.com',
-      metaTitle: 'Walkathawa (වල් කතාව) | Sinhala Stories Online',
-      metaDescription:
-        'Walkathawa (වල් කතාව) is a place to read Sinhala stories online. Discover new Sinhala katha, romantic stories, fictional stories, and interesting short stories updated regularly.',
-      keywords:
-        'walkatha, walakatha, walkathawa, වල් කතා, වල්කතා, sinhala stories, sinhala katha, sinhala short stories, sinhala kathandara, sinhala love stories, sinhala adult stories, sinhala romantic stories, sinhala fictional stories, sinhala novels, new sinhala stories, latest sinhala katha, online sinhala stories, read sinhala stories online',
-      ogImage:
-        'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1200&q=80',
-      googleAnalyticsId: '',
-      searchConsoleVerification: '',
-      publisherName: 'Walkathawa (වල් කතාව)',
-    };
   }
 
   public async updateSiteSettings(settings: Partial<SiteSettings>): Promise<SiteSettings> {
+    this.requireAuth();
     try {
-      const res = await fetch('/api/admin/settings', {
-        method: 'PUT',
-        headers: this.getHeaders(),
-        body: JSON.stringify(settings),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        try {
-          localStorage.setItem(LOCAL_SETTINGS_KEY, JSON.stringify(data.settings));
-        } catch {}
-        return data.settings;
-      }
-    } catch {
-      // ignore
+      const current = await this.getSiteSettings();
+      const updated: SiteSettings = { ...current, ...settings };
+      
+      await setDoc(doc(db, 'settings', 'global'), updated);
+      
+      return updated;
+    } catch (e) {
+      console.error(e);
+      throw new Error('Failed to update site settings');
     }
-
-    const current = await this.getSiteSettings();
-    const updated: SiteSettings = {
-      ...current,
-      ...settings,
-    };
-    try {
-      localStorage.setItem(LOCAL_SETTINGS_KEY, JSON.stringify(updated));
-    } catch {}
-    return updated;
   }
 }
 
 export const adminService = new AdminService();
-

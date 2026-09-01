@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Tag, Plus, BookOpen, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Tag, Plus, BookOpen, CheckCircle2, AlertCircle, Trash2 } from 'lucide-react';
 import { Category } from '../../types/story';
 import { storyService } from '../../services/storyService';
+import { adminService } from '../../services/adminService';
 
 export const AdminCategories: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -12,10 +13,14 @@ export const AdminCategories: React.FC = () => {
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   useEffect(() => {
+    loadCategories();
+  }, []);
+
+  const loadCategories = () => {
     storyService.getCategories().then((cats) => {
       setCategories(cats.filter((c) => c.slug !== 'all'));
     });
-  }, []);
+  }
 
   const handleNameChange = (val: string) => {
     setNewCatName(val);
@@ -34,23 +39,34 @@ export const AdminCategories: React.FC = () => {
     setFeedback(null);
 
     try {
-      const newCat: Category = {
-        id: `cat-${Date.now()}`,
+      const { category, message } = await adminService.createCategory({
         name: newCatName.trim(),
         slug: newCatSlug || newCatName.toLowerCase().replace(/\s+/g, '-'),
-        description: newCatDescription.trim() || `${newCatName} stories and tales`,
-        storyCount: 0,
-      };
-
-      setCategories((prev) => [...prev, newCat]);
+        description: newCatDescription.trim(),
+      });
+      setCategories((prev) => [...prev, category]);
+      setFeedback({ type: 'success', message });
       setNewCatName('');
       setNewCatSlug('');
       setNewCatDescription('');
-      setFeedback({ type: 'success', message: `Category "${newCat.name}" added successfully!` });
     } catch (err: any) {
       setFeedback({ type: 'error', message: err.message || 'Failed to create category' });
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteCategory = async (id: string, name: string) => {
+    if (!window.confirm(`Are you sure you want to delete the category "${name}"? This action cannot be undone.`)) {
+      return;
+    }
+    
+    try {
+      await adminService.deleteCategory(id);
+      setCategories((prev) => prev.filter(c => c.id !== id));
+      setFeedback({ type: 'success', message: 'Category deleted successfully' });
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: err.message || 'Failed to delete category' });
     }
   };
 
@@ -174,6 +190,14 @@ export const AdminCategories: React.FC = () => {
                   <span className="px-2.5 py-1 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-xs font-mono font-bold">
                     {cat.storyCount ?? 0} stories
                   </span>
+                  <button 
+                    type="button" 
+                    onClick={() => cat.id && handleDeleteCategory(cat.id, cat.name)}
+                    className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500 hover:text-white transition-colors"
+                    title="Delete Category"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
             ))}

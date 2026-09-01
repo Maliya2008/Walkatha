@@ -109,12 +109,11 @@ export default function App() {
 
   // Fetch live site settings for SEO & Meta
   useEffect(() => {
-    fetch('/api/public/settings')
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
+    import('./services/adminService').then(({ adminService }) => {
+      adminService.getSiteSettings().then((data) => {
         if (data) setSiteSettings(data);
-      })
-      .catch(() => {});
+      }).catch(() => {});
+    });
   }, []);
 
   // Update dynamic SEO metadata and Schema.org on route changes

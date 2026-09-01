@@ -1,107 +1,141 @@
 import { Category, PaginatedResponse, Story, StoryFilterParams } from '../types/story';
-import { INITIAL_CATEGORIES, INITIAL_STORIES } from '../data/seedStories';
+import { db } from '../lib/firebase';
+import { collection, getDocs, query, where, orderBy, getDoc, doc, limit } from 'firebase/firestore';
 
 class StoryService {
   public async getStories(params: StoryFilterParams = {}): Promise<PaginatedResponse<Story>> {
     try {
-      const query = new URLSearchParams();
-      if (params.category && params.category !== 'all') query.set('category', params.category);
-      if (params.search) query.set('search', params.search);
-      if (params.tag) query.set('tag', params.tag);
-      if (params.sortBy) query.set('sortBy', params.sortBy);
-      if (params.page) query.set('page', String(params.page));
-      if (params.limit) query.set('limit', String(params.limit));
+      const storiesRef = collection(db, 'stories');
+      let q = query(storiesRef, where('published', '==', true));
+      
+      const snapshot = await getDocs(q);
+      let allStories: Story[] = [];
+      snapshot.forEach(doc => {
+        allStories.push({ id: doc.id, ...doc.data() } as Story);
+      });
 
-      const res = await fetch(`/api/public/stories?${query.toString()}`);
-      if (res.ok) {
-        return await res.json();
+      // Simple client-side sorting and filtering for public view
+      // Order by uploadDate desc
+      allStories.sort((a, b) => new Date(b.uploadDate || 0).getTime() - new Date(a.uploadDate || 0).getTime());
+
+      if (params.category && params.category !== 'all') {
+        allStories = allStories.filter((s) => s.category?.toLowerCase() === params.category!.toLowerCase());
       }
-    } catch {
-      // Fallback
-    }
-
-    // Check local store or seed stories fallback
-    let allStories = INITIAL_STORIES;
-    try {
-      const stored = localStorage.getItem('walkatha_stories_store_v1');
-      if (stored) {
-        allStories = JSON.parse(stored);
+      if (params.search && params.search.trim()) {
+        const queryText = params.search.toLowerCase().trim();
+        allStories = allStories.filter(
+          (s) =>
+            s.title?.toLowerCase().includes(queryText) ||
+            s.shortDescription?.toLowerCase().includes(queryText) ||
+            s.tags?.some((t) => t.toLowerCase().includes(queryText))
+        );
       }
-    } catch {
-      // ignore
-    }
 
-    let filtered = allStories.filter((s) => s.published);
-    if (params.category && params.category !== 'all') {
-      filtered = filtered.filter((s) => s.category.toLowerCase() === params.category!.toLowerCase());
+      const page = params.page || 1;
+      const limitVal = params.limit || 9;
+      const total = allStories.length;
+      
+      return {
+        data: allStories.slice((page - 1) * limitVal, page * limitVal),
+        total,
+        page,
+        totalPages: Math.ceil(total / limitVal) || 1,
+        hasMore: page < Math.ceil(total / limitVal),
+      };
+    } catch (e) {
+      console.error("Error fetching stories:", e);
+      return { data: [], total: 0, page: 1, totalPages: 1, hasMore: false };
     }
-    if (params.search && params.search.trim()) {
-      const q = params.search.toLowerCase().trim();
-      filtered = filtered.filter(
-        (s) =>
-          s.title.toLowerCase().includes(q) ||
-          s.shortDescription.toLowerCase().includes(q) ||
-          s.tags.some((t) => t.toLowerCase().includes(q))
-      );
-    }
-    const page = params.page || 1;
-    const limit = params.limit || 9;
-    const total = filtered.length;
-    return {
-      data: filtered.slice((page - 1) * limit, page * limit),
-      total,
-      page,
-      totalPages: Math.ceil(total / limit) || 1,
-      hasMore: page < Math.ceil(total / limit),
-    };
   }
 
   public async getStoryBySlug(
     slug: string
   ): Promise<{ story: Story | null; relatedStories: Story[] }> {
     try {
-      const res = await fetch(`/api/public/stories/${encodeURIComponent(slug)}`);
-      if (res.ok) {
-        return await res.json();
+      const storiesRef = collection(db, 'stories');
+      const q = query(storiesRef, where('slug', '==', slug), where('published', '==', true), limit(1));
+      const snapshot = await getDocs(q);
+      
+      let story: Story | null = null;
+      if (!snapshot.empty) {
+        story = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as Story;
+      } else {
+        // Try falling back to looking it up by ID
+        const docRef = doc(db, 'stories', slug);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists() && docSnap.data().published) {
+          story = { id: docSnap.id, ...docSnap.data() } as Story;
+        }
       }
-    } catch {
-      // Fallback
-    }
 
-    let allStories = INITIAL_STORIES;
-    try {
-      const stored = localStorage.getItem('walkatha_stories_store_v1');
-      if (stored) {
-        allStories = JSON.parse(stored);
+      let relatedStories: Story[] = [];
+      if (story && story.category) {
+        const relatedQ = query(storiesRef, where('category', '==', story.category), where('published', '==', true), limit(4));
+        const relatedSnap = await getDocs(relatedQ);
+        relatedSnap.forEach(d => {
+          if (d.id !== story!.id) {
+            relatedStories.push({ id: d.id, ...d.data() } as Story);
+          }
+        });
       }
-    } catch {
-      // ignore
+
+      return { story, relatedStories: relatedStories.slice(0, 3) };
+    } catch (e) {
+      console.error("Error fetching story by slug:", e);
+      return { story: null, relatedStories: [] };
     }
-
-    const story = allStories.find((s) => s.slug === slug || s.id === slug) || null;
-    const relatedStories = allStories.filter(
-      (s) => story && s.id !== story.id && s.category === story.category && s.published
-    ).slice(0, 3);
-
-    return { story, relatedStories };
   }
 
-  public async getFeaturedStories(limit = 3): Promise<Story[]> {
-    const res = await this.getStories({ limit: 10 });
-    const featured = res.data.filter((s) => s.featured);
-    return featured.length > 0 ? featured.slice(0, limit) : res.data.slice(0, limit);
+  public async getFeaturedStories(limitVal = 3): Promise<Story[]> {
+    try {
+      const storiesRef = collection(db, 'stories');
+      const q = query(storiesRef, where('published', '==', true), where('featured', '==', true), limit(limitVal));
+      const snapshot = await getDocs(q);
+      
+      let featured: Story[] = [];
+      snapshot.forEach(d => {
+        featured.push({ id: d.id, ...d.data() } as Story);
+      });
+      
+      if (featured.length === 0) {
+        const res = await this.getStories({ limit: limitVal });
+        return res.data;
+      }
+      return featured;
+    } catch (e) {
+      console.error("Error fetching featured stories", e);
+      return [];
+    }
   }
 
   public async getCategories(): Promise<Category[]> {
     try {
-      const res = await fetch('/api/public/categories');
-      if (res.ok) {
-        return await res.json();
+      const categoriesRef = collection(db, 'categories');
+      const snapshot = await getDocs(categoriesRef);
+      let categories: Category[] = [];
+      snapshot.forEach(doc => {
+        categories.push({ id: doc.id, ...doc.data() } as Category);
+      });
+      
+      // Fallback categories if none exist in DB yet
+      if (categories.length === 0) {
+        categories = [
+          { id: '1', slug: 'romantic', name: 'ආදර කතා (Romantic)' },
+          { id: '2', slug: 'adventure', name: 'ත්‍රාසජනක (Adventure)' },
+          { id: '3', slug: 'fiction', name: 'ප්‍රබන්ධ කතා (Fiction)' },
+          { id: '4', slug: 'mystery', name: 'අභිරහස් (Mystery)' }
+        ];
       }
-    } catch {
-      // fallback
+      return categories;
+    } catch (e) {
+      console.error("Error fetching categories:", e);
+      return [
+          { id: '1', slug: 'romantic', name: 'ආදර කතා (Romantic)' },
+          { id: '2', slug: 'adventure', name: 'ත්‍රාසජනක (Adventure)' },
+          { id: '3', slug: 'fiction', name: 'ප්‍රබන්ධ කතා (Fiction)' },
+          { id: '4', slug: 'mystery', name: 'අභිරහස් (Mystery)' }
+      ];
     }
-    return INITIAL_CATEGORIES;
   }
 }
 

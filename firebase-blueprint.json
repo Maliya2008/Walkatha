@@ -1,0 +1,69 @@
+{
+  "collections": [
+    {
+      "name": "users",
+      "description": "Store admin users",
+      "schema": {
+        "email": "string",
+        "role": "string",
+        "createdAt": "string"
+      }
+    },
+    {
+      "name": "stories",
+      "description": "Store all stories",
+      "schema": {
+        "title": "string",
+        "slug": "string",
+        "coverImage": "string",
+        "description": "string",
+        "content": "string",
+        "category": "string",
+        "tags": "array",
+        "author": "map",
+        "uploadDate": "string",
+        "updatedDate": "string",
+        "views": "number",
+        "published": "boolean"
+      }
+    },
+    {
+      "name": "categories",
+      "description": "Store story categories",
+      "schema": {
+        "name": "string",
+        "slug": "string",
+        "createdAt": "string"
+      }
+    },
+    {
+      "name": "settings",
+      "description": "Global settings. Use document ID 'global'",
+      "schema": {
+        "siteName": "string",
+        "logo": "string",
+        "description": "string",
+        "seoTitle": "string",
+        "seoDescription": "string",
+        "seoKeywords": "string"
+      }
+    },
+    {
+      "name": "advertisements",
+      "description": "Global ads. Use document ID 'global'",
+      "schema": {
+        "globalCode": "string",
+        "enabled": "boolean",
+        "adsPerPage": "number"
+      }
+    },
+    {
+      "name": "storyAdvertisements",
+      "description": "Story-specific ads. Document ID should be story ID",
+      "schema": {
+        "storyId": "string",
+        "adCode": "string"
+      }
+    }
+  ]
+}

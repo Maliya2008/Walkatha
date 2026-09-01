@@ -72,8 +72,8 @@ export const AdminStoryForm: React.FC<AdminStoryFormProps> = ({
     }
   }, [fullContent, isEditing, storyToEdit]);
 
-  // Handle local image file upload & conversion to base64 Data URL
-  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle local image file upload to Firebase Storage
+  const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -82,14 +82,33 @@ export const AdminStoryForm: React.FC<AdminStoryFormProps> = ({
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      if (event.target?.result) {
-        setCoverImage(event.target.result as string);
-        setError(null);
-      }
-    };
-    reader.readAsDataURL(file);
+    try {
+      const { storage } = await import('../../lib/firebase');
+      const { ref, uploadBytesResumable, getDownloadURL } = await import('firebase/storage');
+      
+      const fileName = `covers/${Date.now()}_${file.name}`;
+      const storageRef = ref(storage, fileName);
+      
+      // We do a simple upload. For progress, could use uploadBytesResumable
+      const snapshot = await uploadBytesResumable(storageRef, file);
+      const downloadURL = await getDownloadURL(snapshot.ref);
+      
+      setCoverImage(downloadURL);
+      setError(null);
+    } catch (err: any) {
+      console.error(err);
+      setError('Failed to upload image to Storage. Using base64 fallback.');
+      
+      // Fallback
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setCoverImage(event.target.result as string);
+          setError(null);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

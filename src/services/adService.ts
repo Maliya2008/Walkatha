@@ -1,4 +1,6 @@
 import { AdvertisementSettings } from '../types/admin';
+import { db } from '../lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 
 const DEFAULT_CONFIG: AdvertisementSettings = {
   globalAdCode: '',
@@ -21,12 +23,12 @@ class AdService {
 
   public async fetchConfig(): Promise<AdvertisementSettings> {
     try {
-      const res = await fetch('/api/public/ads/config');
-      if (res.ok) {
-        const data = await res.json();
+      const docRef = doc(db, 'advertisements', 'global');
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
         this.config = {
           ...this.config,
-          ...data,
+          ...docSnap.data(),
         };
         this.fetched = true;
       }

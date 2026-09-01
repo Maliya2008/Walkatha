@@ -76,26 +76,42 @@ export default function App() {
 
     // 2. Story Reader Check
     let storySlug: string | null = null;
-    const storyMatch = path.match(/^\/story\/([a-zA-Z0-9-_]+)/);
+    const storyMatch = path.match(/^\/story\/([^/]+)/);
     if (storyMatch) {
-      storySlug = storyMatch[1];
+      try {
+        storySlug = decodeURIComponent(storyMatch[1]);
+      } catch {
+        storySlug = storyMatch[1];
+      }
     } else {
-      const hashStoryMatch = hash.match(/^#\/story\/([a-zA-Z0-9-_]+)/);
+      const hashStoryMatch = hash.match(/^#\/story\/([^/]+)/);
       if (hashStoryMatch) {
-        storySlug = hashStoryMatch[1];
+        try {
+          storySlug = decodeURIComponent(hashStoryMatch[1]);
+        } catch {
+          storySlug = hashStoryMatch[1];
+        }
       }
     }
     setCurrentSlug(storySlug);
 
     // 3. Category Page Check
     let categorySlug = 'all';
-    const categoryMatch = path.match(/^\/category\/([a-zA-Z0-9-_]+)/);
+    const categoryMatch = path.match(/^\/category\/([^/]+)/);
     if (categoryMatch) {
-      categorySlug = categoryMatch[1];
+      try {
+        categorySlug = decodeURIComponent(categoryMatch[1]);
+      } catch {
+        categorySlug = categoryMatch[1];
+      }
     } else {
-      const hashCategoryMatch = hash.match(/^#\/category\/([a-zA-Z0-9-_]+)/);
+      const hashCategoryMatch = hash.match(/^#\/category\/([^/]+)/);
       if (hashCategoryMatch) {
-        categorySlug = hashCategoryMatch[1];
+        try {
+          categorySlug = decodeURIComponent(hashCategoryMatch[1]);
+        } catch {
+          categorySlug = hashCategoryMatch[1];
+        }
       }
     }
 

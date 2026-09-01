@@ -36,6 +36,20 @@ export const AdminRoot: React.FC<AdminRootProps> = ({
       .verifySession()
       .then((u) => {
         setUser(u);
+        if (u) {
+          // Safe auto-heal: execute migrations only when logged in as verified admin
+          adminService.migrateStorySlugs().then((count) => {
+            if (count > 0) {
+              console.log(`Auto-healed ${count} stories lacking slug fields.`);
+            }
+          }).catch(() => {});
+
+          adminService.migrateStoryCategories().then((count) => {
+            if (count > 0) {
+              console.log(`Auto-healed ${count} story category relationships.`);
+            }
+          }).catch(() => {});
+        }
       })
       .finally(() => {
         setIsCheckingAuth(false);

@@ -333,6 +333,16 @@ class AdminService {
         }
       }
 
+      // Ensure slug is populated and valid
+      let finalSlug = updates.slug?.trim() || existing.slug;
+      if (!finalSlug || !finalSlug.trim()) {
+        const titleToUse = updates.title || existing.title || '';
+        finalSlug = titleToUse
+          .toLowerCase()
+          .replace(/[^a-z0-9\u0D80-\u0DFF]+/g, '-')
+          .replace(/(^-|-$)+/g, '') || `story-${id}`;
+      }
+
       const finalUpdates: any = {
         ...updates,
         description: updates.shortDescription || updates.description || existing.description || existing.shortDescription,
@@ -342,6 +352,7 @@ class AdminService {
         category: categorySlug,
         categoryId,
         categoryName,
+        slug: finalSlug,
         updatedDate: nowIso,
         updatedAt: nowIso,
         categories: deleteField(),
@@ -835,6 +846,34 @@ class AdminService {
       return migratedCount;
     } catch (err) {
       console.warn('Story category migration notice:', err);
+      return 0;
+    }
+  }
+
+  public async migrateStorySlugs(): Promise<number> {
+    try {
+      const storiesRef = collection(db, 'stories');
+      const snapshot = await getDocs(storiesRef);
+      let migratedCount = 0;
+
+      for (const docSnap of snapshot.docs) {
+        const data = docSnap.data();
+        if (!data.slug || typeof data.slug !== 'string' || !data.slug.trim()) {
+          const generated = (data.title || '')
+            .toLowerCase()
+            .replace(/[^a-z0-9\u0D80-\u0DFF]+/g, '-')
+            .replace(/(^-|-$)+/g, '') || `story-${docSnap.id}`;
+          
+          await updateDoc(docSnap.ref, {
+            slug: generated,
+            updatedAt: new Date().toISOString(),
+          });
+          migratedCount++;
+        }
+      }
+      return migratedCount;
+    } catch (err) {
+      console.error('Story slug migration error:', err);
       return 0;
     }
   }

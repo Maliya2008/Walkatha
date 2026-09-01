@@ -15,6 +15,8 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   className = '',
 }) => {
   const [localValue, setLocalValue] = useState(value);
+  const onChangeRef = React.useRef(onChange);
+  onChangeRef.current = onChange;
 
   useEffect(() => {
     setLocalValue(value);
@@ -23,11 +25,11 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   useEffect(() => {
     const handler = setTimeout(() => {
       if (localValue !== value) {
-        onChange(localValue);
+        onChangeRef.current(localValue);
       }
     }, 250);
     return () => clearTimeout(handler);
-  }, [localValue, onChange, value]);
+  }, [localValue, value]);
 
   return (
     <div className={`relative flex items-center w-full ${className}`}>

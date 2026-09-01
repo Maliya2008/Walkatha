@@ -4,8 +4,9 @@ import { storyService } from '../services/storyService';
 import { authService } from '../services/authService';
 import { SEOService } from '../services/seoService';
 
-// In-memory set of story document IDs that have been incremented during the current active session/visit
-const viewedStoriesThisSession = new Set<string>();
+// Module-level variables to track the last incremented story and prevent duplicate increments from React StrictMode/re-renders
+let lastIncrementedStoryId: string | null = null;
+let lastIncrementTime: number = 0;
 
 export function useStory(slug: string | null) {
   const [story, setStory] = useState<Story | null>(null);
@@ -50,10 +51,13 @@ export function useStory(slug: string | null) {
           // Atomic public view increment: Only for public visitors on published stories
           // Protected against duplicate React renders / StrictMode via realDocId tracking
           if (!isAdmin && isPublished && realDocId) {
-            const hasIncremented = viewedStoriesThisSession.has(realDocId);
+            const now = Date.now();
+            // Count as a duplicate render if it's the exact same story incremented within the last 5 seconds
+            const isDuplicateRender = lastIncrementedStoryId === realDocId && (now - lastIncrementTime < 5000);
 
-            if (!hasIncremented) {
-              viewedStoriesThisSession.add(realDocId);
+            if (!isDuplicateRender) {
+              lastIncrementedStoryId = realDocId;
+              lastIncrementTime = now;
 
               // Immediately update displayed count on the story screen
               loadedStory.views = (loadedStory.views || 0) + 1;

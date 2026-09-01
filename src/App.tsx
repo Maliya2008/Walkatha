@@ -131,17 +131,11 @@ export default function App() {
       pageNum = parseInt(pageParam, 10) || 1;
     }
 
-    // Synchronize useStories parameters to prevent double fetches
-    if (params.category !== categorySlug) {
-      setCategory(categorySlug);
-    }
-    if ((params.search || '') !== searchVal) {
-      setSearch(searchVal);
-    }
-    if (page !== pageNum) {
-      setPage(pageNum);
-    }
-  }, [params.category, params.search, page, setCategory, setSearch, setPage]);
+    // Synchronize useStories parameters
+    setCategory(categorySlug);
+    setSearch(searchVal);
+    setPage(pageNum);
+  }, [setCategory, setSearch, setPage]);
 
   // Sync on mount and popstate
   useEffect(() => {
@@ -188,6 +182,23 @@ export default function App() {
     navigateTo(targetPath);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [navigateTo]);
+
+  const handleSearchChange = useCallback((val: string) => {
+    if (val) {
+      navigateTo('/search', { q: val });
+    } else {
+      navigateTo(params.category && params.category !== 'all' ? `/category/${params.category}` : '/');
+    }
+  }, [navigateTo, params.category]);
+
+  const handlePageChange = useCallback((pageNum: number) => {
+    const currentPath = window.location.pathname;
+    const queryObj: Record<string, string> = { page: String(pageNum) };
+    if (params.search) {
+      queryObj.q = params.search;
+    }
+    navigateTo(currentPath, queryObj);
+  }, [navigateTo, params.search]);
 
   if (isAdminView) {
     return <AdminRoot />;
@@ -248,25 +259,12 @@ export default function App() {
             selectedCategory={params.category || 'all'}
             onSelectCategory={handleSelectCategory}
             searchTerm={params.search || ''}
-            onSearchChange={(val) => {
-              if (val) {
-                navigateTo('/search', { q: val });
-              } else {
-                navigateTo(params.category && params.category !== 'all' ? `/category/${params.category}` : '/');
-              }
-            }}
+            onSearchChange={handleSearchChange}
             sortBy={params.sortBy || 'latest'}
             onSortChange={setSortBy}
             currentPage={page}
             totalPages={totalPages}
-            onPageChange={(pageNum) => {
-              const currentPath = window.location.pathname;
-              const queryObj: Record<string, string> = { page: String(pageNum) };
-              if (params.search) {
-                queryObj.q = params.search;
-              }
-              navigateTo(currentPath, queryObj);
-            }}
+            onPageChange={handlePageChange}
             onReadStory={handleReadStory}
             isLoading={isStoriesLoading}
           />

@@ -58,21 +58,21 @@ export function useStories(initialParams: StoryFilterParams = {}) {
     loadMeta();
   }, []);
 
-  const setCategory = (category: string) => {
-    setParams((prev) => ({ ...prev, category, page: 1 }));
-  };
+  const setCategory = useCallback((category: string) => {
+    setParams((prev) => (prev.category === category ? prev : { ...prev, category, page: 1 }));
+  }, []);
 
-  const setSearch = (search: string) => {
-    setParams((prev) => ({ ...prev, search, page: 1 }));
-  };
+  const setSearch = useCallback((search: string) => {
+    setParams((prev) => (prev.search === search ? prev : { ...prev, search, page: 1 }));
+  }, []);
 
-  const setPage = (page: number) => {
-    setParams((prev) => ({ ...prev, page }));
-  };
+  const setPage = useCallback((page: number) => {
+    setParams((prev) => (prev.page === page ? prev : { ...prev, page }));
+  }, []);
 
-  const setSortBy = (sortBy: 'latest' | 'popular' | 'readingTime') => {
-    setParams((prev) => ({ ...prev, sortBy, page: 1 }));
-  };
+  const setSortBy = useCallback((sortBy: 'latest' | 'popular' | 'readingTime') => {
+    setParams((prev) => (prev.sortBy === sortBy ? prev : { ...prev, sortBy, page: 1 }));
+  }, []);
 
   return {
     stories: response.data,

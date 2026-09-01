@@ -45,6 +45,7 @@ export interface SiteSettings {
 
 export interface DashboardStats {
   totalStories: number;
+  totalCategories: number;
   totalViews: number;
   publishedStories: number;
   draftStories: number;

@@ -23,22 +23,15 @@ class AdService {
 
   public async fetchConfig(): Promise<AdvertisementSettings> {
     try {
-      // First check the primary advertisement_settings/global doc
-      let docRef = doc(db, 'advertisement_settings', 'global');
-      let docSnap = await getDoc(docRef);
-
-      // Fallback to advertisements/settings if old schema doc exists
-      if (!docSnap.exists()) {
-        docRef = doc(db, 'advertisements', 'settings');
-        docSnap = await getDoc(docRef);
-      }
+      const docRef = doc(db, 'advertisement_settings', 'config');
+      const docSnap = await getDoc(docRef);
 
       if (docSnap.exists()) {
         const data = docSnap.data();
         this.config = {
-          enabled: typeof data.enabled === 'boolean' ? data.enabled : true,
-          globalAdCode: data.globalAdCode || data.globalDirectLink || '',
-          redirectAmount: (data.redirectAmount || data.maxTriggers || 1) as 1 | 2 | 3,
+          enabled: typeof data.enabled === 'boolean' ? data.enabled : false,
+          globalAdCode: data.globalAdCode || '',
+          redirectAmount: (data.redirectAmount !== undefined ? data.redirectAmount : 1) as 1 | 2 | 3,
           updatedAt: data.updatedAt,
         };
         this.fetched = true;

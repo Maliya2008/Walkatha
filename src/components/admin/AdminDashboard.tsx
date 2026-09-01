@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { BookOpen, Eye, CheckCircle, FileText, Megaphone, Plus, ArrowUpRight, TrendingUp, Sparkles } from 'lucide-react';
+import { BookOpen, Eye, CheckCircle, FileText, Megaphone, Plus, ArrowUpRight, TrendingUp, Sparkles, Layers } from 'lucide-react';
 import { adminService } from '../../services/adminService';
 import { DashboardStats } from '../../types/admin';
 
@@ -87,8 +87,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       </div>
 
-      {/* 5 Core Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      {/* 6 Core Metric Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         {/* Total Stories */}
         <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800/80 shadow-lg relative overflow-hidden group">
           <div className="flex items-center justify-between">
@@ -102,6 +102,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <span className="text-[10px] text-slate-400">items</span>
           </div>
           <div className="mt-2 text-[11px] text-slate-500">In repository archive</div>
+        </div>
+
+        {/* Total Categories */}
+        <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800/80 shadow-lg relative overflow-hidden group">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Categories</span>
+            <div className="p-2 rounded-xl bg-violet-500/10 text-violet-400">
+              <Layers className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-baseline gap-2">
+            <span className="text-2xl font-black text-white font-mono">{stats.totalCategories || 0}</span>
+            <span className="text-[10px] text-slate-400">genres</span>
+          </div>
+          <div className="mt-2 text-[11px] text-slate-500">Active story categories</div>
         </div>
 
         {/* Total Views */}

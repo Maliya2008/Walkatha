@@ -40,66 +40,116 @@ class AdminService {
   public async getDashboardStats(): Promise<DashboardStats> {
     this.requireAuth();
 
+    let totalStories = 0;
+    let publishedStories = 0;
+    let draftStories = 0;
+    let totalViews = 0;
+    let totalCategories = 0;
+    const stories: Story[] = [];
+
+    // Query stories
     try {
       const storiesRef = collection(db, 'stories');
       const snapshot = await getDocs(storiesRef);
-      
-      let totalStories = 0;
-      let publishedStories = 0;
-      let draftStories = 0;
-      let totalViews = 0;
-      
-      const stories: Story[] = [];
-
-      snapshot.forEach((docSnap) => {
-        const data = docSnap.data() as Story;
-        data.id = docSnap.id;
-        stories.push(data);
-        
-        totalStories++;
-        if (data.published) publishedStories++;
-        else draftStories++;
-        totalViews += (data.views || 0);
+      if (snapshot && !snapshot.empty) {
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data() as Story;
+          data.id = docSnap.id;
+          stories.push(data);
+          
+          totalStories++;
+          if (data.published) publishedStories++;
+          else draftStories++;
+          totalViews += (data.views || 0);
+        });
+      }
+    } catch (err: any) {
+      console.error('Firebase Error in getDashboardStats (stories):', {
+        code: err?.code,
+        message: err?.message,
+        details: err
       });
+      throw new Error(`Failed to fetch dashboard metrics (stories): [${err?.code || 'unknown-error'}] ${err?.message || ''}`);
+    }
 
-      // Sort recent
-      stories.sort((a, b) => new Date(b.uploadDate || b.uploadedDate || b.createdAt || 0).getTime() - new Date(a.uploadDate || a.uploadedDate || a.createdAt || 0).getTime());
+    // Query categories
+    try {
+      const categoriesRef = collection(db, 'categories');
+      const snapshot = await getDocs(categoriesRef);
+      if (snapshot && !snapshot.empty) {
+        totalCategories = snapshot.size;
+      }
+    } catch (err: any) {
+      console.error('Firebase Error in getDashboardStats (categories):', {
+        code: err?.code,
+        message: err?.message,
+        details: err
+      });
+      throw new Error(`Failed to fetch dashboard metrics (categories): [${err?.code || 'unknown-error'}] ${err?.message || ''}`);
+    }
 
-      // Get ads status from advertisement_settings or fallback
-      let adsDoc = await getDoc(doc(db, 'advertisement_settings', 'global'));
+    // Query ads status
+    let adsEnabled = false;
+    let redirectAmount = 1;
+    let hasGlobalAdCode = false;
+
+    try {
+      const adsDocRef = doc(db, 'advertisement_settings', 'config');
+      let adsDoc = await getDoc(adsDocRef);
+      
       if (!adsDoc.exists()) {
-        adsDoc = await getDoc(doc(db, 'advertisements', 'settings'));
+        const defaultSettings = {
+          enabled: false,
+          globalAdCode: '',
+          redirectAmount: 1,
+          updatedAt: new Date().toISOString(),
+        };
+        await setDoc(adsDocRef, defaultSettings);
+        adsDoc = await getDoc(adsDocRef);
       }
 
-      const adsData = adsDoc.exists() ? adsDoc.data() : null;
-      const adsEnabled = adsData && typeof adsData.enabled === 'boolean' ? adsData.enabled : true;
-      const redirectAmount = adsData ? (adsData.redirectAmount || adsData.maxTriggers || 1) : 1;
-      const hasGlobalAdCode = adsData ? !!(adsData.globalAdCode || adsData.globalDirectLink) : false;
-
-      return {
-        totalStories,
-        publishedStories,
-        draftStories,
-        totalViews,
-        adsEnabled,
-        redirectAmount,
-        hasGlobalAdCode,
-        maxTriggers: redirectAmount,
-        hasGlobalDirectLink: hasGlobalAdCode,
-        recentUploads: stories.slice(0, 5).map((s) => ({
-          id: s.id,
-          title: s.title,
-          slug: s.slug,
-          category: s.category || '',
-          uploadedDate: s.uploadDate || s.uploadedDate || s.createdAt || new Date().toISOString(),
-          views: s.views || 0,
-          published: s.published,
-        })),
-      };
+      if (adsDoc.exists()) {
+        const adsData = adsDoc.data();
+        adsEnabled = typeof adsData.enabled === 'boolean' ? adsData.enabled : false;
+        redirectAmount = adsData.redirectAmount || 1;
+        hasGlobalAdCode = !!adsData.globalAdCode;
+      }
     } catch (err: any) {
-      console.error(err);
-      throw new Error('Failed to fetch dashboard metrics');
+      console.error('Firebase Error in getDashboardStats (ads):', {
+        code: err?.code,
+        message: err?.message,
+        details: err
+      });
     }
+
+    // Sort recent
+    try {
+      stories.sort((a, b) => new Date(b.uploadDate || b.uploadedDate || b.createdAt || 0).getTime() - new Date(a.uploadDate || a.uploadedDate || a.createdAt || 0).getTime());
+    } catch {
+      // ignore sorting error
+    }
+
+    return {
+      totalStories,
+      totalCategories,
+      publishedStories,
+      draftStories,
+      totalViews,
+      adsEnabled,
+      redirectAmount,
+      hasGlobalAdCode,
+      maxTriggers: redirectAmount,
+      hasGlobalDirectLink: hasGlobalAdCode,
+      recentUploads: stories.slice(0, 5).map((s) => ({
+        id: s.id,
+        title: s.title,
+        slug: s.slug,
+        category: s.category || '',
+        uploadedDate: s.uploadDate || s.uploadedDate || s.createdAt || new Date().toISOString(),
+        views: s.views || 0,
+        published: s.published,
+      })),
+    };
   }
 
   public async getStories(params?: {
@@ -341,31 +391,43 @@ class AdminService {
     advertisements: AdvertisementSettings;
   }> {
     try {
-      let adsDoc = await getDoc(doc(db, 'advertisement_settings', 'global'));
+      const docRef = doc(db, 'advertisement_settings', 'config');
+      const adsDoc = await getDoc(docRef);
+
       if (!adsDoc.exists()) {
-        adsDoc = await getDoc(doc(db, 'advertisements', 'settings'));
+        const defaultSettings = {
+          enabled: false,
+          globalAdCode: '',
+          redirectAmount: 1,
+          updatedAt: new Date().toISOString(),
+        };
+        await setDoc(docRef, defaultSettings);
+        return { advertisements: defaultSettings as any };
       }
 
-      let ads: AdvertisementSettings = {
-        enabled: true,
-        globalAdCode: '',
-        redirectAmount: 1,
+      const data = adsDoc.data();
+      const ads: AdvertisementSettings = {
+        enabled: typeof data.enabled === 'boolean' ? data.enabled : false,
+        globalAdCode: data.globalAdCode || '',
+        redirectAmount: (data.redirectAmount !== undefined ? data.redirectAmount : 1) as 1 | 2 | 3,
+        updatedAt: data.updatedAt || new Date().toISOString(),
       };
 
-      if (adsDoc.exists()) {
-        const data = adsDoc.data();
-        ads = {
-          enabled: typeof data.enabled === 'boolean' ? data.enabled : true,
-          globalAdCode: data.globalAdCode || data.globalDirectLink || '',
-          redirectAmount: (data.redirectAmount || data.maxTriggers || 1) as 1 | 2 | 3,
-          updatedAt: data.updatedAt,
-        };
-      }
-
       return { advertisements: ads };
-    } catch (e) {
-      console.error(e);
-      throw new Error('Failed to load advertisement settings');
+    } catch (e: any) {
+      console.error('Firebase error fetching advertisement settings:', {
+        code: e?.code,
+        message: e?.message,
+        details: e
+      });
+      // Fallback instead of throwing to prevent crashing the admin panel
+      const fallbackSettings = {
+        enabled: false,
+        globalAdCode: '',
+        redirectAmount: 1 as 1 | 2 | 3,
+        updatedAt: new Date().toISOString(),
+      };
+      return { advertisements: fallbackSettings };
     }
   }
 
@@ -379,19 +441,12 @@ class AdminService {
       const updated: AdvertisementSettings = {
         enabled: typeof settings.enabled === 'boolean' ? settings.enabled : current.enabled,
         globalAdCode: typeof settings.globalAdCode === 'string' ? settings.globalAdCode : current.globalAdCode,
-        redirectAmount: (settings.redirectAmount || current.redirectAmount || 1) as 1 | 2 | 3,
+        redirectAmount: (settings.redirectAmount !== undefined ? settings.redirectAmount : current.redirectAmount || 1) as 1 | 2 | 3,
         updatedAt: new Date().toISOString(),
       };
 
       // Save to primary collection
-      await setDoc(doc(db, 'advertisement_settings', 'global'), updated);
-
-      // Also sync to legacy document for backward compatibility
-      await setDoc(doc(db, 'advertisements', 'settings'), {
-        ...updated,
-        globalDirectLink: updated.globalAdCode,
-        maxTriggers: updated.redirectAmount,
-      });
+      await setDoc(doc(db, 'advertisement_settings', 'config'), updated);
 
       // Update runtime adService config
       adService.updateConfig(updated);
@@ -401,9 +456,13 @@ class AdminService {
         advertisements: updated,
       };
     } catch (error: any) {
-      console.error('Firebase Advertisement Update Error:', error);
+      console.error('Firebase Advertisement Update Error:', {
+        code: error?.code,
+        message: error?.message,
+        details: error
+      });
       const code = error?.code || error?.message || 'unknown error';
-      throw new Error(`Failed to update advertisement settings: ${code}`);
+      throw new Error(`Failed to update advertisement settings: [${code}]`);
     }
   }
 

@@ -1,4 +1,6 @@
 @import "tailwindcss";
+@variant dark (&:where(.dark, .dark *));
+@variant sepia (&:where(.sepia, .sepia *));
 
 @layer base {
   html {

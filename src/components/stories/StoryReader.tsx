@@ -70,6 +70,24 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
     dark: 'bg-slate-950 text-slate-100',
   }[theme];
 
+  const titleTextClasses = {
+    light: 'text-slate-900',
+    sepia: 'text-[#36271c]',
+    dark: 'text-slate-50',
+  }[theme];
+
+  const descTextClasses = {
+    light: 'text-slate-600',
+    sepia: 'text-[#5b4636]',
+    dark: 'text-slate-300',
+  }[theme];
+
+  const paragraphTextClasses = {
+    light: 'text-slate-800',
+    sepia: 'text-[#4c3c30]',
+    dark: 'text-slate-100',
+  }[theme];
+
   const fontFamClass = fontFamily === 'serif' ? 'font-serif' : 'font-sans';
 
   return (
@@ -121,12 +139,12 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
 
           <h1
             id="reader-story-title"
-            className="text-2xl sm:text-3xl font-bold tracking-tight mb-3 text-slate-900 dark:text-white font-serif leading-snug"
+            className={`text-2xl sm:text-3xl font-bold tracking-tight mb-3 font-serif leading-snug ${titleTextClasses}`}
           >
             {story.title}
           </h1>
 
-          <p className="text-sm sm:text-base text-slate-600 dark:text-slate-300 italic mb-4 leading-relaxed border-l-2 border-indigo-500 pl-3">
+          <p className={`text-sm sm:text-base italic mb-4 leading-relaxed border-l-2 border-indigo-500 pl-3 ${descTextClasses}`}>
             {story.shortDescription || story.description}
           </p>
 
@@ -168,7 +186,7 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
         {/* Main Content Body */}
         <main id="reader-story-body" className={`max-w-[750px] mx-auto my-6 ${fontFamClass} ${fontSizes}`}>
           {paragraphs.map((paragraph, index) => (
-            <p key={`p-${index}`} className="mb-5 text-left text-slate-800 dark:text-slate-200 leading-[1.8] sm:leading-loose">
+            <p key={`p-${index}`} className={`mb-5 text-left leading-[1.8] sm:leading-loose ${paragraphTextClasses}`}>
               {paragraph}
             </p>
           ))}

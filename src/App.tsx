@@ -194,7 +194,13 @@ export default function App() {
   }
 
   return (
-    <div className={`min-h-screen flex flex-col transition-colors duration-200 ${theme === 'dark' ? 'dark bg-slate-950' : 'bg-slate-50'}`}>
+    <div className={`min-h-screen flex flex-col transition-colors duration-200 ${
+      theme === 'dark'
+        ? 'dark bg-slate-950 text-slate-100'
+        : theme === 'sepia'
+        ? 'bg-[#fbf7ee] text-[#423326]'
+        : 'bg-slate-50 text-slate-900'
+    }`}>
       <Header
         categories={categories}
         selectedCategory={params.category || 'all'}

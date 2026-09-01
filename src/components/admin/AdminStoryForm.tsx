@@ -11,6 +11,7 @@ import {
   Eye,
   Loader2,
   RefreshCw,
+  X,
 } from 'lucide-react';
 import { Category, Story } from '../../types/story';
 import { adminService } from '../../services/adminService';
@@ -58,6 +59,85 @@ export const AdminStoryForm: React.FC<AdminStoryFormProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // Category Modal States
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [newCategoryDescription, setNewCategoryDescription] = useState('');
+  const [categoryModalError, setCategoryModalError] = useState<string | null>(null);
+  const [isCreatingCategory, setIsCreatingCategory] = useState(false);
+
+  // Helper to generate a unique safe slug
+  const generateUniqueSlug = (name: string, existingCats: Category[]) => {
+    let baseSlug = name
+      .toLowerCase()
+      .replace(/[^a-z0-9\u0D80-\u0DFF]+/g, '-')
+      .replace(/(^-|-$)+/g, '');
+    if (!baseSlug) {
+      baseSlug = 'category';
+    }
+    let slug = baseSlug;
+    let counter = 1;
+    while (existingCats.some((c) => c.slug.toLowerCase() === slug.toLowerCase() || c.id.toLowerCase() === slug.toLowerCase())) {
+      counter++;
+      slug = `${baseSlug}-${counter}`;
+    }
+    return slug;
+  };
+
+  const handleCreateCategoryInline = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCategoryName.trim()) {
+      setCategoryModalError('Category name is required.');
+      return;
+    }
+
+    const trimmedName = newCategoryName.trim();
+    // Case-insensitive check
+    const duplicate = categoriesList.find(
+      (c) => c.name.trim().toLowerCase() === trimmedName.toLowerCase()
+    );
+
+    if (duplicate) {
+      setCategoryModalError('That category already exists.');
+      // Auto-select the existing category
+      setSelectedCategoryId(duplicate.id);
+      setTimeout(() => {
+        setIsCategoryModalOpen(false);
+        setCategoryModalError(null);
+      }, 1500);
+      return;
+    }
+
+    setIsCreatingCategory(true);
+    setCategoryModalError(null);
+
+    try {
+      const generatedSlug = generateUniqueSlug(trimmedName, categoriesList);
+      const result = await adminService.createCategory({
+        name: trimmedName,
+        slug: generatedSlug,
+        description: newCategoryDescription.trim(),
+      });
+
+      // Update local state categoriesList
+      const createdCat = result.category;
+      setCategoriesList((prev) => [...prev, createdCat]);
+
+      // Automatically select the new category
+      setSelectedCategoryId(createdCat.id);
+
+      // Close modal
+      setIsCategoryModalOpen(false);
+      setNewCategoryName('');
+      setNewCategoryDescription('');
+    } catch (err: any) {
+      console.error('Failed to create category inline:', err);
+      setCategoryModalError(err?.message || 'Failed to create category. Please check your network and privileges.');
+    } finally {
+      setIsCreatingCategory(false);
+    }
+  };
 
   // Fetch categories dynamically from Firestore
   const fetchCategories = async () => {
@@ -234,6 +314,93 @@ export const AdminStoryForm: React.FC<AdminStoryFormProps> = ({
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
+      {/* Category Creation Modal */}
+      {isCategoryModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 rounded-3xl border border-slate-800 p-6 max-w-md w-full shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <Tag className="w-4 h-4 text-indigo-400" />
+                <span>Create New Category</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCategoryModalOpen(false);
+                  setCategoryModalError(null);
+                }}
+                className="text-slate-400 hover:text-white p-1 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateCategoryInline} className="space-y-4">
+              {categoryModalError && (
+                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-start gap-2.5">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{categoryModalError}</span>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                  Category Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Horror"
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-semibold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                  Description (Optional)
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="e.g. Eerie tales and supernatural stories"
+                  value={newCategoryDescription}
+                  onChange={(e) => setNewCategoryDescription(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsCategoryModalOpen(false);
+                    setCategoryModalError(null);
+                  }}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-700 text-slate-300 text-xs font-semibold hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingCategory}
+                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {isCreatingCategory ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Creating...</span>
+                    </>
+                  ) : (
+                    <span>Create Category</span>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Top action bar */}
       <div className="flex items-center justify-between">
         <button
@@ -437,13 +604,22 @@ export const AdminStoryForm: React.FC<AdminStoryFormProps> = ({
                 <select
                   required
                   value={selectedCategoryId}
-                  onChange={(e) => setSelectedCategoryId(e.target.value)}
-                  disabled={isCategoriesLoading || categoriesList.length === 0}
+                  onChange={(e) => {
+                    if (e.target.value === 'CREATE_NEW_CATEGORY') {
+                      setIsCategoryModalOpen(true);
+                      setNewCategoryName('');
+                      setNewCategoryDescription('');
+                      setCategoryModalError(null);
+                    } else {
+                      setSelectedCategoryId(e.target.value);
+                    }
+                  }}
+                  disabled={isCategoriesLoading}
                   className="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-xl text-xs font-medium text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none disabled:opacity-50"
                 >
                   {isCategoriesLoading ? (
                     <option value="">Loading categories from database...</option>
-                  ) : categoriesList.length > 0 ? (
+                  ) : (
                     <>
                       <option value="">Choose category</option>
                       {categoriesList.map((cat) => (
@@ -451,9 +627,10 @@ export const AdminStoryForm: React.FC<AdminStoryFormProps> = ({
                           {cat.name}
                         </option>
                       ))}
+                      <option value="CREATE_NEW_CATEGORY" className="text-indigo-400 font-semibold bg-slate-900">
+                        + Create New Category
+                      </option>
                     </>
-                  ) : (
-                    <option value="">No categories found. Please create one in Categories tab.</option>
                   )}
                 </select>
               )}

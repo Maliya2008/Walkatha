@@ -1,7 +1,6 @@
 import React from 'react';
 import { Category, Story } from '../../types/story';
 import { StoryCard } from './StoryCard';
-import { FeaturedStoryHero } from './FeaturedStoryHero';
 import { SearchBar } from '../common/SearchBar';
 import { Pagination } from '../common/Pagination';
 
@@ -38,17 +37,10 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
   onReadStory,
   isLoading,
 }) => {
-  const showFeaturedHero = currentPage === 1 && !searchTerm && selectedCategory === 'all' && featuredStories.length > 0;
-
   return (
     <div id="story-gallery-container" className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
-      {/* Featured Story Hero (Page 1 default) */}
-      {showFeaturedHero && (
-        <FeaturedStoryHero story={featuredStories[0]} onRead={onReadStory} />
-      )}
-
       {/* Gallery Filter & Search Section */}
-      <div className="my-4 flex flex-col gap-3">
+      <div className="mb-4 flex flex-col gap-3">
         {/* Search Bar & Sorter Controls */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="w-full sm:max-w-md">

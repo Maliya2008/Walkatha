@@ -6,6 +6,7 @@ interface FooterProps {
   categories: Category[];
   onSelectCategory: (categorySlug: string) => void;
   onSearchKeyword?: (keyword: string) => void;
+  onOpenSitemap?: () => void;
 }
 
 const POPULAR_KEYWORDS = [
@@ -31,6 +32,7 @@ export const Footer: React.FC<FooterProps> = ({
   categories,
   onSelectCategory,
   onSearchKeyword,
+  onOpenSitemap,
 }) => {
   return (
     <footer
@@ -106,8 +108,12 @@ export const Footer: React.FC<FooterProps> = ({
           <div className="flex items-center gap-4">
             <a
               href="/sitemap"
-              target="_blank"
-              rel="noopener noreferrer"
+              onClick={(e) => {
+                if (onOpenSitemap) {
+                  e.preventDefault();
+                  onOpenSitemap();
+                }
+              }}
               className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
             >
               සයිට්මැප් (Sitemap)

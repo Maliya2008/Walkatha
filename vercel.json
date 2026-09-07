@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "vite build",
+  "buildCommand": "node scripts/generate-sitemap.js && vite build",
   "outputDirectory": "dist",
   "headers": [
     {
@@ -49,6 +49,36 @@
           "value": "public, max-age=86400, s-maxage=86400"
         }
       ]
+    },
+    {
+      "source": "/sitemap.xsl",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "text/xsl; charset=utf-8"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=86400, s-maxage=86400"
+        }
+      ]
+    },
+    {
+      "source": "/sw.js",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/javascript; charset=utf-8"
+        },
+        {
+          "key": "Service-Worker-Allowed",
+          "value": "/"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
     }
   ],
   "rewrites": [
@@ -59,6 +89,14 @@
     {
       "source": "/sitemap.xml",
       "destination": "/sitemap.xml"
+    },
+    {
+      "source": "/sitemap.xsl",
+      "destination": "/sitemap.xsl"
+    },
+    {
+      "source": "/sw.js",
+      "destination": "/sw.js"
     },
     {
       "source": "/(.*)",

@@ -5,6 +5,7 @@ import { useTheme } from './hooks/useTheme';
 import { Header } from './components/layout/Header';
 import { Footer } from './components/layout/Footer';
 import { StoryGallery } from './components/stories/StoryGallery';
+import { SitemapPage } from './components/sitemap/SitemapPage';
 import { SEOService } from './services/seoService';
 import { adService } from './services/adService';
 
@@ -36,6 +37,7 @@ export default function App() {
   } = useStories();
 
   const [isAdminView, setIsAdminView] = useState<boolean>(false);
+  const [isSitemapView, setIsSitemapView] = useState<boolean>(false);
   const [currentSlug, setCurrentSlug] = useState<string | null>(null);
 
   const {
@@ -76,11 +78,27 @@ export default function App() {
     setIsAdminView(isAdmin);
 
     if (isAdmin) {
+      setIsSitemapView(false);
       setCurrentSlug(null);
       return;
     }
 
-    // 2. Story Reader Check
+    // 2. Sitemap Check
+    const isSitemap =
+      path === '/sitemap' ||
+      path === '/sitemap/' ||
+      path === '/sitemap.html' ||
+      hash === '#sitemap' ||
+      hash.startsWith('#/sitemap') ||
+      hash === '#/sitemap';
+    setIsSitemapView(isSitemap);
+
+    if (isSitemap) {
+      setCurrentSlug(null);
+      return;
+    }
+
+    // 3. Story Reader Check
     let storySlug: string | null = null;
     const storyMatch = path.match(/^\/story\/([^/]+)/);
     if (storyMatch) {
@@ -173,6 +191,10 @@ export default function App() {
       document.title = 'Admin Portal - Walkathawa (වල් කතාව)';
       return;
     }
+    if (isSitemapView) {
+      document.title = 'Walkathawa Sitemap (වල් කතාව සයිට්මැප්) | All Sinhala Stories Directory';
+      return;
+    }
     if (currentSlug && activeStory) {
       SEOService.updateHead(SEOService.generateStorySEO(activeStory), siteSettings);
     } else if (!currentSlug) {
@@ -180,19 +202,22 @@ export default function App() {
       const catName = catObj ? catObj.name : undefined;
       SEOService.updateHead(SEOService.generateHomeSEO(catName, params.search), siteSettings);
     }
-  }, [isAdminView, currentSlug, activeStory, params.category, params.search, categories, siteSettings]);
+  }, [isAdminView, isSitemapView, currentSlug, activeStory, params.category, params.search, categories, siteSettings]);
 
   const handleReadStory = useCallback((slug: string) => {
+    setIsSitemapView(false);
     navigateTo(`/story/${slug}`);
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, [navigateTo]);
 
   const handleBackToGallery = useCallback(() => {
+    setIsSitemapView(false);
     navigateTo('/');
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, [navigateTo]);
 
   const handleSelectCategory = useCallback((catSlug: string) => {
+    setIsSitemapView(false);
     const targetPath = catSlug === 'all' ? '/' : `/category/${catSlug}`;
     navigateTo(targetPath);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -244,7 +269,15 @@ export default function App() {
       />
 
       <main className="flex-grow">
-        {currentSlug ? (
+        {isSitemapView ? (
+          <SitemapPage
+            stories={stories}
+            categories={categories}
+            onSelectStory={handleReadStory}
+            onNavigateHome={handleBackToGallery}
+            onSelectCategory={handleSelectCategory}
+          />
+        ) : currentSlug ? (
           activeStory ? (
             <Suspense
               fallback={
@@ -308,7 +341,13 @@ export default function App() {
       <Footer
         categories={categories}
         onSelectCategory={handleSelectCategory}
+        onOpenSitemap={() => {
+          setIsSitemapView(true);
+          navigateTo('/sitemap');
+          window.scrollTo({ top: 0, behavior: 'instant' });
+        }}
         onSearchKeyword={(kw) => {
+          setIsSitemapView(false);
           handleSelectCategory('all');
           handleSearchChange(kw);
           if (currentSlug) {

@@ -26,7 +26,7 @@ export function useStories(initialParams: StoryFilterParams = {}) {
     return storyService.getInitialFeaturedStories(3);
   });
 
-  // If initial response has data, isLoading is false immediately (0ms delay)
+  // Zero-delay loading if cached data exists
   const [isLoading, setIsLoading] = useState<boolean>(() => {
     const initial = storyService.getInitialPaginatedStories(mergedInitialParams);
     return initial.data.length === 0;
@@ -34,7 +34,6 @@ export function useStories(initialParams: StoryFilterParams = {}) {
 
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const isFirstMount = useRef(true);
 
   const fetchStories = useCallback(async (forceLoading = false) => {
     if (forceLoading) {
@@ -54,37 +53,41 @@ export function useStories(initialParams: StoryFilterParams = {}) {
     }
   }, [params]);
 
-  // Handle params changes: instantly filter locally, then sync in background
+  // Instantly apply local filtering on parameter changes, then fetch with cache guard
   useEffect(() => {
-    // Perform instant local filtering on current in-memory cache
     const instantFiltered = storyService.filterAndPaginateStories(
       storyService.getStoredStoriesSync(),
       params
     );
-    if (instantFiltered.data.length > 0 || !isFirstMount.current) {
+    if (instantFiltered.data.length > 0) {
       setResponse(instantFiltered);
     }
 
-    // Background fetch fresh updates from Firestore
+    // Shared cached fetch
     fetchStories(false);
-    isFirstMount.current = false;
   }, [fetchStories, params]);
 
+  // Background metadata synchronization (cached with 1 hour / 15 min TTL)
   useEffect(() => {
-    // Background metadata synchronization
+    let isMounted = true;
     const loadMeta = async () => {
       try {
         const [cats, featured] = await Promise.all([
           storyService.getCategories(),
           storyService.getFeaturedStories(3),
         ]);
-        if (cats && cats.length > 0) setCategories(cats);
-        if (featured && featured.length > 0) setFeaturedStories(featured);
+        if (isMounted) {
+          if (cats && cats.length > 0) setCategories(cats);
+          if (featured && featured.length > 0) setFeaturedStories(featured);
+        }
       } catch (err) {
-        console.warn('Background meta sync fallback:', err);
+        console.warn('Metadata sync fallback:', err);
       }
     };
     loadMeta();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const setCategory = useCallback((category: string) => {
@@ -123,4 +126,3 @@ export function useStories(initialParams: StoryFilterParams = {}) {
     refreshStories: () => fetchStories(true),
   };
 }
-

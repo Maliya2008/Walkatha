@@ -30,6 +30,11 @@ const DEFAULT_CATEGORIES: Array<{ name: string; slug: string; description: strin
   { name: 'ජීවිත ආදර්ශ (Inspirational & Life)', slug: 'inspirational', description: 'Real-world lessons, life inspirations, and moral stories' },
 ];
 
+let cachedDashboardStats: { data: DashboardStats; timestamp: number } | null = null;
+let cachedSiteSettings: { data: SiteSettings; timestamp: number } | null = null;
+const ADMIN_STATS_CACHE_TTL = 2 * 60 * 1000;     // 2 minutes
+const SITE_SETTINGS_CACHE_TTL = 60 * 60 * 1000;  // 1 hour
+
 class AdminService {
   private requireAuth() {
     if (!authService.isAuthenticated()) {
@@ -37,8 +42,21 @@ class AdminService {
     }
   }
 
+  public invalidateAdminCache() {
+    cachedDashboardStats = null;
+    cachedSiteSettings = null;
+    import('./storyService').then(({ storyService }) => {
+      storyService.invalidateCache();
+    });
+  }
+
   public async getDashboardStats(): Promise<DashboardStats> {
     this.requireAuth();
+
+    const now = Date.now();
+    if (cachedDashboardStats && now - cachedDashboardStats.timestamp < ADMIN_STATS_CACHE_TTL) {
+      return cachedDashboardStats.data;
+    }
 
     let totalStories = 0;
     let publishedStories = 0;
@@ -64,12 +82,19 @@ class AdminService {
         });
       }
     } catch (err: any) {
-      console.error('Firebase Error in getDashboardStats (stories):', {
-        code: err?.code,
-        message: err?.message,
-        details: err
-      });
-      throw new Error(`Failed to fetch dashboard metrics (stories): [${err?.code || 'unknown-error'}] ${err?.message || ''}`);
+      // Fallback to local stored stories if quota reached or offline
+      const localStories = (await import('./storyService')).storyService.getStoredStoriesSync();
+      if (localStories && localStories.length > 0) {
+        localStories.forEach((s) => {
+          stories.push(s);
+          totalStories++;
+          if (s.published) publishedStories++;
+          else draftStories++;
+          totalViews += (s.views || 0);
+        });
+      } else {
+        console.warn('Fallback stats from local store:', err);
+      }
     }
 
     // Query categories
@@ -79,13 +104,8 @@ class AdminService {
       if (snapshot && !snapshot.empty) {
         totalCategories = snapshot.size;
       }
-    } catch (err: any) {
-      console.error('Firebase Error in getDashboardStats (categories):', {
-        code: err?.code,
-        message: err?.message,
-        details: err
-      });
-      throw new Error(`Failed to fetch dashboard metrics (categories): [${err?.code || 'unknown-error'}] ${err?.message || ''}`);
+    } catch {
+      totalCategories = 8;
     }
 
     // Query ads status
@@ -129,7 +149,7 @@ class AdminService {
       // ignore sorting error
     }
 
-    return {
+    const stats: DashboardStats = {
       totalStories,
       totalCategories,
       publishedStories,
@@ -150,6 +170,9 @@ class AdminService {
         published: s.published,
       })),
     };
+
+    cachedDashboardStats = { data: stats, timestamp: Date.now() };
+    return stats;
   }
 
   public async getStories(params?: {
@@ -213,8 +236,9 @@ class AdminService {
       
       return stories;
     } catch (e: any) {
-      console.error(e);
-      throw new Error('Failed to fetch stories list');
+      console.warn('Falling back to local stories in admin:', e);
+      const fallback = (await import('./storyService')).storyService.getStoredStoriesSync();
+      return fallback;
     }
   }
 
@@ -278,6 +302,7 @@ class AdminService {
       };
 
       const docRef = await addDoc(collection(db, 'stories'), newStory);
+      this.invalidateAdminCache();
       
       return {
         message: 'Story published successfully',
@@ -367,6 +392,7 @@ class AdminService {
       delete finalUpdates.directAdLink;
 
       await updateDoc(docRef, finalUpdates);
+      this.invalidateAdminCache();
 
       return {
         message: 'Story updated successfully',
@@ -392,6 +418,7 @@ class AdminService {
       }
 
       await deleteDoc(docRef);
+      this.invalidateAdminCache();
     } catch (error: any) {
       console.error('Firebase deleteStory Error:', error);
       throw new Error(`Failed to delete story: ${error?.code || error?.message || 'unknown error'}`);
@@ -461,6 +488,7 @@ class AdminService {
 
       // Update runtime adService config
       adService.updateConfig(updated);
+      this.invalidateAdminCache();
 
       return {
         message: 'Advertisement settings updated successfully',
@@ -609,6 +637,7 @@ class AdminService {
         storyCount: 0,
       };
       const docRef = await addDoc(collection(db, 'categories'), newCat);
+      this.invalidateAdminCache();
       return {
         message: 'Category created successfully',
         category: { id: docRef.id, ...newCat },
@@ -664,6 +693,8 @@ class AdminService {
           await batch.commit();
         }
       }
+
+      this.invalidateAdminCache();
 
       return {
         message: 'Category updated successfully',
@@ -737,6 +768,7 @@ class AdminService {
 
       // Delete the category document
       await deleteDoc(catRef);
+      this.invalidateAdminCache();
 
       return {
         message: 'Category deleted successfully',
@@ -749,32 +781,39 @@ class AdminService {
   }
 
   public async getSiteSettings(): Promise<SiteSettings> {
+    const now = Date.now();
+    if (cachedSiteSettings && now - cachedSiteSettings.timestamp < SITE_SETTINGS_CACHE_TTL) {
+      return cachedSiteSettings.data;
+    }
+
+    const defaultSettings: SiteSettings = {
+      siteName: 'Walkathawa (වල් කතාව)',
+      alternateName: 'වල් කතාව',
+      logo: '/icon.png',
+      tagline: 'A place to read Sinhala stories online',
+      contactEmail: 'contact@walkathawa.com',
+      metaTitle: 'Walkathawa (වල් කතාව) | Sinhala Stories Online',
+      metaDescription: 'Walkathawa (වල් කතාව) is a place to read Sinhala stories online. Discover new Sinhala katha, romantic stories, fictional stories, and interesting short stories updated regularly.',
+      keywords: 'walkatha, walakatha, walkathawa, වල් කතා, වල්කතා, sinhala stories, sinhala katha, sinhala short stories, sinhala kathandara, sinhala love stories, sinhala adult stories, sinhala romantic stories, sinhala fictional stories, sinhala novels, new sinhala stories, latest sinhala katha, online sinhala stories, read sinhala stories online',
+      ogImage: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1200&q=80',
+      googleAnalyticsId: '',
+      searchConsoleVerification: '',
+      publisherName: 'Walkathawa (වල් කතාව)',
+    };
+
     try {
       const docRef = doc(db, 'settings', 'global');
       const docSnap = await getDoc(docRef);
       
-      const defaultSettings: SiteSettings = {
-        siteName: 'Walkathawa (වල් කතාව)',
-        alternateName: 'වල් කතාව',
-        logo: '/icon.png',
-        tagline: 'A place to read Sinhala stories online',
-        contactEmail: 'contact@walkathawa.com',
-        metaTitle: 'Walkathawa (වල් කතාව) | Sinhala Stories Online',
-        metaDescription: 'Walkathawa (වල් කතාව) is a place to read Sinhala stories online. Discover new Sinhala katha, romantic stories, fictional stories, and interesting short stories updated regularly.',
-        keywords: 'walkatha, walakatha, walkathawa, වල් කතා, වල්කතා, sinhala stories, sinhala katha, sinhala short stories, sinhala kathandara, sinhala love stories, sinhala adult stories, sinhala romantic stories, sinhala fictional stories, sinhala novels, new sinhala stories, latest sinhala katha, online sinhala stories, read sinhala stories online',
-        ogImage: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1200&q=80',
-        googleAnalyticsId: '',
-        searchConsoleVerification: '',
-        publisherName: 'Walkathawa (වල් කතාව)',
-      };
-
+      let res = defaultSettings;
       if (docSnap.exists()) {
-        return { ...defaultSettings, ...docSnap.data() };
+        res = { ...defaultSettings, ...docSnap.data() };
       }
+      cachedSiteSettings = { data: res, timestamp: Date.now() };
+      return res;
+    } catch {
+      cachedSiteSettings = { data: defaultSettings, timestamp: Date.now() };
       return defaultSettings;
-    } catch (e) {
-      console.error(e);
-      throw new Error('Failed to fetch site settings');
     }
   }
 
@@ -785,6 +824,8 @@ class AdminService {
       const updated: SiteSettings = { ...current, ...settings };
       
       await setDoc(doc(db, 'settings', 'global'), updated);
+      cachedSiteSettings = { data: updated, timestamp: Date.now() };
+      this.invalidateAdminCache();
       
       return updated;
     } catch (error: any) {

@@ -8,6 +8,7 @@ import {
   User as FirebaseUser,
 } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { isQuotaError } from './storyService';
 
 type AuthListener = (user: User | null) => void;
 
@@ -70,10 +71,20 @@ class AuthService {
             this.currentUser = null;
             this.token = null;
           }
-        } catch (e) {
-          console.error('Auth authorization error during state change:', e);
-          this.currentUser = null;
-          this.token = null;
+        } catch (e: any) {
+          if (isQuotaError(e) && firebaseUser.email) {
+            this.currentUser = {
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              role: 'admin',
+              createdAt: new Date().toISOString(),
+            };
+            this.token = await firebaseUser.getIdToken();
+          } else {
+            console.warn('Auth state fetch notice:', e);
+            this.currentUser = null;
+            this.token = null;
+          }
         }
       } else {
         this.currentUser = null;

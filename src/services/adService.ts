@@ -1,6 +1,9 @@
 import { AdvertisementSettings } from '../types/admin';
 import { db } from '../lib/firebase';
-import { doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
+import { isQuotaError } from './storyService';
+
+const STORAGE_AD_CONFIG_KEY = 'walkathawa_ad_config_v2';
 
 const DEFAULT_CONFIG: AdvertisementSettings = {
   enabled: false,
@@ -18,48 +21,59 @@ interface StoryAdState {
 class AdService {
   private config: AdvertisementSettings = { ...DEFAULT_CONFIG };
   private activeStoryState: StoryAdState | null = null;
-  private unsubscribeFirestore: (() => void) | null = null;
+  private isConfigLoaded = false;
 
   constructor() {
     if (typeof window !== 'undefined') {
-      this.initRealtimeConfig();
-    }
-  }
-
-  /**
-   * Initializes real-time listener for Firestore advertisement settings
-   */
-  private initRealtimeConfig(): void {
-    try {
-      const docRef = doc(db, 'advertisement_settings', 'config');
-      this.unsubscribeFirestore = onSnapshot(
-        docRef,
-        (docSnap) => {
-          if (docSnap.exists()) {
-            const data = docSnap.data();
-            this.config = {
-              enabled: typeof data.enabled === 'boolean' ? data.enabled : false,
-              globalAdCode: data.globalAdCode || '',
-              redirectAmount: (data.redirectAmount !== undefined ? data.redirectAmount : 1) as 1 | 2 | 3,
-              updatedAt: data.updatedAt,
-            };
-            this.applyGlobalScript();
-          }
-        },
-        (error) => {
-          console.warn('AdService: Real-time listener fallback to one-time fetch:', error);
-          this.fetchConfig();
-        }
-      );
-    } catch (e) {
+      this.initCachedConfig();
       this.fetchConfig();
     }
   }
 
+  private initCachedConfig(): void {
+    try {
+      const stored = localStorage.getItem(STORAGE_AD_CONFIG_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && typeof parsed === 'object') {
+          this.config = { ...DEFAULT_CONFIG, ...parsed };
+          this.applyGlobalScript();
+        }
+      }
+    } catch {
+      // Ignore
+    }
+  }
+
   /**
-   * Explicit one-time fetch for advertisement settings
+   * Resilient fetch for advertisement settings from server API with Firestore fallback
    */
   public async fetchConfig(): Promise<AdvertisementSettings> {
+    if (this.isConfigLoaded) return this.config;
+
+    // 1. Try server public API first (0 Firestore reads)
+    try {
+      const res = await fetch('/api/public/ads/config');
+      if (res.ok) {
+        const data = await res.json();
+        if (data && typeof data === 'object') {
+          this.config = {
+            enabled: typeof data.enabled === 'boolean' ? data.enabled : false,
+            globalAdCode: data.globalAdCode || data.globalDirectLink || '',
+            redirectAmount: (data.redirectAmount !== undefined ? data.redirectAmount : data.maxTriggers || 1) as 1 | 2 | 3,
+            updatedAt: data.updatedAt,
+          };
+          this.isConfigLoaded = true;
+          this.saveConfigToStorage();
+          this.applyGlobalScript();
+          return this.config;
+        }
+      }
+    } catch {
+      // Fall through to Firestore
+    }
+
+    // 2. Try Firestore with quota error catch
     try {
       const docRef = doc(db, 'advertisement_settings', 'config');
       const docSnap = await getDoc(docRef);
@@ -72,12 +86,27 @@ class AdService {
           redirectAmount: (data.redirectAmount !== undefined ? data.redirectAmount : 1) as 1 | 2 | 3,
           updatedAt: data.updatedAt,
         };
+        this.isConfigLoaded = true;
+        this.saveConfigToStorage();
         this.applyGlobalScript();
       }
-    } catch (e) {
-      console.warn('AdService: Using fallback default ad config.', e);
+    } catch (e: any) {
+      if (!isQuotaError(e)) {
+        console.warn('AdService: Using fallback default ad config.');
+      }
     }
+
     return this.config;
+  }
+
+  private saveConfigToStorage(): void {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        localStorage.setItem(STORAGE_AD_CONFIG_KEY, JSON.stringify(this.config));
+      }
+    } catch {
+      // Ignore storage errors
+    }
   }
 
   public getConfig(): AdvertisementSettings {

@@ -172,13 +172,9 @@ export default function App() {
     return () => window.removeEventListener('popstate', syncRoute);
   }, [syncRoute]);
 
-  // Refresh stories when returning from a story page so view counts update
   useEffect(() => {
-    if (previousSlugRef.current && !currentSlug) {
-      refreshStories();
-    }
     previousSlugRef.current = currentSlug;
-  }, [currentSlug, refreshStories]);
+  }, [currentSlug]);
 
   useEffect(() => {
     import('./services/adminService').then(({ adminService }) => {

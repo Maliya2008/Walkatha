@@ -251,7 +251,7 @@ app.get('/api/public/stories', (req: Request, res: Response) => {
   }
 
   const pageNum = Math.max(1, parseInt(String(page), 10) || 1);
-  const limitNum = Math.max(1, Math.min(50, parseInt(String(limit), 10) || 20));
+  const limitNum = Math.max(1, Math.min(500, parseInt(String(limit), 10) || 20));
   const total = stories.length;
   const totalPages = Math.ceil(total / limitNum) || 1;
   const offset = (pageNum - 1) * limitNum;
@@ -264,6 +264,18 @@ app.get('/api/public/stories', (req: Request, res: Response) => {
     totalPages,
     hasMore: pageNum < totalPages,
   });
+});
+
+// Public: Atomic Story View Increment
+app.post('/api/public/stories/:id/view', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const story = db.stories.find((s) => s.id === id || s.slug === id);
+  if (story) {
+    story.views = (story.views || 0) + 1;
+    saveDatabase();
+    return res.json({ success: true, views: story.views });
+  }
+  res.json({ success: false, error: 'Story not found' });
 });
 
 // Public: Get Story by Slug with View Increment

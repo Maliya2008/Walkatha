@@ -3,55 +3,55 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
   <url>
     <loc>https://www.walkathawa.site/</loc>
-    <lastmod>2026-09-07T10:39:33.761Z</lastmod>
+    <lastmod>2026-09-07T16:01:43.912Z</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
     <loc>https://www.walkathawa.site/?category=love</loc>
-    <lastmod>2026-09-07T10:39:33.761Z</lastmod>
+    <lastmod>2026-09-07T16:01:43.912Z</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://www.walkathawa.site/?category=family</loc>
-    <lastmod>2026-09-07T10:39:33.761Z</lastmod>
+    <lastmod>2026-09-07T16:01:43.912Z</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://www.walkathawa.site/?category=office</loc>
-    <lastmod>2026-09-07T10:39:33.761Z</lastmod>
+    <lastmod>2026-09-07T16:01:43.912Z</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://www.walkathawa.site/?category=bus</loc>
-    <lastmod>2026-09-07T10:39:33.761Z</lastmod>
+    <lastmod>2026-09-07T16:01:43.912Z</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://www.walkathawa.site/?category=village</loc>
-    <lastmod>2026-09-07T10:39:33.761Z</lastmod>
+    <lastmod>2026-09-07T16:01:43.912Z</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://www.walkathawa.site/?category=fantasy</loc>
-    <lastmod>2026-09-07T10:39:33.761Z</lastmod>
+    <lastmod>2026-09-07T16:01:43.912Z</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://www.walkathawa.site/?category=classic</loc>
-    <lastmod>2026-09-07T10:39:33.761Z</lastmod>
+    <lastmod>2026-09-07T16:01:43.912Z</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
     <loc>https://www.walkathawa.site/?category=other</loc>
-    <lastmod>2026-09-07T10:39:33.761Z</lastmod>
+    <lastmod>2026-09-07T16:01:43.912Z</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -163,76 +163,6 @@
     <image:image>
       <image:loc>https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQMSjlzMPOMpT9pqDCKS2aGFw_dstvkc8RMe87ULL78Rw&amp;s=10</image:loc>
       <image:title>දිනිතිගෙ චැට් එ​ක – 10 – Walakatha</image:title>
-    </image:image>
-  </url>
-  <url>
-    <loc>https://www.walkathawa.site/story/rahas-hamuwima-sinhala-story</loc>
-    <lastmod>2026-09-01T10:00:00.000Z</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
-    <image:image>
-      <image:loc>https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&amp;fit=crop&amp;w=1200&amp;q=80</image:loc>
-      <image:title>රහස් හමුවීම - Rahas Hamuwima (Secret Encounter)</image:title>
-    </image:image>
-  </url>
-  <url>
-    <loc>https://www.walkathawa.site/story/nil-diyawara-asabada-wal-katha</loc>
-    <lastmod>2026-09-02T14:30:00.000Z</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
-    <image:image>
-      <image:loc>https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&amp;fit=crop&amp;w=1200&amp;q=80</image:loc>
-      <image:title>නිල් දියවර අසබඩ - Nil Diyawara Asabada (Coastal Romance)</image:title>
-    </image:image>
-  </url>
-  <url>
-    <loc>https://www.walkathawa.site/story/madhyama-rathriye-amuththa-thriller</loc>
-    <lastmod>2026-09-03T18:00:00.000Z</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
-    <image:image>
-      <image:loc>https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&amp;fit=crop&amp;w=1200&amp;q=80</image:loc>
-      <image:title>මධ්‍යම රාත්‍රියේ අමුත්තා - Madhyama Rathriye Amuththa</image:title>
-    </image:image>
-  </url>
-  <url>
-    <loc>https://www.walkathawa.site/story/tharu-piri-ahasa-yata-walkatha</loc>
-    <lastmod>2026-09-04T09:15:00.000Z</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
-    <image:image>
-      <image:loc>https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&amp;fit=crop&amp;w=1200&amp;q=80</image:loc>
-      <image:title>තරු පිරි අහස යට - Tharu Piri Ahasa Yata</image:title>
-    </image:image>
-  </url>
-  <url>
-    <loc>https://www.walkathawa.site/story/nodutu-sihinaya-sinhala-katha</loc>
-    <lastmod>2026-09-05T12:00:00.000Z</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
-    <image:image>
-      <image:loc>https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?auto=format&amp;fit=crop&amp;w=1200&amp;q=80</image:loc>
-      <image:title>නොදුටු සිහිනය - Nodutu Sihinaya (Unseen Dream)</image:title>
-    </image:image>
-  </url>
-  <url>
-    <loc>https://www.walkathawa.site/story/wasi-bindu-atharin-love-story</loc>
-    <lastmod>2026-09-06T15:30:00.000Z</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
-    <image:image>
-      <image:loc>https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&amp;fit=crop&amp;w=1200&amp;q=80</image:loc>
-      <image:title>වැසි බිඳු අතරින් - Wasi Bindu Atharin (Rainy Love)</image:title>
-    </image:image>
-  </url>
-  <url>
-    <loc>https://www.walkathawa.site/story/the-secret-in-moonlight</loc>
-    <lastmod>2026-08-31T09:00:00.000Z</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
-    <image:image>
-      <image:loc>https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&amp;fit=crop&amp;w=1200&amp;q=80</image:loc>
-      <image:title>සඳ එළියේ රහස (The Secret in Moonlight)</image:title>
     </image:image>
   </url>
   <url>

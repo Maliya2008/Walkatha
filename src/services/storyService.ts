@@ -99,6 +99,35 @@ function matchesSearchQuery(s: Story, queryText: string): boolean {
   });
 }
 
+const BANNED_MOCK_PATTERNS = [
+  'rahas-hamuwima',
+  'nil-diyawara',
+  'madhyama-rathriye',
+  'tharu-piri',
+  'nodutu-sihinaya',
+  'wasi-bindu',
+  'the-secret-in-moonlight',
+  'story-the-secret-in-moonlight',
+  'සඳ එළියේ රහස',
+  'රහස් හමුවීම',
+  'නිල් දියවර',
+  'මධ්‍යම රාත්‍රියේ',
+  'තරු පිරි අහස',
+  'නොදුටු සිහිනය',
+  'වැසි බිඳු අතරින්',
+  'නිස්කලංක රාත්‍රියක හමුවූ අමුතු ආගන්තුකයා',
+];
+
+export function isMockStory(s: any): boolean {
+  if (!s) return false;
+  const id = String(s.id || '').toLowerCase();
+  const slug = String(s.slug || '').toLowerCase();
+  const title = String(s.title || '').toLowerCase();
+  return BANNED_MOCK_PATTERNS.some(
+    (p) => id.includes(p) || slug.includes(p) || title.includes(p)
+  );
+}
+
 function normalizeStoryDoc(id: string, data: any): Story {
   return {
     id,
@@ -170,11 +199,20 @@ class StoryService {
       const storedMap = localStorage.getItem(STORAGE_STORY_MAP_KEY);
       if (storedMap) {
         const parsed: Record<string, Story> = JSON.parse(storedMap);
+        let changed = false;
         Object.entries(parsed).forEach(([key, story]) => {
+          if (isMockStory(story) || isMockStory({ id: key, slug: key })) {
+            delete parsed[key];
+            changed = true;
+            return;
+          }
           storyEntityCache.set(key, { story, timestamp: Date.now() });
           if (story.slug) storyEntityCache.set(story.slug, { story, timestamp: Date.now() });
           if (story.id) storyEntityCache.set(story.id, { story, timestamp: Date.now() });
         });
+        if (changed) {
+          localStorage.setItem(STORAGE_STORY_MAP_KEY, JSON.stringify(parsed));
+        }
       }
 
       // 2. Categories
@@ -191,15 +229,19 @@ class StoryService {
       if (storedStories) {
         const parsed: Story[] = JSON.parse(storedStories);
         if (Array.isArray(parsed) && parsed.length > 0) {
+          const cleanParsed = parsed.filter((s) => !isMockStory(s));
           storyListCache.set('all_default', {
-            data: parsed,
-            total: parsed.length,
+            data: cleanParsed,
+            total: cleanParsed.length,
             timestamp: Date.now(),
           });
-          parsed.forEach((s) => {
+          cleanParsed.forEach((s) => {
             if (s.id) storyEntityCache.set(s.id, { story: s, timestamp: Date.now() });
             if (s.slug) storyEntityCache.set(s.slug, { story: s, timestamp: Date.now() });
           });
+          if (cleanParsed.length !== parsed.length) {
+            localStorage.setItem(STORAGE_STORIES_CACHE_KEY, JSON.stringify(cleanParsed));
+          }
         }
       }
     } catch {
@@ -208,7 +250,7 @@ class StoryService {
 
     // Seed defaults if entity cache is still empty
     if (storyEntityCache.size === 0) {
-      INITIAL_STORIES.forEach((s) => {
+      INITIAL_STORIES.filter((s) => !isMockStory(s)).forEach((s) => {
         const normalized = normalizeStoryDoc(s.id, s);
         storyEntityCache.set(s.id, { story: normalized, timestamp: Date.now() });
         if (s.slug) storyEntityCache.set(s.slug, { story: normalized, timestamp: Date.now() });
@@ -217,7 +259,7 @@ class StoryService {
   }
 
   private persistStoryToStorage(story: Story): void {
-    if (typeof window === 'undefined' || !window.localStorage) return;
+    if (typeof window === 'undefined' || !window.localStorage || isMockStory(story)) return;
     try {
       const storedMap = localStorage.getItem(STORAGE_STORY_MAP_KEY);
       const parsed: Record<string, Story> = storedMap ? JSON.parse(storedMap) : {};

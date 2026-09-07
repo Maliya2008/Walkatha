@@ -80,10 +80,13 @@ export class SEOService {
     }
     linkCanonical.href = url;
 
-    // Google Search Console verification meta tag (if provided)
-    if (settings?.searchConsoleVerification) {
-      this.setMeta('name', 'google-site-verification', settings.searchConsoleVerification);
-    }
+    // Google Search Console verification meta tag (guaranteed preservation)
+    const verificationToken =
+      settings?.searchConsoleVerification || 'aoXN34vuFG8HPn2ngc_Pmqky8knpnPtglDWTX5qFUd4';
+    this.setMeta('name', 'google-site-verification', verificationToken);
+
+    // Monetag verification meta tag (guaranteed preservation)
+    this.setMeta('name', 'monetag', '1a2dd2951426e8a994727b6a854062c4');
 
     // Google Analytics Injection (if provided and valid)
     if (settings?.googleAnalyticsId && /^G-[A-Z0-9]+$/i.test(settings.googleAnalyticsId)) {

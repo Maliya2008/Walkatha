@@ -9,12 +9,41 @@ if (!fs.existsSync(publicDir)) {
   fs.mkdirSync(publicDir, { recursive: true });
 }
 
+const BANNED_MOCK_PATTERNS = [
+  'rahas-hamuwima',
+  'nil-diyawara',
+  'madhyama-rathriye',
+  'tharu-piri',
+  'nodutu-sihinaya',
+  'wasi-bindu',
+  'the-secret-in-moonlight',
+  'story-the-secret-in-moonlight',
+  'සඳ එළියේ රහස',
+  'රහස් හමුවීම',
+  'නිල් දියවර',
+  'මධ්‍යම රාත්‍රියේ',
+  'තරු පිරි අහස',
+  'නොදුටු සිහිනය',
+  'වැසි බිඳු අතරින්',
+  'නිස්කලංක රාත්‍රියක හමුවූ අමුතු ආගන්තුකයා',
+];
+
+function isMockStory(s) {
+  if (!s) return false;
+  const id = String(s.id || '').toLowerCase();
+  const slug = String(s.slug || '').toLowerCase();
+  const title = String(s.title || '').toLowerCase();
+  return BANNED_MOCK_PATTERNS.some(
+    (p) => id.includes(p) || slug.includes(p) || title.includes(p)
+  );
+}
+
 let stories = [];
 if (fs.existsSync(dbPath)) {
   try {
     const raw = fs.readFileSync(dbPath, 'utf-8');
     const data = JSON.parse(raw);
-    stories = (data.stories || []).filter((s) => s.published);
+    stories = (data.stories || []).filter((s) => s.published && !isMockStory(s));
   } catch (err) {
     console.error('Error reading database.json for sitemap:', err);
   }

@@ -125,7 +125,7 @@ function initDatabase(): void {
       'walkatha, walakatha, walkathawa, වල් කතා, වල්කතා, sinhala stories, sinhala katha, sinhala short stories, sinhala kathandara, sinhala love stories, sinhala adult stories, sinhala romantic stories, sinhala fictional stories, sinhala novels, new sinhala stories, latest sinhala katha, online sinhala stories, read sinhala stories online',
     ogImage: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1200&q=80',
     googleAnalyticsId: '',
-    searchConsoleVerification: '',
+    searchConsoleVerification: 'aoXN34vuFG8HPn2ngc_Pmqky8knpnPtglDWTX5qFUd4',
     publisherName: 'Walkathawa (වල් කතාව)',
   };
 
@@ -509,9 +509,38 @@ function getBasePublicUrl(req: Request): string {
   return `${protocol}://${finalHost}`;
 }
 
+const BANNED_MOCK_PATTERNS = [
+  'rahas-hamuwima',
+  'nil-diyawara',
+  'madhyama-rathriye',
+  'tharu-piri',
+  'nodutu-sihinaya',
+  'wasi-bindu',
+  'the-secret-in-moonlight',
+  'story-the-secret-in-moonlight',
+  'සඳ එළියේ රහස',
+  'රහස් හමුවීම',
+  'නිල් දියවර',
+  'මධ්‍යම රාත්‍රියේ',
+  'තරු පිරි අහස',
+  'නොදුටු සිහිනය',
+  'වැසි බිඳු අතරින්',
+  'නිස්කලංක රාත්‍රියක හමුවූ අමුතු ආගන්තුකයා',
+];
+
+function isMockStoryRecord(s: { id?: string; slug?: string; title?: string }): boolean {
+  if (!s) return false;
+  const id = String(s.id || '').toLowerCase();
+  const slug = String(s.slug || '').toLowerCase();
+  const title = String(s.title || '').toLowerCase();
+  return BANNED_MOCK_PATTERNS.some(
+    (p) => id.includes(p) || slug.includes(p) || title.includes(p)
+  );
+}
+
 // Helper to gather all published stories (local db + Firestore if reachable)
 async function getSitemapStoriesList() {
-  const stories = [...(db.stories || []).filter((s) => s.published)];
+  const stories = [...(db.stories || []).filter((s) => s.published && !isMockStoryRecord(s))];
   try {
     const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
     if (fs.existsSync(configPath)) {
@@ -532,6 +561,10 @@ async function getSitemapStoriesList() {
               const fields = doc.fields || {};
               const slug = fields.slug?.stringValue;
               const title = fields.title?.stringValue || '';
+              const id = doc.name.split('/').pop() || slug || '';
+              if (isMockStoryRecord({ id, slug, title })) {
+                continue;
+              }
               const published = fields.published?.booleanValue !== false;
               const coverImage = fields.coverImage?.stringValue || '';
               const updatedDate =
@@ -540,7 +573,7 @@ async function getSitemapStoriesList() {
                 fields.uploadedDate?.stringValue;
               if (slug && published && !seenSlugs.has(slug)) {
                 stories.push({
-                  id: doc.name.split('/').pop() || slug,
+                  id,
                   slug,
                   title,
                   published,
@@ -567,7 +600,7 @@ async function getSitemapStoriesList() {
   } catch {
     // Non-fatal, fall back seamlessly to db.stories
   }
-  return stories;
+  return stories.filter((s) => !isMockStoryRecord(s));
 }
 
 // --- DYNAMIC SEO SITEMAP (/sitemap and /sitemap.xml) ---

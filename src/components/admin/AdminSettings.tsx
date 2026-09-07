@@ -295,7 +295,7 @@ export const AdminSettings: React.FC = () => {
                       W
                     </div>
                     <div className="text-[11px] text-slate-400 truncate">
-                      https://walkatha-amber.vercel.app
+                      https://www.walkathawa.site
                     </div>
                   </div>
                   <h4 className="text-sm font-semibold text-indigo-400 hover:underline cursor-pointer line-clamp-1">
@@ -479,19 +479,35 @@ export const AdminSettings: React.FC = () => {
                 Automatically generated XML sitemap indexing all published Sinhala stories, categories, and tags.
               </p>
 
-              <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-between font-mono text-xs text-slate-300">
-                <span>/sitemap.xml</span>
-                <button
-                  type="button"
-                  onClick={() => handleCopy(`${window.location.origin}/sitemap.xml`, 'sitemap')}
-                  className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors cursor-pointer"
-                >
-                  {copiedItem === 'sitemap' ? (
-                    <Check className="w-3.5 h-3.5 text-emerald-400" />
-                  ) : (
-                    <Copy className="w-3.5 h-3.5" />
-                  )}
-                </button>
+              <div className="space-y-2">
+                <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-between font-mono text-xs text-slate-300">
+                  <span>/sitemap</span>
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(`${window.location.origin}/sitemap`, 'sitemap')}
+                    className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors cursor-pointer"
+                  >
+                    {copiedItem === 'sitemap' ? (
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    ) : (
+                      <Copy className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                </div>
+                <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-between font-mono text-xs text-slate-300">
+                  <span>/sitemap.xml</span>
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(`${window.location.origin}/sitemap.xml`, 'sitemapxml')}
+                    className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors cursor-pointer"
+                  >
+                    {copiedItem === 'sitemapxml' ? (
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    ) : (
+                      <Copy className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                </div>
               </div>
               <div className="text-[11px] text-slate-500">
                 Submit this URL to Google Search Console to expedite indexation of new Sinhala stories.

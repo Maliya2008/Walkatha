@@ -103,6 +103,25 @@ export const Footer: React.FC<FooterProps> = ({
           <div>
             © {new Date().getFullYear()} Walkathawa (වල් කතාව). All rights reserved.
           </div>
+          <div className="flex items-center gap-4">
+            <a
+              href="/sitemap"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+            >
+              සයිට්මැප් (Sitemap)
+            </a>
+            <span>•</span>
+            <a
+              href="/robots.txt"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+            >
+              Robots.txt
+            </a>
+          </div>
         </div>
       </div>
     </footer>

@@ -44,8 +44,15 @@ export const Footer: React.FC<FooterProps> = ({
           {/* Brand Col */}
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2">
-              <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-slate-900 text-white dark:bg-white dark:text-slate-900 sepia:bg-[#36271c] sepia:text-[#fbf7ee]">
-                <BookOpen className="w-3.5 h-3.5" />
+              <div className="flex items-center justify-center w-7 h-7 rounded-lg overflow-hidden bg-black border border-slate-700/50 shadow-xs">
+                <img
+                  src="/icon.svg"
+                  alt="Walkathawa Logo"
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).src = '/icon.png';
+                  }}
+                />
               </div>
               <span className="font-extrabold text-sm text-slate-900 dark:text-white sepia:text-[#36271c]">
                 Walkathawa <span className="text-indigo-600 dark:text-indigo-400 text-xs font-serif">(වල් කතාව)</span>

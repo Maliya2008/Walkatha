@@ -25,8 +25,16 @@ export const Header: React.FC<HeaderProps> = ({
           onClick={onHomeClick}
           className="flex items-center gap-2.5 cursor-pointer group select-none"
         >
-          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-slate-900 text-white dark:bg-white dark:text-slate-900 group-hover:bg-indigo-600 dark:group-hover:bg-indigo-400 dark:group-hover:text-white transition-colors shadow-xs">
-            <BookOpen className="w-4 h-4" />
+          <div className="flex items-center justify-center w-8 h-8 rounded-lg overflow-hidden bg-black border border-slate-700/50 shadow-xs group-hover:scale-105 transition-transform">
+            <img
+              src="/icon.svg"
+              alt="Walkathawa Logo"
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                // Fallback to PNG if SVG fails
+                (e.currentTarget as HTMLImageElement).src = '/icon.png';
+              }}
+            />
           </div>
           <div>
             <span className="font-extrabold text-base tracking-tight text-slate-900 dark:text-white block leading-none">

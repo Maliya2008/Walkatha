@@ -26,7 +26,22 @@ export function useStory(slug: string | null) {
 
     activeSlugRef.current = slug;
     let isMounted = true;
-    setIsLoading(true);
+
+    // Check if story is already in memory cache for 0ms transition
+    const cachedAll = storyService.getStoredStoriesSync();
+    const immediateStory = cachedAll.find((s) => s.slug === slug || s.id === slug) || null;
+    if (immediateStory) {
+      setStory(immediateStory);
+      const cat = (immediateStory.category || '').toLowerCase().trim();
+      const related = cachedAll
+        .filter((s) => s.id !== immediateStory.id && (s.category || '').toLowerCase().trim() === cat)
+        .slice(0, 3);
+      setRelatedStories(related.length > 0 ? related : cachedAll.filter((s) => s.id !== immediateStory.id).slice(0, 3));
+      setIsLoading(false);
+    } else {
+      setIsLoading(true);
+    }
+
     setError(null);
 
     const loadStory = async () => {

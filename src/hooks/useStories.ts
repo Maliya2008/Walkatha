@@ -1,31 +1,47 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Category, PaginatedResponse, Story, StoryFilterParams } from '../types/story';
 import { storyService } from '../services/storyService';
 
 export function useStories(initialParams: StoryFilterParams = {}) {
-  const [params, setParams] = useState<StoryFilterParams>({
+  const mergedInitialParams: StoryFilterParams = {
     category: 'all',
     page: 1,
     limit: 20,
     sortBy: 'latest',
     ...initialParams,
+  };
+
+  const [params, setParams] = useState<StoryFilterParams>(mergedInitialParams);
+
+  // Synchronously initialize with cached/seed stories on frame 0
+  const [response, setResponse] = useState<PaginatedResponse<Story>>(() => {
+    return storyService.getInitialPaginatedStories(mergedInitialParams);
   });
 
-  const [response, setResponse] = useState<PaginatedResponse<Story>>({
-    data: [],
-    total: 0,
-    page: 1,
-    totalPages: 1,
-    hasMore: false,
+  const [categories, setCategories] = useState<Category[]>(() => {
+    return storyService.getInitialCategories();
   });
 
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [featuredStories, setFeaturedStories] = useState<Story[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [featuredStories, setFeaturedStories] = useState<Story[]>(() => {
+    return storyService.getInitialFeaturedStories(3);
+  });
+
+  // If initial response has data, isLoading is false immediately (0ms delay)
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    const initial = storyService.getInitialPaginatedStories(mergedInitialParams);
+    return initial.data.length === 0;
+  });
+
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const isFirstMount = useRef(true);
 
-  const fetchStories = useCallback(async () => {
-    setIsLoading(true);
+  const fetchStories = useCallback(async (forceLoading = false) => {
+    if (forceLoading) {
+      setIsLoading(true);
+    } else {
+      setIsRefreshing(true);
+    }
     setError(null);
     try {
       const result = await storyService.getStories(params);
@@ -34,25 +50,38 @@ export function useStories(initialParams: StoryFilterParams = {}) {
       setError(err instanceof Error ? err.message : 'Failed to load stories');
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   }, [params]);
 
+  // Handle params changes: instantly filter locally, then sync in background
   useEffect(() => {
-    fetchStories();
-  }, [fetchStories]);
+    // Perform instant local filtering on current in-memory cache
+    const instantFiltered = storyService.filterAndPaginateStories(
+      storyService.getStoredStoriesSync(),
+      params
+    );
+    if (instantFiltered.data.length > 0 || !isFirstMount.current) {
+      setResponse(instantFiltered);
+    }
+
+    // Background fetch fresh updates from Firestore
+    fetchStories(false);
+    isFirstMount.current = false;
+  }, [fetchStories, params]);
 
   useEffect(() => {
-    // Initial fetch of categories & featured
+    // Background metadata synchronization
     const loadMeta = async () => {
       try {
         const [cats, featured] = await Promise.all([
           storyService.getCategories(),
           storyService.getFeaturedStories(3),
         ]);
-        setCategories(cats);
-        setFeaturedStories(featured);
+        if (cats && cats.length > 0) setCategories(cats);
+        if (featured && featured.length > 0) setFeaturedStories(featured);
       } catch (err) {
-        console.error('Failed to load categories/featured', err);
+        console.warn('Background meta sync fallback:', err);
       }
     };
     loadMeta();
@@ -83,13 +112,15 @@ export function useStories(initialParams: StoryFilterParams = {}) {
     categories,
     featuredStories,
     isLoading,
+    isRefreshing,
     error,
     params,
     setCategory,
     setSearch,
     setPage,
     setSortBy,
-    refresh: fetchStories,
-    refreshStories: fetchStories,
+    refresh: () => fetchStories(true),
+    refreshStories: () => fetchStories(true),
   };
 }
+

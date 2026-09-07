@@ -7,4 +7,3 @@ Disallow: /api/auth
 
 # Sitemap Endpoints
 Sitemap: https://www.walkathawa.site/sitemap.xml
-Sitemap: https://www.walkathawa.site/sitemap

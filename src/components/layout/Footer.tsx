@@ -107,7 +107,7 @@ export const Footer: React.FC<FooterProps> = ({
           </div>
           <div className="flex items-center gap-4">
             <a
-              href="/sitemap"
+              href="/directory"
               onClick={(e) => {
                 if (onOpenSitemap) {
                   e.preventDefault();
@@ -116,7 +116,16 @@ export const Footer: React.FC<FooterProps> = ({
               }}
               className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
             >
-              සයිට්මැප් (Sitemap)
+              සයිට්මැප් (Directory)
+            </a>
+            <span>•</span>
+            <a
+              href="/sitemap.xml"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
+            >
+              XML Sitemap
             </a>
             <span>•</span>
             <a

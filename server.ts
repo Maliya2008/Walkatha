@@ -636,7 +636,6 @@ Disallow: /api/auth
 
 # Sitemap Endpoints
 Sitemap: ${baseUrl}/sitemap.xml
-Sitemap: ${baseUrl}/sitemap
 `;
 
   res.header('Content-Type', 'text/plain; charset=utf-8');

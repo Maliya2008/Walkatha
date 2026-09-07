@@ -83,12 +83,14 @@ export default function App() {
       return;
     }
 
-    // 2. Sitemap Check
+    // 2. Sitemap / Directory Check
     const isSitemap =
-      path === '/sitemap' ||
-      path === '/sitemap/' ||
+      path === '/directory' ||
+      path === '/stories-directory' ||
+      path === '/sitemap-index' ||
       path === '/sitemap.html' ||
       hash === '#sitemap' ||
+      hash === '#directory' ||
       hash.startsWith('#/sitemap') ||
       hash === '#/sitemap';
     setIsSitemapView(isSitemap);
@@ -343,7 +345,7 @@ export default function App() {
         onSelectCategory={handleSelectCategory}
         onOpenSitemap={() => {
           setIsSitemapView(true);
-          navigateTo('/sitemap');
+          navigateTo('/directory');
           window.scrollTo({ top: 0, behavior: 'instant' });
         }}
         onSearchKeyword={(kw) => {

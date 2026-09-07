@@ -46,15 +46,7 @@ xml += `    <changefreq>daily</changefreq>\n`;
 xml += `    <priority>1.0</priority>\n`;
 xml += `  </url>\n`;
 
-// 2. HTML Sitemap
-xml += `  <url>\n`;
-xml += `    <loc>${baseUrl}/sitemap</loc>\n`;
-xml += `    <lastmod>${nowISO}</lastmod>\n`;
-xml += `    <changefreq>daily</changefreq>\n`;
-xml += `    <priority>0.9</priority>\n`;
-xml += `  </url>\n`;
-
-// 3. Categories
+// 2. Categories
 categories.forEach((cat) => {
   xml += `  <url>\n`;
   xml += `    <loc>${baseUrl}/?category=${cat.slug}</loc>\n`;
@@ -98,7 +90,8 @@ stories.forEach((story) => {
 xml += `</urlset>`;
 
 fs.writeFileSync(path.join(publicDir, 'sitemap.xml'), xml, 'utf-8');
-console.log(`[Sitemap Generator] Generated public/sitemap.xml with ${stories.length} stories.`);
+fs.writeFileSync(path.join(publicDir, 'sitemap'), xml, 'utf-8');
+console.log(`[Sitemap Generator] Generated public/sitemap.xml and public/sitemap with ${stories.length} stories.`);
 
 // Generate robots.txt
 const robotsTxt = `# Robots.txt for Walkathawa (වල් කතාව)
@@ -110,7 +103,6 @@ Disallow: /api/auth
 
 # Sitemap Endpoints
 Sitemap: ${baseUrl}/sitemap.xml
-Sitemap: ${baseUrl}/sitemap
 `;
 
 fs.writeFileSync(path.join(publicDir, 'robots.txt'), robotsTxt, 'utf-8');

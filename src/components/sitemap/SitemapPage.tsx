@@ -42,7 +42,7 @@ export const SitemapPage: React.FC<SitemapPageProps> = ({
     // Update canonical link
     let canonical = document.querySelector('link[rel="canonical"]') as HTMLLinkElement | null;
     if (canonical) {
-      canonical.href = 'https://www.walkathawa.site/sitemap';
+      canonical.href = 'https://www.walkathawa.site/directory';
     }
 
     window.scrollTo({ top: 0, behavior: 'smooth' });

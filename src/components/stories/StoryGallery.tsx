@@ -53,11 +53,15 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
             />
           </div>
           <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1">
+            <label
+              htmlFor="sort-stories-select"
+              className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1 cursor-pointer"
+            >
               <span>Sort:</span>
-            </span>
+            </label>
             <select
               id="sort-stories-select"
+              aria-label="Sort stories"
               value={sortBy}
               onChange={(e) => onSortChange(e.target.value as any)}
               className="px-3 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 cursor-pointer"
@@ -117,7 +121,7 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
       {/* Gallery Header Title */}
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <h1 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <span>
               {searchTerm
                 ? `Search Results for "${searchTerm}"`
@@ -125,7 +129,7 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
                 ? 'Discover Stories'
                 : `${categories.find((c) => c.slug === selectedCategory)?.name || selectedCategory} Stories`}
             </span>
-          </h2>
+          </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             {typeof total === 'number' && total > stories.length
               ? `Showing ${stories.length} of ${total} stories`
@@ -147,9 +151,9 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
         </div>
       ) : stories.length === 0 ? (
         <div className="text-center py-12 px-4 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 my-4">
-          <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">
+          <h2 className="text-base font-bold text-slate-800 dark:text-slate-200">
             No stories found
-          </h3>
+          </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
             Try adjusting your search query or selecting a different category from above.
           </p>
@@ -167,8 +171,13 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
       ) : (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5">
-            {stories.map((story) => (
-              <StoryCard key={story.id} story={story} onRead={onReadStory} />
+            {stories.map((story, index) => (
+              <StoryCard
+                key={story.id}
+                story={story}
+                onRead={onReadStory}
+                priority={index === 0}
+              />
             ))}
           </div>
 

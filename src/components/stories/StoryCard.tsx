@@ -6,9 +6,10 @@ import { Badge } from '../common/Badge';
 interface StoryCardProps {
   story: Story;
   onRead: (slug: string) => void;
+  priority?: boolean;
 }
 
-export const StoryCard: React.FC<StoryCardProps> = ({ story, onRead }) => {
+export const StoryCard: React.FC<StoryCardProps> = ({ story, onRead, priority = false }) => {
   const formattedDate = new Date(story.uploadDate || story.uploadedDate || 0).toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
@@ -28,7 +29,11 @@ export const StoryCard: React.FC<StoryCardProps> = ({ story, onRead }) => {
         <img
           src={story.coverImage}
           alt={story.title}
-          loading="lazy"
+          loading={priority ? 'eager' : 'lazy'}
+          fetchPriority={priority ? 'high' : 'auto'}
+          decoding={priority ? 'sync' : 'async'}
+          width={400}
+          height={225}
           className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-300"
         />
         <div className="absolute top-2.5 left-2.5 flex gap-1.5 flex-wrap">
@@ -60,13 +65,13 @@ export const StoryCard: React.FC<StoryCardProps> = ({ story, onRead }) => {
         </p>
 
         {/* Metadata Section */}
-        <div className="pt-2.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+        <div className="pt-2.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-2 text-[11px] text-slate-600 dark:text-slate-400">
           <div className="flex items-center gap-2.5">
             <div className="flex items-center gap-1">
-              <Calendar className="w-3 h-3 text-slate-400" />
+              <Calendar className="w-3 h-3 text-slate-500 dark:text-slate-400" />
               <span>{formattedDate}</span>
             </div>
-            <div className="flex items-center gap-1 text-slate-400 dark:text-slate-500">
+            <div className="flex items-center gap-1 text-slate-500 dark:text-slate-400">
               <Eye className="w-3 h-3" />
               <span>{(story.views || 0).toLocaleString()}</span>
             </div>

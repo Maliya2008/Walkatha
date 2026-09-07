@@ -129,6 +129,9 @@ export const AdminStoriesList: React.FC<AdminStoriesListProps> = ({
         <div className="flex items-center gap-2 w-full md:w-auto">
           <Filter className="w-4 h-4 text-slate-400 shrink-0" />
           <select
+            id="admin-category-filter-select"
+            name="categoryFilter"
+            aria-label="Filter stories by category"
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
             className="px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 capitalize"
@@ -143,6 +146,9 @@ export const AdminStoriesList: React.FC<AdminStoriesListProps> = ({
 
           {/* Status Filter */}
           <select
+            id="admin-status-filter-select"
+            name="statusFilter"
+            aria-label="Filter stories by publication status"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as any)}
             className="px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"

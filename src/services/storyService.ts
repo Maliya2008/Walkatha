@@ -24,6 +24,68 @@ const DEFAULT_FALLBACK_CATEGORIES: Category[] = [
   { id: 'cat-inspirational', slug: 'inspirational', name: 'ජීවිත ආදර්ශ (Inspirational)', description: 'Inspirational and moral life stories', storyCount: 0 },
 ];
 
+const SYNONYMS: Record<string, string[]> = {
+  amma: ['අම්මා', 'මව'],
+  putha: ['පුතා'],
+  akka: ['අක්කා'],
+  malli: ['මල්ලි'],
+  ayya: ['අයියා'],
+  nangi: ['නංගි'],
+  wife: ['වයිෆ්', 'බිරිඳ', 'birinda'],
+  birinda: ['බිරිඳ', 'වයිෆ්', 'wife'],
+  nanda: ['නැන්දා', 'aunty', 'ඇන්ටි'],
+  aunty: ['ඇන්ටි', 'නැන්දා'],
+  teacher: ['ටීචර්', 'ගුරුතුමී', 'teacher'],
+  bus: ['බස්', 'bus'],
+  family: ['පවුලේ', 'pawule'],
+  pawule: ['පවුලේ', 'family'],
+  aluth: ['අලුත්', 'new', 'නවතම', 'aluthma'],
+  aluthma: ['අලුත්', 'new', 'නවතම', 'aluth'],
+  new: ['අලුත්', 'aluth', 'නවතම'],
+  wal: ['වල්', 'වැල', 'wela', 'wala', 'walkatha'],
+  wela: ['වැල', 'වල්', 'wal', 'wala'],
+  wala: ['වලා', 'වල්', 'වැල', 'wal'],
+  walakatha: ['walkatha', 'වල් කතා', 'වැල කතා'],
+  walkatha: ['wal katha', 'වල් කතා', 'වැල කතා'],
+  katha: ['කතා', 'කතාව', 'story', 'stories'],
+  chithra: ['චිත්‍ර', 'chithra'],
+  pdf: ['pdf', 'පොත්'],
+  full: ['සම්පූර්ණ', 'full'],
+};
+
+function matchesSearchQuery(s: Story, queryText: string): boolean {
+  if (!queryText) return true;
+  const rawQuery = queryText.toLowerCase().trim();
+  const title = (s.title || '').toLowerCase();
+  const desc = (s.shortDescription || s.description || '').toLowerCase();
+  const category = (s.categoryName || s.category || '').toLowerCase();
+  const tags = (s.tags || []).map((t) => t.toLowerCase());
+
+  if (
+    title.includes(rawQuery) ||
+    desc.includes(rawQuery) ||
+    category.includes(rawQuery) ||
+    tags.some((t) => t.includes(rawQuery))
+  ) {
+    return true;
+  }
+
+  const tokens = rawQuery.split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return true;
+
+  return tokens.every((token) => {
+    if (token === '2025' || token === '2026' || token === 'free') return true;
+    const equivalents = [token, ...(SYNONYMS[token] || [])];
+    return equivalents.some(
+      (eq) =>
+        title.includes(eq) ||
+        desc.includes(eq) ||
+        category.includes(eq) ||
+        tags.some((t) => t.includes(eq))
+    );
+  });
+}
+
 function normalizeStoryDoc(id: string, data: any): Story {
   return {
     id,
@@ -81,13 +143,8 @@ class StoryService {
         });
       }
       if (params.search && params.search.trim()) {
-        const queryText = params.search.toLowerCase().trim();
-        allStories = allStories.filter(
-          (s) =>
-            s.title?.toLowerCase().includes(queryText) ||
-            s.shortDescription?.toLowerCase().includes(queryText) ||
-            s.tags?.some((t) => t.toLowerCase().includes(queryText))
-        );
+        const queryText = params.search.trim();
+        allStories = allStories.filter((s) => matchesSearchQuery(s, queryText));
       }
 
       // Sort by selected criteria
@@ -118,6 +175,10 @@ class StoryService {
       if (params.category && params.category !== 'all') {
         const catFilter = params.category.toLowerCase().trim();
         fallback = fallback.filter((s) => (s.category || '').toLowerCase().trim() === catFilter);
+      }
+      if (params.search && params.search.trim()) {
+        const queryText = params.search.trim();
+        fallback = fallback.filter((s) => matchesSearchQuery(s, queryText));
       }
       const page = params.page || 1;
       const limitVal = params.limit || 20;

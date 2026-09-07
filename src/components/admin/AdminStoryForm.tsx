@@ -571,7 +571,7 @@ export const AdminStoryForm: React.FC<AdminStoryFormProps> = ({
 
             <div className="md:col-span-4">
               <div className="flex items-center justify-between mb-2">
-                <label className="block text-xs font-bold text-white uppercase tracking-wider">
+                <label htmlFor="story-category-select" className="block text-xs font-bold text-white uppercase tracking-wider">
                   Category <span className="text-rose-400">*</span>
                 </label>
                 {isCategoriesLoading && (
@@ -594,6 +594,8 @@ export const AdminStoryForm: React.FC<AdminStoryFormProps> = ({
                     </button>
                   </div>
                   <select
+                    id="story-category-select"
+                    aria-label="Story Category Unavailable"
                     disabled
                     className="w-full px-4 py-3 bg-slate-950/50 border border-rose-500/50 rounded-xl text-xs text-slate-500 opacity-60"
                   >
@@ -602,6 +604,9 @@ export const AdminStoryForm: React.FC<AdminStoryFormProps> = ({
                 </div>
               ) : (
                 <select
+                  id="story-category-select"
+                  name="storyCategory"
+                  aria-label="Select Story Category"
                   required
                   value={selectedCategoryId}
                   onChange={(e) => {

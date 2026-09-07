@@ -1,14 +1,20 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, Suspense, lazy } from 'react';
 import { useStories } from './hooks/useStories';
 import { useStory } from './hooks/useStory';
 import { useTheme } from './hooks/useTheme';
 import { Header } from './components/layout/Header';
 import { Footer } from './components/layout/Footer';
 import { StoryGallery } from './components/stories/StoryGallery';
-import { StoryReader } from './components/stories/StoryReader';
-import { AdminRoot } from './components/admin/AdminRoot';
 import { SEOService } from './services/seoService';
 import { adService } from './services/adService';
+
+// Lazy-load heavy components to reduce initial JavaScript execution & bundle size
+const StoryReader = lazy(() =>
+  import('./components/stories/StoryReader').then((m) => ({ default: m.StoryReader }))
+);
+const AdminRoot = lazy(() =>
+  import('./components/admin/AdminRoot').then((m) => ({ default: m.AdminRoot }))
+);
 
 export default function App() {
   const { theme, setTheme, fontSize, setFontSize, fontFamily, setFontFamily } = useTheme();
@@ -210,7 +216,17 @@ export default function App() {
   }, [navigateTo, params.search]);
 
   if (isAdminView) {
-    return <AdminRoot />;
+    return (
+      <Suspense
+        fallback={
+          <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+            <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        }
+      >
+        <AdminRoot />
+      </Suspense>
+    );
   }
 
   return (
@@ -230,18 +246,26 @@ export default function App() {
       <main className="flex-grow">
         {currentSlug ? (
           activeStory ? (
-            <StoryReader
-              story={activeStory}
-              relatedStories={relatedStories}
-              onBack={handleBackToGallery}
-              onSelectStory={handleReadStory}
-              theme={theme}
-              onThemeChange={setTheme}
-              fontSize={fontSize}
-              onFontSizeChange={setFontSize}
-              fontFamily={fontFamily}
-              onFontFamilyChange={setFontFamily}
-            />
+            <Suspense
+              fallback={
+                <div className="flex items-center justify-center min-h-[50vh]">
+                  <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                </div>
+              }
+            >
+              <StoryReader
+                story={activeStory}
+                relatedStories={relatedStories}
+                onBack={handleBackToGallery}
+                onSelectStory={handleReadStory}
+                theme={theme}
+                onThemeChange={setTheme}
+                fontSize={fontSize}
+                onFontSizeChange={setFontSize}
+                fontFamily={fontFamily}
+                onFontFamilyChange={setFontFamily}
+              />
+            </Suspense>
           ) : isStoryLoading ? (
             <div className="flex items-center justify-center min-h-[50vh]">
               <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
@@ -284,6 +308,14 @@ export default function App() {
       <Footer
         categories={categories}
         onSelectCategory={handleSelectCategory}
+        onSearchKeyword={(kw) => {
+          handleSelectCategory('all');
+          handleSearchChange(kw);
+          if (currentSlug) {
+            handleBackToGallery();
+          }
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
       />
     </div>
   );

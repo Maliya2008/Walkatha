@@ -17,5 +17,20 @@ export default defineConfig(() => {
       hmr: isHmrDisabled ? false : { overlay: false },
       watch: isHmrDisabled ? null : {},
     },
+    build: {
+      sourcemap: true,
+      minify: 'esbuild' as const,
+      chunkSizeWarningLimit: 600,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'vendor-react': ['react', 'react-dom'],
+            'vendor-firebase': ['firebase/app', 'firebase/firestore', 'firebase/auth'],
+            'vendor-motion': ['motion'],
+            'vendor-icons': ['lucide-react'],
+          },
+        },
+      },
+    },
   };
 });

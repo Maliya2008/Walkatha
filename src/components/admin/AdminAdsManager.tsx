@@ -178,11 +178,14 @@ export const AdminAdsManager: React.FC = () => {
 
           {/* Advertisement Redirection Amount Dropdown */}
           <div>
-            <label className="block text-xs font-bold text-white uppercase tracking-wider mb-2 flex items-center gap-2">
+            <label htmlFor="ad-redirect-amount-select" className="block text-xs font-bold text-white uppercase tracking-wider mb-2 flex items-center gap-2">
               <Layers className="w-4 h-4 text-indigo-400" />
               <span>Advertisement Redirection Amount</span>
             </label>
             <select
+              id="ad-redirect-amount-select"
+              name="adRedirectAmount"
+              aria-label="Advertisement Redirection Amount"
               value={adsSettings.redirectAmount}
               onChange={(e) =>
                 setAdsSettings({

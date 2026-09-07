@@ -313,10 +313,13 @@ export const AdminCategories: React.FC = () => {
 
                 {deleteAction === 'reassign' && (
                   <div className="pt-2">
-                    <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                    <label htmlFor="reassign-category-select" className="block text-[11px] font-semibold text-slate-400 mb-1">
                       Select Destination Category:
                     </label>
                     <select
+                      id="reassign-category-select"
+                      name="reassignCategory"
+                      aria-label="Select Destination Category"
                       value={targetCategoryId}
                       onChange={(e) => setTargetCategoryId(e.target.value)}
                       className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"

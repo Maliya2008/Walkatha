@@ -16,6 +16,7 @@ interface StoryGalleryProps {
   onSortChange: (sort: 'latest' | 'popular') => void;
   currentPage: number;
   totalPages: number;
+  total?: number;
   onPageChange: (page: number) => void;
   onReadStory: (slug: string) => void;
   isLoading: boolean;
@@ -33,6 +34,7 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
   onSortChange,
   currentPage,
   totalPages,
+  total,
   onPageChange,
   onReadStory,
   isLoading,
@@ -125,7 +127,10 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
             </span>
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            {stories.length} {stories.length === 1 ? 'story' : 'stories'} available
+            {typeof total === 'number' && total > stories.length
+              ? `Showing ${stories.length} of ${total} stories`
+              : `${stories.length} ${stories.length === 1 ? 'story' : 'stories'} available`}
+            {totalPages > 1 && ` • Page ${currentPage} of ${totalPages}`}
           </p>
         </div>
       </div>

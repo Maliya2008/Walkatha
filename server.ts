@@ -208,7 +208,7 @@ function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunctio
 
 // Public: List Published Stories
 app.get('/api/public/stories', (req: Request, res: Response) => {
-  const { category, search, tag, sortBy, page = '1', limit = '9' } = req.query;
+  const { category, search, tag, sortBy, page = '1', limit = '20' } = req.query;
 
   let stories = db.stories.filter((s) => s.published);
 
@@ -241,7 +241,7 @@ app.get('/api/public/stories', (req: Request, res: Response) => {
   }
 
   const pageNum = Math.max(1, parseInt(String(page), 10) || 1);
-  const limitNum = Math.max(1, Math.min(50, parseInt(String(limit), 10) || 9));
+  const limitNum = Math.max(1, Math.min(50, parseInt(String(limit), 10) || 20));
   const total = stories.length;
   const totalPages = Math.ceil(total / limitNum) || 1;
   const offset = (pageNum - 1) * limitNum;

@@ -6,7 +6,7 @@ export function useStories(initialParams: StoryFilterParams = {}) {
   const [params, setParams] = useState<StoryFilterParams>({
     category: 'all',
     page: 1,
-    limit: 6,
+    limit: 20,
     sortBy: 'latest',
     ...initialParams,
   });

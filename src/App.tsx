@@ -273,6 +273,7 @@ export default function App() {
             onSortChange={setSortBy}
             currentPage={page}
             totalPages={totalPages}
+            total={total}
             onPageChange={handlePageChange}
             onReadStory={handleReadStory}
             isLoading={isStoriesLoading}

@@ -1,4 +1,5 @@
 import { Category, PaginatedResponse, Story, StoryFilterParams } from '../types/story';
+import { INITIAL_STORIES } from '../data/seedStories';
 import { db } from '../lib/firebase';
 import {
   collection,
@@ -59,6 +60,10 @@ class StoryService {
         allStories.push(normalizeStoryDoc(docSnap.id, docSnap.data()));
       });
 
+      if (allStories.length === 0 && INITIAL_STORIES.length > 0) {
+        allStories = [...INITIAL_STORIES];
+      }
+
       // Filter and sort
       if (params.category && params.category !== 'all') {
         const catFilter = params.category.toLowerCase().trim();
@@ -97,7 +102,7 @@ class StoryService {
       }
 
       const page = params.page || 1;
-      const limitVal = params.limit || 9;
+      const limitVal = params.limit || 20;
       const total = allStories.length;
       
       return {
@@ -109,7 +114,21 @@ class StoryService {
       };
     } catch (e) {
       console.error('Error fetching stories from Firestore:', e);
-      return { data: [], total: 0, page: 1, totalPages: 1, hasMore: false };
+      let fallback = [...INITIAL_STORIES];
+      if (params.category && params.category !== 'all') {
+        const catFilter = params.category.toLowerCase().trim();
+        fallback = fallback.filter((s) => (s.category || '').toLowerCase().trim() === catFilter);
+      }
+      const page = params.page || 1;
+      const limitVal = params.limit || 20;
+      const total = fallback.length;
+      return {
+        data: fallback.slice((page - 1) * limitVal, page * limitVal),
+        total,
+        page,
+        totalPages: Math.ceil(total / limitVal) || 1,
+        hasMore: page < Math.ceil(total / limitVal),
+      };
     }
   }
 

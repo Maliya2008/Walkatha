@@ -13,15 +13,12 @@ const firebaseConfig = {
   measurementId: 'G-E0YMRGV1SK',
 };
 
-const DEFAULT_CATEGORIES: Array<{ name: string; slug: string; description: string }> = [
-  { name: 'ආදර කතා (Romantic Stories)', slug: 'romantic', description: 'Romantic tales, heartfelt emotions, and relationship journeys' },
-  { name: 'ත්‍රාසජනක (Adventure & Thriller)', slug: 'adventure', description: 'Action-packed adventures, survival tales, and thrilling journeys' },
-  { name: 'ප්‍රබන්ධ කතා (Fictional Stories)', slug: 'fiction', description: 'Creative fiction, moral tales, and contemporary Sinhala literature' },
-  { name: 'අභිරහස් (Mystery & Detective)', slug: 'mystery', description: 'Unsolved puzzles, crime investigations, and enigmatic plots' },
-  { name: 'විද්‍යා ප්‍රබන්ධ (Science Fiction)', slug: 'sci-fi', description: 'Futuristic narratives, advanced tech, and alternate worlds' },
-  { name: 'මනඃකල්පිත (Fantasy & Myth)', slug: 'fantasy', description: 'Magical realms, mythical creatures, and ancient folklore' },
-  { name: 'හොල්මන් / බියකරු (Supernatural Horror)', slug: 'horror', description: 'Ghostly sightings, supernatural horror, and eerie mysteries' },
-  { name: 'ජීවිත ආදර්ශ (Inspirational & Life)', slug: 'inspirational', description: 'Real-world lessons, life inspirations, and moral stories' },
+const DEFAULT_CATEGORIES: Array<{ id: string; name: string; slug: string; description: string; storyCount: number }> = [
+  { id: 'all', name: 'සියලුම කතා (All Stories)', slug: 'all', description: 'සියලුම අලුත් සිංහල කතා සහ රසවත් කතා එකතුව', storyCount: 19 },
+  { id: 'wife', name: 'වයිෆ් / බිරිඳ (Wife Stories)', slug: 'wife', description: 'බිරිඳ, වයිෆ් සහ පවුලේ සත්‍ය අත්දැකීම් ඇසුරින් ලියවුණු කතා', storyCount: 12 },
+  { id: 'school', name: 'පාසල් කතා (School Stories)', slug: 'school', description: 'පාසල්, පන්ති සහ ගුරු සිසු සබඳතා ඇසුරින් ලියවුණු කතා', storyCount: 3 },
+  { id: 'akka-malli', name: 'අක්කා - මල්ලි (Akka Malli)', slug: 'akka-malli', description: 'අක්කා මල්ලි සහ අසල්වැසි සබඳතා පිළිබඳ රසවත් කතා', storyCount: 2 },
+  { id: 'romantic', name: 'ආදර කතා (Romantic Stories)', slug: 'romantic', description: 'ආදරය, හැඟීම්බර සහ ආශාවන් පිරි කෙටිකතා', storyCount: 2 },
 ];
 
 const app = initializeApp(firebaseConfig);

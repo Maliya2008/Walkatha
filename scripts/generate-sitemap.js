@@ -52,14 +52,10 @@ if (fs.existsSync(dbPath)) {
 const nowISO = new Date().toISOString();
 
 const categories = [
-  { slug: 'love', name: 'ආදර කතා (Romantic)' },
-  { slug: 'family', name: 'පවුලේ කතා (Family)' },
-  { slug: 'office', name: 'කාර්යාල කතා (Office)' },
-  { slug: 'bus', name: 'බස් කතා (Travel)' },
-  { slug: 'village', name: 'ගමේ කතා (Village)' },
-  { slug: 'fantasy', name: 'ෆැන්ටසි (Fantasy)' },
-  { slug: 'classic', name: 'පැරණි කතා (Classic)' },
-  { slug: 'other', name: 'වෙනත් (Other)' },
+  { slug: 'wife', name: 'වයිෆ් / බිරිඳ (Wife Stories)' },
+  { slug: 'school', name: 'පාසල් කතා (School Stories)' },
+  { slug: 'akka-malli', name: 'අක්කා - මල්ලි (Akka Malli)' },
+  { slug: 'romantic', name: 'ආදර කතා (Romantic Stories)' },
 ];
 
 // Generate XML Sitemap

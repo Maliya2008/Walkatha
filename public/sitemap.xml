@@ -3,55 +3,31 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
   <url>
     <loc>https://www.walkathawa.site/</loc>
-    <lastmod>2026-09-07T16:01:43.912Z</lastmod>
+    <lastmod>2026-09-08T08:58:14.365Z</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://www.walkathawa.site/?category=love</loc>
-    <lastmod>2026-09-07T16:01:43.912Z</lastmod>
+    <loc>https://www.walkathawa.site/?category=wife</loc>
+    <lastmod>2026-09-08T08:58:14.365Z</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://www.walkathawa.site/?category=family</loc>
-    <lastmod>2026-09-07T16:01:43.912Z</lastmod>
+    <loc>https://www.walkathawa.site/?category=school</loc>
+    <lastmod>2026-09-08T08:58:14.365Z</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://www.walkathawa.site/?category=office</loc>
-    <lastmod>2026-09-07T16:01:43.912Z</lastmod>
+    <loc>https://www.walkathawa.site/?category=akka-malli</loc>
+    <lastmod>2026-09-08T08:58:14.365Z</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://www.walkathawa.site/?category=bus</loc>
-    <lastmod>2026-09-07T16:01:43.912Z</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.walkathawa.site/?category=village</loc>
-    <lastmod>2026-09-07T16:01:43.912Z</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.walkathawa.site/?category=fantasy</loc>
-    <lastmod>2026-09-07T16:01:43.912Z</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.walkathawa.site/?category=classic</loc>
-    <lastmod>2026-09-07T16:01:43.912Z</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://www.walkathawa.site/?category=other</loc>
-    <lastmod>2026-09-07T16:01:43.912Z</lastmod>
+    <loc>https://www.walkathawa.site/?category=romantic</loc>
+    <lastmod>2026-09-08T08:58:14.365Z</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>

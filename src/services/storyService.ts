@@ -27,14 +27,6 @@ const SINGLE_STORY_CACHE_TTL_MS = 30 * 60 * 1000;  // 30 minutes
 
 export const DEFAULT_FALLBACK_CATEGORIES: Category[] = [
   ...INITIAL_CATEGORIES,
-  { id: 'cat-romantic', slug: 'romantic', name: 'ආදර කතා (Romantic)', description: 'Romantic tales and emotions', storyCount: 0 },
-  { id: 'cat-adventure', slug: 'adventure', name: 'ත්‍රාසජනක (Adventure)', description: 'Adventures and thrillers', storyCount: 0 },
-  { id: 'cat-fiction', slug: 'fiction', name: 'ප්‍රබන්ධ කතා (Fiction)', description: 'Creative fiction and literature', storyCount: 0 },
-  { id: 'cat-mystery', slug: 'mystery', name: 'අභිරහස් (Mystery)', description: 'Mystery and detective stories', storyCount: 0 },
-  { id: 'cat-scifi', slug: 'sci-fi', name: 'විද්‍යා ප්‍රබන්ධ (Sci-Fi)', description: 'Science fiction and future tales', storyCount: 0 },
-  { id: 'cat-fantasy', slug: 'fantasy', name: 'මනඃකල්පිත (Fantasy)', description: 'Fantasy, magic, and folklore', storyCount: 0 },
-  { id: 'cat-horror', slug: 'horror', name: 'හොල්මන් / බියකරු (Horror)', description: 'Horror and supernatural mysteries', storyCount: 0 },
-  { id: 'cat-inspirational', slug: 'inspirational', name: 'ජීවිත ආදර්ශ (Inspirational)', description: 'Inspirational and moral life stories', storyCount: 0 },
 ];
 
 const SYNONYMS: Record<string, string[]> = {

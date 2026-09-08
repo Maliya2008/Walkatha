@@ -5,7 +5,7 @@ import fs from 'fs';
 import crypto from 'crypto';
 import { createServer as createViteServer } from 'vite';
 import { INITIAL_STORIES, INITIAL_CATEGORIES } from './src/data/seedStories';
-import { Story } from './src/types/story';
+import { Story, Category } from './src/types/story';
 import { DirectAdSettings, SiteSettings, User } from './src/types/admin';
 
 const app = express();
@@ -14,9 +14,8 @@ const PORT = 3000;
 // Security & Best Practice Headers Middleware
 app.use((_req: Request, res: Response, next: NextFunction) => {
   res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
-  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Referrer-Policy', 'no-referrer-when-downgrade');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   next();
 });
@@ -32,6 +31,7 @@ const DB_FILE = path.join(DATA_DIR, 'database.json');
 interface DatabaseSchema {
   users: Array<User & { passwordHash: string; salt: string }>;
   stories: Story[];
+  categories?: Category[];
   advertisements: DirectAdSettings;
   postAdvertisements: Record<string, string>; // storyId -> adCode
   settings: SiteSettings;
@@ -336,7 +336,7 @@ app.get('/api/public/ads/config', (_req: Request, res: Response) => {
 
 // Public: Get Categories
 app.get('/api/public/categories', (_req: Request, res: Response) => {
-  res.json(INITIAL_CATEGORIES);
+  res.json(db.categories || INITIAL_CATEGORIES);
 });
 
 // Public: Get Public Site & SEO Settings
@@ -1128,7 +1128,7 @@ app.post('/api/admin/upload', requireAuth, (req: AuthenticatedRequest, res: Resp
 
 // GET /api/admin/categories
 app.get('/api/admin/categories', requireAuth, (_req: AuthenticatedRequest, res: Response) => {
-  res.json(INITIAL_CATEGORIES);
+  res.json(db.categories || INITIAL_CATEGORIES);
 });
 
 // GET /api/admin/settings

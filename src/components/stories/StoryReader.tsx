@@ -206,7 +206,7 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
         </div>
 
         {/* Reading Customization Controls */}
-        <div className="max-w-[750px] mx-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="max-w-[750px] mx-auto">
           <ReadingControls
             theme={theme}
             onThemeChange={onThemeChange}
@@ -247,12 +247,12 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
             </div>
           )}
 
-          <div onClick={(e) => e.stopPropagation()}>
+          <div>
             <SocialShare story={story} />
           </div>
         </main>
 
-        <div onClick={(e) => e.stopPropagation()}>
+        <div>
           <RelatedStories stories={relatedStories} onRead={onSelectStory} />
         </div>
       </div>

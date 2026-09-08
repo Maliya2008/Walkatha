@@ -466,5 +466,79 @@
     "searchConsoleVerification": "aoXN34vuFG8HPn2ngc_Pmqky8knpnPtglDWTX5qFUd4",
     "publisherName": "Walkathawa (වල් කතාව)"
   },
-  "activeSessions": {}
+  "activeSessions": {},
+  "categories": [
+    {
+      "id": "romantic",
+      "name": "ආදර කතා (Romantic Stories)",
+      "slug": "romantic",
+      "description": "Romantic tales, heartfelt emotions, and relationship journeys",
+      "storyCount": 0,
+      "createdAt": "2026-09-08T02:39:20.430Z",
+      "updatedAt": "2026-09-08T02:39:20.430Z"
+    },
+    {
+      "id": "adventure",
+      "name": "ත්‍රාසජනක (Adventure & Thriller)",
+      "slug": "adventure",
+      "description": "Action-packed adventures, survival tales, and thrilling journeys",
+      "storyCount": 0,
+      "createdAt": "2026-09-08T02:39:20.430Z",
+      "updatedAt": "2026-09-08T02:39:20.430Z"
+    },
+    {
+      "id": "fiction",
+      "name": "ප්‍රබන්ධ කතා (Fictional Stories)",
+      "slug": "fiction",
+      "description": "Creative fiction, moral tales, and contemporary Sinhala literature",
+      "storyCount": 0,
+      "createdAt": "2026-09-08T02:39:20.430Z",
+      "updatedAt": "2026-09-08T02:39:20.430Z"
+    },
+    {
+      "id": "mystery",
+      "name": "අභිරහස් (Mystery & Detective)",
+      "slug": "mystery",
+      "description": "Unsolved puzzles, crime investigations, and enigmatic plots",
+      "storyCount": 0,
+      "createdAt": "2026-09-08T02:39:20.430Z",
+      "updatedAt": "2026-09-08T02:39:20.430Z"
+    },
+    {
+      "id": "sci-fi",
+      "name": "විද්‍යා ප්‍රබන්ධ (Science Fiction)",
+      "slug": "sci-fi",
+      "description": "Futuristic narratives, advanced tech, and alternate worlds",
+      "storyCount": 0,
+      "createdAt": "2026-09-08T02:39:20.430Z",
+      "updatedAt": "2026-09-08T02:39:20.430Z"
+    },
+    {
+      "id": "fantasy",
+      "name": "මනඃකල්පිත (Fantasy & Myth)",
+      "slug": "fantasy",
+      "description": "Magical realms, mythical creatures, and ancient folklore",
+      "storyCount": 0,
+      "createdAt": "2026-09-08T02:39:20.430Z",
+      "updatedAt": "2026-09-08T02:39:20.430Z"
+    },
+    {
+      "id": "horror",
+      "name": "හොල්මන් / බියකරු (Supernatural Horror)",
+      "slug": "horror",
+      "description": "Ghostly sightings, supernatural horror, and eerie mysteries",
+      "storyCount": 0,
+      "createdAt": "2026-09-08T02:39:20.430Z",
+      "updatedAt": "2026-09-08T02:39:20.430Z"
+    },
+    {
+      "id": "inspirational",
+      "name": "ජීවිත ආදර්ශ (Inspirational & Life)",
+      "slug": "inspirational",
+      "description": "Real-world lessons, life inspirations, and moral stories",
+      "storyCount": 0,
+      "createdAt": "2026-09-08T02:39:20.430Z",
+      "updatedAt": "2026-09-08T02:39:20.430Z"
+    }
+  ]
 }

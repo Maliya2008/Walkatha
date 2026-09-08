@@ -1110,8 +1110,106 @@ class AdminService {
       }
       return migratedCount;
     } catch (err) {
-      console.error('Story slug migration error:', err);
+      console.warn('Story slug migration notice:', err);
       return 0;
+    }
+  }
+
+  public async syncAllToFirestore(): Promise<{ storiesCount: number; categoriesCount: number; success: boolean }> {
+    this.requireAuth();
+    try {
+      // 1. Fetch from local backend API to get current database state
+      const res = await fetch('/api/public/stories?limit=100');
+      const storiesJson = res.ok ? await res.json() : { data: [] };
+      const localStories: Story[] = storiesJson.data || [];
+
+      // 2. Fetch categories
+      const catRes = await fetch('/api/public/categories');
+      const catJson = catRes.ok ? await catRes.json() : { data: [] };
+      const localCategories: Category[] = catJson.data || [];
+
+      // 3. Fetch Settings
+      const setRes = await fetch('/api/public/settings');
+      const settingsJson = setRes.ok ? await setRes.json() : { data: null };
+
+      // 4. Fetch Ads
+      const adsRes = await fetch('/api/public/ads/config');
+      const adsJson = adsRes.ok ? await adsRes.json() : { data: null };
+
+      // Sync Categories
+      const categoriesToSync = localCategories.length > 0
+        ? localCategories
+        : DEFAULT_CATEGORIES.map((c) => ({
+            id: c.slug,
+            name: c.name,
+            slug: c.slug,
+            description: c.description,
+            storyCount: 0,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          }));
+
+      for (const cat of categoriesToSync) {
+        const catId = cat.id || cat.slug;
+        const iconVal = 'icon' in cat ? (cat as any).icon || '' : '';
+        await setDoc(doc(db, 'categories', catId), {
+          id: catId,
+          name: cat.name,
+          slug: cat.slug,
+          description: cat.description || '',
+          icon: iconVal,
+          storyCount: cat.storyCount || 0,
+          createdAt: cat.createdAt || new Date().toISOString(),
+          updatedAt: cat.updatedAt || new Date().toISOString(),
+        }, { merge: true });
+      }
+
+      // Sync Site Settings
+      if (settingsJson.data) {
+        await setDoc(doc(db, 'settings', 'site'), {
+          ...settingsJson.data,
+          updatedAt: new Date().toISOString(),
+        }, { merge: true });
+      }
+
+      // Sync Ads
+      if (adsJson.data) {
+        await setDoc(doc(db, 'advertisement_settings', 'config'), {
+          ...adsJson.data,
+          updatedAt: new Date().toISOString(),
+        }, { merge: true });
+      }
+
+      // Sync Stories in batches
+      if (localStories.length > 0) {
+        const batchSize = 20;
+        for (let i = 0; i < localStories.length; i += batchSize) {
+          const chunk = localStories.slice(i, i + batchSize);
+          const batch = writeBatch(db);
+          for (const story of chunk) {
+            const storyRef = doc(db, 'stories', story.id);
+            batch.set(storyRef, {
+              ...story,
+              published: story.published !== undefined ? story.published : true,
+              views: Number(story.views) || 0,
+              updatedDate: story.updatedDate || new Date().toISOString(),
+              createdAt: story.createdAt || story.uploadDate || story.uploadedDate || new Date().toISOString(),
+            }, { merge: true });
+          }
+          await batch.commit();
+        }
+      }
+
+      this.invalidateAdminCache();
+
+      return {
+        storiesCount: localStories.length,
+        categoriesCount: categoriesToSync.length,
+        success: true,
+      };
+    } catch (err: any) {
+      console.error('Error syncing data to Firestore:', err);
+      throw new Error(err?.message || 'Failed to synchronize data to Firestore');
     }
   }
 }

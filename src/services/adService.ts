@@ -137,12 +137,19 @@ class AdService {
     const rawCode = (this.config.globalAdCode || '').trim();
     if (!rawCode) return '';
 
+    let url = '';
     if (/^https?:\/\//i.test(rawCode)) {
-      return rawCode.split(/\s+/)[0];
+      url = rawCode.split(/\s+/)[0];
+    } else {
+      const urlMatch = rawCode.match(/https?:\/\/[^\s"'`<>]+/i);
+      url = urlMatch ? urlMatch[0] : '';
     }
 
-    const urlMatch = rawCode.match(/https?:\/\/[^\s"'`<>]+/i);
-    return urlMatch ? urlMatch[0] : '';
+    if (!url || url.includes('example.com')) {
+      return '';
+    }
+
+    return url;
   }
 
   /**

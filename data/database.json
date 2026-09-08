@@ -447,8 +447,8 @@
     }
   ],
   "advertisements": {
-    "globalDirectLink": "https://example.com/ad",
-    "enabled": true,
+    "globalDirectLink": "",
+    "enabled": false,
     "maxTriggers": 1
   },
   "postAdvertisements": {},

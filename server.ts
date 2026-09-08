@@ -107,8 +107,8 @@ function initDatabase(): void {
   }));
 
   const defaultAds: DirectAdSettings = {
-    globalDirectLink: 'https://example.com/ad',
-    enabled: true,
+    globalDirectLink: '',
+    enabled: false,
     maxTriggers: 1,
   };
 

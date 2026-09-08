@@ -134,7 +134,7 @@
     },
     {
       "id": "YGvppHV6uMFRCzO44XV0",
-      "views": 0,
+      "views": 1,
       "slug": "දිනිතිගෙ-චැට්-එ-ක-12-wal-katha-new",
       "createdAt": "2026-09-02T04:29:52.445Z",
       "categoryName": "වෙනත්",
@@ -447,8 +447,8 @@
     }
   ],
   "advertisements": {
-    "globalDirectLink": "",
-    "enabled": false,
+    "globalDirectLink": "<script>\n  atOptions = {\n    'key' : '41fe3a7c5be5b71cd4620d5d0fc4e600',\n    'format' : 'iframe',\n    'height' : 60,\n    'width' : 468,\n    'params' : {}\n  };\n</script>\n<script src=\"https://www.highrevenueformat.com/41fe3a7c5be5b71cd4620d5d0fc4e600/invoke.js\"></script>",
+    "enabled": true,
     "maxTriggers": 1
   },
   "postAdvertisements": {},

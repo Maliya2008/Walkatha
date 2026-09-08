@@ -5,6 +5,7 @@ import { Badge } from '../common/Badge';
 import { ReadingControls } from './ReadingControls';
 import { SocialShare } from './SocialShare';
 import { RelatedStories } from './RelatedStories';
+import { AdsterraBanner } from '../common/AdsterraBanner';
 import { adService } from '../../services/adService';
 
 interface StoryReaderProps {
@@ -214,6 +215,11 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
             fontFamily={fontFamily}
             onFontFamilyChange={onFontFamilyChange}
           />
+        </div>
+
+        {/* Adsterra Left Banner */}
+        <div className="max-w-[750px] mx-auto my-2">
+          <AdsterraBanner align="left" />
         </div>
 
         {/* Main Content Body */}

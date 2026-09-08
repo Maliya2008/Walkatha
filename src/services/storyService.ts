@@ -425,7 +425,7 @@ class StoryService {
         const res = await fetch(`/api/public/stories?${queryParams.toString()}`);
         if (res.ok) {
           const json = await res.json();
-          if (json && Array.isArray(json.data) && json.data.length > 0) {
+          if (json && Array.isArray(json.data)) {
             const fetchedStories: Story[] = json.data;
             fetchedStories.forEach((s) => {
               storyEntityCache.set(s.id, { story: s, timestamp: Date.now() });
@@ -440,7 +440,7 @@ class StoryService {
               data: fetchedStories,
               total: json.total || fetchedStories.length,
               page: json.page || params.page || 1,
-              totalPages: json.totalPages || Math.ceil((json.total || fetchedStories.length) / (params.limit || 20)),
+              totalPages: json.totalPages || Math.ceil((json.total || fetchedStories.length) / (params.limit || 20)) || 1,
               hasMore: Boolean(json.hasMore),
             };
           }
@@ -817,6 +817,54 @@ class StoryService {
 
     pendingRequests.set(requestKey, fetchPromise);
     return fetchPromise;
+  }
+
+  public upsertLocalStory(story: Story): void {
+    if (!story || isMockStory(story)) return;
+    const normalized = normalizeStoryDoc(story.id, story);
+    storyEntityCache.set(normalized.id, { story: normalized, timestamp: Date.now() });
+    if (normalized.slug) {
+      storyEntityCache.set(normalized.slug, { story: normalized, timestamp: Date.now() });
+    }
+    this.persistStoryToStorage(normalized);
+
+    const cachedList = storyListCache.get('all_default');
+    if (cachedList) {
+      const idx = cachedList.data.findIndex(
+        (s) => s.id === normalized.id || (normalized.slug && s.slug === normalized.slug)
+      );
+      if (idx !== -1) {
+        cachedList.data[idx] = normalized;
+      } else {
+        cachedList.data.unshift(normalized);
+        cachedList.total += 1;
+      }
+    }
+    this.invalidateCache();
+  }
+
+  public deleteLocalStory(id: string): void {
+    if (!id) return;
+    const item = storyEntityCache.get(id);
+    const slug = item?.story.slug;
+    storyEntityCache.delete(id);
+    if (slug) {
+      storyEntityCache.delete(slug);
+    }
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const storedMap = localStorage.getItem(STORAGE_STORY_MAP_KEY);
+        if (storedMap) {
+          const parsed = JSON.parse(storedMap);
+          delete parsed[id];
+          if (slug) delete parsed[slug];
+          localStorage.setItem(STORAGE_STORY_MAP_KEY, JSON.stringify(parsed));
+        }
+      }
+    } catch {
+      // Ignore
+    }
+    this.invalidateCache();
   }
 }
 

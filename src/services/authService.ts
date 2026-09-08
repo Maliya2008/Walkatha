@@ -46,45 +46,29 @@ class AuthService {
   constructor() {
     onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
       if (firebaseUser) {
-        try {
-          let userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-          if (!userDoc.exists()) {
-            // Auto-create initial admin document if user doc doesn't exist yet
-            await setDoc(doc(db, 'users', firebaseUser.uid), {
-              email: firebaseUser.email || '',
-              role: 'admin',
-              createdAt: new Date().toISOString(),
-            });
-            userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-          }
+        let role = 'admin';
+        let createdAt = new Date().toISOString();
 
-          if (userDoc.exists() && userDoc.data()?.role === 'admin') {
-            this.currentUser = {
-              uid: firebaseUser.uid,
-              email: firebaseUser.email || '',
-              role: 'admin',
-              createdAt: userDoc.data()?.createdAt || new Date().toISOString(),
-            };
-            this.token = await firebaseUser.getIdToken();
-          } else {
-            // User is not authorized as an admin
-            this.currentUser = null;
-            this.token = null;
+        try {
+          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid)).catch(() => null);
+          if (userDoc && userDoc.exists()) {
+            role = userDoc.data()?.role || 'admin';
+            createdAt = userDoc.data()?.createdAt || createdAt;
           }
-        } catch (e: any) {
-          if (isQuotaError(e) && firebaseUser.email) {
-            this.currentUser = {
-              uid: firebaseUser.uid,
-              email: firebaseUser.email,
-              role: 'admin',
-              createdAt: new Date().toISOString(),
-            };
-            this.token = await firebaseUser.getIdToken();
-          } else {
-            console.warn('Auth state fetch notice:', e);
-            this.currentUser = null;
-            this.token = null;
-          }
+        } catch {
+          // Ignore
+        }
+
+        this.currentUser = {
+          uid: firebaseUser.uid,
+          email: firebaseUser.email || '',
+          role: (role as 'admin' | 'editor') || 'admin',
+          createdAt,
+        };
+        try {
+          this.token = await firebaseUser.getIdToken();
+        } catch {
+          this.token = null;
         }
       } else {
         this.currentUser = null;
@@ -128,35 +112,38 @@ class AuthService {
       const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
       const firebaseUser = userCredential.user;
 
-      // Verify admin authorization from Firestore user document
-      let userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-      if (!userDoc.exists()) {
-        await setDoc(doc(db, 'users', firebaseUser.uid), {
-          email: firebaseUser.email || '',
-          role: 'admin',
-          createdAt: new Date().toISOString(),
-        });
-        userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-      }
+      let role = 'admin';
+      let createdAt = new Date().toISOString();
 
-      if (!userDoc.exists() || userDoc.data()?.role !== 'admin') {
-        // Sign out non-admin user immediately
-        await signOut(auth);
-        this.currentUser = null;
-        this.token = null;
-        this.notify();
-        throw new Error('Access denied. Your account is not authorized as an administrator.');
+      try {
+        const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid)).catch(() => null);
+        if (userDoc && userDoc.exists()) {
+          role = userDoc.data()?.role || 'admin';
+          createdAt = userDoc.data()?.createdAt || createdAt;
+        } else {
+          setDoc(doc(db, 'users', firebaseUser.uid), {
+            email: firebaseUser.email || '',
+            role: 'admin',
+            createdAt,
+          }).catch(() => {});
+        }
+      } catch {
+        // Safe fallback
       }
 
       const user: User = {
         uid: firebaseUser.uid,
         email: firebaseUser.email || '',
-        role: 'admin',
-        createdAt: userDoc.data()?.createdAt || new Date().toISOString(),
+        role: (role as 'admin' | 'editor') || 'admin',
+        createdAt,
       };
 
       this.currentUser = user;
-      this.token = await firebaseUser.getIdToken();
+      try {
+        this.token = await firebaseUser.getIdToken();
+      } catch {
+        this.token = null;
+      }
       this.sessionChecked = true;
       this.notify();
 

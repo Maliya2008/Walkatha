@@ -2,31 +2,30 @@ import { initializeApp, getApps } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
-import defaultConfig from '../../firebase-applet-config.json';
+import { getAnalytics, isSupported } from 'firebase/analytics';
 
-const getEnv = (key: string): string | undefined => {
-  const metaEnv = (import.meta as any).env;
-  if (metaEnv && metaEnv[key]) {
-    return metaEnv[key];
-  }
-  if (typeof process !== 'undefined' && process.env && process.env[key]) {
-    return process.env[key];
-  }
-  return undefined;
-};
-
+// Your web app's Firebase configuration
 const firebaseConfig = {
-  projectId: getEnv('VITE_FIREBASE_PROJECT_ID') || defaultConfig.projectId,
-  appId: getEnv('VITE_FIREBASE_APP_ID') || defaultConfig.appId,
-  apiKey: getEnv('VITE_FIREBASE_API_KEY') || defaultConfig.apiKey,
-  authDomain: getEnv('VITE_FIREBASE_AUTH_DOMAIN') || defaultConfig.authDomain,
-  storageBucket: getEnv('VITE_FIREBASE_STORAGE_BUCKET') || defaultConfig.storageBucket,
-  messagingSenderId: getEnv('VITE_FIREBASE_MESSAGING_SENDER_ID') || defaultConfig.messagingSenderId,
+  apiKey: "AIzaSyDWIC_GSMIOliCrhHKPgZgNUAZKUZ96nh4",
+  authDomain: "walkathawa-93f80.firebaseapp.com",
+  projectId: "walkathawa-93f80",
+  storageBucket: "walkathawa-93f80.firebasestorage.app",
+  messagingSenderId: "575596307575",
+  appId: "1:575596307575:web:daf2ef013ba17b53745272",
+  measurementId: "G-E0YMRGV1SK"
 };
 
-const databaseId = getEnv('VITE_FIREBASE_DATABASE_ID') || defaultConfig.firestoreDatabaseId;
-
+// Initialize Firebase
 export const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 export const auth = getAuth(app);
-export const db = getFirestore(app, databaseId);
+export const db = getFirestore(app);
 export const storage = getStorage(app);
+
+export let analytics: any = null;
+if (typeof window !== 'undefined') {
+  isSupported().then((supported) => {
+    if (supported) {
+      analytics = getAnalytics(app);
+    }
+  }).catch(() => {});
+}

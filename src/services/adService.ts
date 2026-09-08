@@ -11,7 +11,7 @@ const DEFAULT_CONFIG: AdvertisementSettings = {
   redirectAmount: 1,
 };
 
-const SCRIPT_ELEMENT_ID = 'walkathawa-monetag-script-container';
+const SCRIPT_ELEMENT_ID = 'walkathawa-ad-script-container';
 
 interface StoryAdState {
   storyId: string;
@@ -269,7 +269,7 @@ class AdService {
   }
 
   /**
-   * Applies any global Adsterra/Monetag script tags if present and enabled
+   * Applies any custom ad script tags if present and enabled
    */
   public applyGlobalScript(): void {
     if (typeof document === 'undefined') return;
@@ -316,7 +316,7 @@ class AdService {
 
         document.head.appendChild(container);
       } catch (err) {
-        console.error('Failed to inject Adsterra/Monetag script code:', err);
+        console.error('Failed to inject ad script code:', err);
       }
     }
   }

@@ -74,10 +74,6 @@ export function useStory(slug: string | null) {
               lastIncrementedStoryId = realDocId;
               lastIncrementTime = now;
 
-              import('../services/adService').then(({ adService }) => {
-                adService.forceInitStoryVisit(realDocId);
-              });
-
               // Atomically increment the Firestore counter in the background
               storyService.incrementStoryViews(realDocId).catch((err) => {
                 console.warn('[StoryView] Background view increment error:', err);

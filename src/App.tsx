@@ -7,7 +7,6 @@ import { Footer } from './components/layout/Footer';
 import { StoryGallery } from './components/stories/StoryGallery';
 import { SitemapPage } from './components/sitemap/SitemapPage';
 import { SEOService } from './services/seoService';
-import { adService } from './services/adService';
 
 // Lazy-load heavy components to reduce initial JavaScript execution & bundle size
 const StoryReader = lazy(() =>

@@ -1,12 +1,10 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { ArrowLeft, Calendar, Eye, Bookmark, CheckCircle2 } from 'lucide-react';
 import { Story, ReadingTheme, FontSize, FontFamily } from '../../types/story';
 import { Badge } from '../common/Badge';
 import { ReadingControls } from './ReadingControls';
 import { SocialShare } from './SocialShare';
 import { RelatedStories } from './RelatedStories';
-import { AdsterraBanner } from '../common/AdsterraBanner';
-import { adService } from '../../services/adService';
 
 interface StoryReaderProps {
   story: Story;
@@ -35,22 +33,6 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
 }) => {
   const [scrollProgress, setScrollProgress] = useState(0);
   const [isBookmarked, setIsBookmarked] = useState(false);
-
-  const storyKey = story.slug || story.id;
-
-  // Initialize ad frequency state for this story
-  useEffect(() => {
-    if (storyKey) {
-      adService.initStoryVisit(storyKey);
-    }
-  }, [storyKey]);
-
-  // Optional subtle interaction trigger for subsequent redirects up to the post limit
-  const handleReaderInteraction = useCallback(() => {
-    if (storyKey && adService.canRedirectForStory(storyKey)) {
-      adService.triggerStoryAd(storyKey);
-    }
-  }, [storyKey]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -118,7 +100,6 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
     <div
       id="story-reader-container"
       className={`min-h-screen transition-colors duration-200 ${themeBgClasses}`}
-      onClick={handleReaderInteraction}
     >
       <div className="fixed top-0 left-0 right-0 h-1 bg-transparent z-50">
         <div
@@ -215,11 +196,6 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
             fontFamily={fontFamily}
             onFontFamilyChange={onFontFamilyChange}
           />
-        </div>
-
-        {/* Adsterra Left Banner */}
-        <div className="max-w-[750px] mx-auto my-2">
-          <AdsterraBanner align="left" />
         </div>
 
         {/* Main Content Body */}

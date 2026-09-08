@@ -27,7 +27,7 @@ export const PrivacyTermsModal: React.FC<PrivacyTermsModalProps> = ({
             <span>
               {type === 'privacy' && 'Privacy Policy & Cookie Policy'}
               {type === 'terms' && 'Terms of Service'}
-              {type === 'ads' && 'Monetag Advertising & Privacy Notice'}
+              {type === 'ads' && 'Advertising & Privacy Notice'}
             </span>
           </div>
           <button
@@ -59,7 +59,7 @@ export const PrivacyTermsModal: React.FC<PrivacyTermsModalProps> = ({
                 Third-Party Advertising Partners
               </h5>
               <p>
-                We work with monetization providers, including Monetag, to display advertising banners and native content breaks. These providers may use non-personalized identifiers to serve relevant advertising.
+                We work with authorized advertising networks to display relevant advertisements. These third-party partners may use cookies or non-personalized identifiers to deliver and measure ad performance.
               </p>
             </>
           )}
@@ -87,20 +87,16 @@ export const PrivacyTermsModal: React.FC<PrivacyTermsModalProps> = ({
           {type === 'ads' && (
             <>
               <h5 className="font-bold text-slate-900 dark:text-slate-100 text-sm">
-                Monetag Ad Network Integration Guidelines
+                Advertising Guidelines & Disclosures
               </h5>
               <p>
-                This platform is structured with clean, non-intrusive container slots adhering to IAB and Monetag publisher recommendations:
+                This platform is structured to ensure high readability while supporting content creators through ad monetization:
               </p>
               <ul className="list-disc pl-5 space-y-1 mt-2 text-slate-600 dark:text-slate-400">
-                <li>Header 728x90 Leaderboard / Mobile Banner container</li>
-                <li>In-Article native paragraph sponsored break</li>
-                <li>Footer 728x90 sticky anchor area</li>
-                <li>Full-screen Vignette / Interstitial transition trigger</li>
+                <li>Advertisements comply with standard digital publishing policies</li>
+                <li>Popunders and direct sponsorships trigger responsibly with frequency limits</li>
+                <li>Content reading areas remain uninterrupted for optimal user experience</li>
               </ul>
-              <p className="mt-3">
-                To connect your live Monetag scripts in Phase 2, simply insert your account Zone IDs in <code>src/services/adService.ts</code>.
-              </p>
             </>
           )}
         </div>

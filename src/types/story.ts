@@ -59,13 +59,3 @@ export interface PaginatedResponse<T> {
 export type ReadingTheme = 'light' | 'sepia' | 'dark';
 export type FontSize = 'sm' | 'md' | 'lg' | 'xl';
 export type FontFamily = 'serif' | 'sans';
-
-export interface MonetagAdConfig {
-  headerZoneId?: string;
-  inArticleZoneId?: string;
-  sidebarZoneId?: string;
-  footerZoneId?: string;
-  interstitialZoneId?: string;
-  enabled: boolean;
-  testMode: boolean;
-}

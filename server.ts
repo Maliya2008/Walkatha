@@ -327,7 +327,7 @@ app.get('/api/public/stories/:slug', (req: Request, res: Response) => {
   });
 });
 
-// Public: Get Monetag Advertisement Configuration
+// Public: Get Advertisement Configuration
 app.get('/api/public/ads/config', (_req: Request, res: Response) => {
   res.json({
     ...db.advertisements,

@@ -97,8 +97,11 @@ export class SEOService {
       this.setMeta('name', 'google-site-verification', verificationToken);
     }
 
-    // Monetag verification meta tag (guaranteed preservation)
-    this.setMeta('name', 'monetag', '1a2dd2951426e8a994727b6a854062c4');
+    // Clean up any legacy monetag meta tags if present
+    const legacyMonetag = document.querySelector('meta[name="monetag"]');
+    if (legacyMonetag) {
+      legacyMonetag.remove();
+    }
 
     // Google Analytics Injection (if provided and valid)
     if (settings?.googleAnalyticsId && /^G-[A-Z0-9]+$/i.test(settings.googleAnalyticsId)) {

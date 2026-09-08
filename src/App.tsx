@@ -4,6 +4,7 @@ import { useStory } from './hooks/useStory';
 import { useTheme } from './hooks/useTheme';
 import { Header } from './components/layout/Header';
 import { Footer } from './components/layout/Footer';
+import { FooterAdBanner } from './components/common/FooterAdBanner';
 import { StoryGallery } from './components/stories/StoryGallery';
 import { SitemapPage } from './components/sitemap/SitemapPage';
 import { SEOService } from './services/seoService';
@@ -334,6 +335,8 @@ export default function App() {
           />
         )}
       </main>
+
+      <FooterAdBanner />
 
       <Footer
         categories={categories}

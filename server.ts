@@ -684,7 +684,9 @@ app.get(['/sitemap', '/sitemap.xml', '/sitemap/'], async (req: Request, res: Res
   xml += `</urlset>`;
 
   res.header('Content-Type', 'application/xml; charset=utf-8');
-  res.send(xml);
+  res.header('Cache-Control', 'public, max-age=3600, s-maxage=3600');
+  res.header('X-Robots-Tag', 'all');
+  res.status(200).send(xml);
 });
 
 // --- ROBOTS.TXT ---
@@ -703,7 +705,9 @@ Sitemap: ${baseUrl}/sitemap.xml
 `;
 
   res.header('Content-Type', 'text/plain; charset=utf-8');
-  res.send(robots);
+  res.header('Cache-Control', 'public, max-age=3600, s-maxage=3600');
+  res.header('X-Robots-Tag', 'all');
+  res.status(200).send(robots);
 });
 
 // --- AUTHENTICATION APIS ---

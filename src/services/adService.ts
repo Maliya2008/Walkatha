@@ -269,7 +269,7 @@ class AdService {
   }
 
   /**
-   * Applies any global Monetag script tags if present and enabled
+   * Applies any global Adsterra/Monetag script tags if present and enabled
    */
   public applyGlobalScript(): void {
     if (typeof document === 'undefined') return;
@@ -285,30 +285,38 @@ class AdService {
 
     const code = this.config.globalAdCode.trim();
 
-    if (code.includes('<script')) {
+    if (code.includes('<script') || code.includes('atOptions') || code.includes('javascript')) {
       try {
         const container = document.createElement('div');
         container.id = SCRIPT_ELEMENT_ID;
         container.style.display = 'none';
 
-        const parser = new DOMParser();
-        const parsedDoc = parser.parseFromString(code, 'text/html');
-        const scriptTags = parsedDoc.querySelectorAll('script');
+        if (code.includes('<script')) {
+          const parser = new DOMParser();
+          const parsedDoc = parser.parseFromString(code, 'text/html');
+          const scriptTags = parsedDoc.querySelectorAll('script');
 
-        scriptTags.forEach((oldScript) => {
-          const newScript = document.createElement('script');
-          Array.from(oldScript.attributes).forEach((attr) => {
-            newScript.setAttribute(attr.name, attr.value);
+          scriptTags.forEach((oldScript) => {
+            const newScript = document.createElement('script');
+            Array.from(oldScript.attributes).forEach((attr) => {
+              newScript.setAttribute(attr.name, attr.value);
+            });
+            if (oldScript.innerHTML) {
+              newScript.innerHTML = oldScript.innerHTML;
+            }
+            container.appendChild(newScript);
           });
-          if (oldScript.innerHTML) {
-            newScript.innerHTML = oldScript.innerHTML;
-          }
+        } else {
+          // If raw JS snippet (e.g. Adsterra popunder object or inline script code)
+          const newScript = document.createElement('script');
+          newScript.type = 'text/javascript';
+          newScript.text = code;
           container.appendChild(newScript);
-        });
+        }
 
         document.head.appendChild(container);
       } catch (err) {
-        console.error('Failed to inject Monetag script code:', err);
+        console.error('Failed to inject Adsterra/Monetag script code:', err);
       }
     }
   }

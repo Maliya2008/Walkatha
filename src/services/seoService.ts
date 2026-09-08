@@ -81,9 +81,21 @@ export class SEOService {
     linkCanonical.href = url;
 
     // Google Search Console verification meta tag (guaranteed preservation)
-    const verificationToken =
-      settings?.searchConsoleVerification || 'aoXN34vuFG8HPn2ngc_Pmqky8knpnPtglDWTX5qFUd4';
-    this.setMeta('name', 'google-site-verification', verificationToken);
+    const rawVerification =
+      settings?.searchConsoleVerification !== undefined && settings.searchConsoleVerification !== null
+        ? settings.searchConsoleVerification
+        : 'aoXN34vuFG8HPn2ngc_Pmqky8knpnPtglDWTX5qFUd4';
+    
+    if (rawVerification && rawVerification.trim()) {
+      let verificationToken = rawVerification.trim();
+      if (verificationToken.includes('<meta')) {
+        const match = verificationToken.match(/content=["']([^"']+)["']/i);
+        if (match && match[1]) {
+          verificationToken = match[1];
+        }
+      }
+      this.setMeta('name', 'google-site-verification', verificationToken);
+    }
 
     // Monetag verification meta tag (guaranteed preservation)
     this.setMeta('name', 'monetag', '1a2dd2951426e8a994727b6a854062c4');

@@ -78,21 +78,32 @@ export const AdminAdsManager: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-3">
             <Megaphone className="w-6 h-6 text-indigo-400" />
-            Global Monetag Advertisement System
+            Adsterra & Monetag Advertisement System
           </h1>
           <p className="text-sm text-slate-400 mt-1">
-            Configure the single global advertisement code and session redirection limit for all stories across the website.
+            Configure global Adsterra/Monetag Popunder, Banners, Social Bar scripts, or Direct Links for all stories across Walkathawa.
           </p>
         </div>
-        <a
-          href="https://monetag.com"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-2 text-xs text-indigo-400 hover:text-indigo-300 font-medium bg-indigo-500/10 px-4 py-2 rounded-xl transition-colors"
-        >
-          <ExternalLink className="w-4 h-4" />
-          Monetag Dashboard
-        </a>
+        <div className="flex items-center gap-2">
+          <a
+            href="https://adsterra.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 text-xs text-amber-400 hover:text-amber-300 font-medium bg-amber-500/10 px-3.5 py-2 rounded-xl transition-colors"
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+            Adsterra
+          </a>
+          <a
+            href="https://monetag.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 font-medium bg-indigo-500/10 px-3.5 py-2 rounded-xl transition-colors"
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+            Monetag
+          </a>
+        </div>
       </div>
 
       {feedback && (
@@ -158,21 +169,21 @@ export const AdminAdsManager: React.FC = () => {
             <div className="flex items-center justify-between mb-2">
               <label className="block text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
                 <Code2 className="w-4 h-4 text-indigo-400" />
-                <span>Global Advertisement Code / Direct Link</span>
+                <span>Adsterra / Monetag Snippet Code or Direct Link</span>
               </label>
               <span className="text-[11px] text-slate-400">
-                Monetag Direct Link URL or Script Tag
+                Adsterra Script / Popunder / Direct Link
               </span>
             </div>
             <textarea
               rows={6}
               value={adsSettings.globalAdCode}
               onChange={(e) => setAdsSettings({ ...adsSettings, globalAdCode: e.target.value })}
-              placeholder="Paste your Monetag direct link (e.g. https://...) or JavaScript snippet code here..."
+              placeholder="Paste your Adsterra or Monetag script snippet (e.g. <script src='...'></script> or direct link https://...) here..."
               className="w-full px-4 py-3 bg-slate-950 border border-slate-700 rounded-2xl text-xs text-amber-300 placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono leading-relaxed resize-y"
             />
             <p className="text-[11px] text-slate-400 mt-2">
-              This code will automatically be executed for all stories and pages across the website when advertisements are turned ON.
+              This snippet or link will automatically be executed for all stories and pages across the website when advertisements are turned ON.
             </p>
           </div>
 

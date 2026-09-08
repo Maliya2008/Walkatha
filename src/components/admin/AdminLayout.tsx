@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { User } from '../../types/admin';
 
-export type AdminTab = 'dashboard' | 'stories' | 'new-story' | 'categories' | 'ads' | 'settings';
+export type AdminTab = 'dashboard' | 'stories' | 'new-story' | 'categories' | 'settings';
 
 interface AdminLayoutProps {
   user: User;
@@ -41,7 +41,6 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
     { id: 'stories', label: 'Stories', icon: BookOpen },
     { id: 'new-story', label: 'Add Story', icon: PlusCircle },
     { id: 'categories', label: 'Categories', icon: Tag },
-    { id: 'ads', label: 'Advertisement Settings', icon: Megaphone },
     { id: 'settings', label: 'Website Settings', icon: Settings },
   ];
 

@@ -4,7 +4,7 @@ import { adminService } from '../../services/adminService';
 import { DashboardStats } from '../../types/admin';
 
 interface AdminDashboardProps {
-  onNavigate: (tab: 'stories' | 'new-story' | 'ads' | 'settings') => void;
+  onNavigate: (tab: 'stories' | 'new-story' | 'settings') => void;
   onEditStory: (storyId: string) => void;
   onViewPublicStory: (slug: string) => void;
 }
@@ -73,7 +73,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <Sparkles className="w-5 h-5 text-indigo-400" />
           </h1>
           <p className="text-xs text-slate-400 mt-1">
-            Real-time analytics, public story visibility, and Monetag ad revenue status.
+            Real-time analytics, category counts, and public story readership status.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -87,8 +87,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       </div>
 
-      {/* 6 Core Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+      {/* 5 Core Metric Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         {/* Total Stories */}
         <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800/80 shadow-lg relative overflow-hidden group">
           <div className="flex items-center justify-between">
@@ -164,30 +164,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <span className="text-[10px] text-amber-400">Unpublished</span>
           </div>
           <div className="mt-2 text-[11px] text-slate-500">Work in progress</div>
-        </div>
-
-        {/* Monetag Ad Status */}
-        <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800/80 shadow-lg relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Monetag Ads</span>
-            <div className="p-2 rounded-xl bg-violet-500/10 text-violet-400">
-              <Megaphone className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-center gap-2">
-            <span
-              className={`px-2 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider ${
-                stats.adsEnabled
-                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                  : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
-              }`}
-            >
-              {stats.adsEnabled ? 'ACTIVE (ON)' : 'DISABLED (OFF)'}
-            </span>
-          </div>
-          <div className="mt-2 text-[11px] text-slate-400">
-            {stats.redirectAmount || stats.maxTriggers || 1} redirect{(stats.redirectAmount || stats.maxTriggers || 1) > 1 ? 's' : ''}/post &bull; {stats.hasGlobalAdCode || stats.hasGlobalDirectLink ? 'Code Set' : 'No Code'}
-          </div>
         </div>
       </div>
 

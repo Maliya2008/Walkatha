@@ -8,7 +8,6 @@ import { AdminDashboard } from './AdminDashboard';
 import { AdminStoriesList } from './AdminStoriesList';
 import { AdminStoryForm } from './AdminStoryForm';
 import { AdminCategories } from './AdminCategories';
-import { AdminAdsManager } from './AdminAdsManager';
 import { AdminSettings } from './AdminSettings';
 import { adminService } from '../../services/adminService';
 
@@ -158,8 +157,6 @@ export const AdminRoot: React.FC<AdminRootProps> = ({
       )}
 
       {activeTab === 'categories' && <AdminCategories />}
-
-      {activeTab === 'ads' && <AdminAdsManager />}
 
       {activeTab === 'settings' && <AdminSettings />}
     </AdminLayout>

@@ -97,6 +97,11 @@ export default function App() {
       return;
     }
 
+    // Normalize legacy paths to canonical URLs
+    if (path === '/stories-directory' || path === '/sitemap-index' || path === '/sitemap.html') {
+      window.history.replaceState(null, '', '/directory');
+    }
+
     // 2. Sitemap / Directory Check
     const isSitemap =
       path === '/directory' ||
@@ -110,6 +115,7 @@ export default function App() {
     setIsSitemapView(isSitemap);
 
     if (isSitemap) {
+      if (hash) window.history.replaceState(null, '', '/directory');
       setCurrentSlug(null);
       return;
     }
@@ -131,6 +137,9 @@ export default function App() {
         } catch {
           storySlug = hashStoryMatch[1];
         }
+        if (storySlug) {
+          window.history.replaceState(null, '', `/story/${encodeURIComponent(storySlug)}`);
+        }
       }
     }
     setCurrentSlug(storySlug);
@@ -151,6 +160,9 @@ export default function App() {
           categorySlug = decodeURIComponent(hashCategoryMatch[1]);
         } catch {
           categorySlug = hashCategoryMatch[1];
+        }
+        if (categorySlug && categorySlug !== 'all') {
+          window.history.replaceState(null, '', `/category/${encodeURIComponent(categorySlug)}`);
         }
       } else if (searchParams.get('category')) {
         const queryCat = searchParams.get('category') || '';
@@ -217,9 +229,13 @@ export default function App() {
     } else if (!currentSlug) {
       const catObj = categories.find((c) => c.slug === params.category);
       const catName = catObj ? catObj.name : undefined;
-      SEOService.updateHead(SEOService.generateHomeSEO(params.category, catName, params.search), siteSettings);
+      const seoPayload = SEOService.generateHomeSEO(params.category, catName, params.search);
+      if (params.page && params.page > 1) {
+        seoPayload.noIndex = true;
+      }
+      SEOService.updateHead(seoPayload, siteSettings);
     }
-  }, [isAdminView, isSitemapView, currentSlug, activeStory, params.category, params.search, categories, siteSettings]);
+  }, [isAdminView, isSitemapView, currentSlug, activeStory, params.category, params.search, params.page, categories, siteSettings]);
 
   const handleReadStory = useCallback((slug: string) => {
     setIsSitemapView(false);

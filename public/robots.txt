@@ -1,9 +1,10 @@
 # Robots.txt for Walkathawa (වල් කතාව)
 User-agent: *
 Allow: /
+
 Disallow: /admin
 Disallow: /api/admin
 Disallow: /api/auth
 
-# Sitemap Endpoints
+# Official Canonical Sitemap
 Sitemap: https://www.walkathawa.site/sitemap.xml

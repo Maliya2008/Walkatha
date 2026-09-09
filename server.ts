@@ -588,24 +588,30 @@ function isMockStoryRecord(s: { id?: string; slug?: string; title?: string }): b
 }
 
 // Helper to gather all published stories (local db + Firestore if reachable)
-async function getSitemapStoriesList() {
-  const stories = [...(db.stories || []).filter((s) => s.published && !isMockStoryRecord(s))];
+async function getSitemapStoriesList(): Promise<Story[]> {
+  const storiesMap = new Map<string, Story>();
+
+  // 1. Seed from local database.json (if available)
+  for (const s of db.stories || []) {
+    if (s && s.slug && s.published !== false && !isMockStoryRecord(s)) {
+      storiesMap.set(s.slug, s);
+    }
+  }
+
+  // 2. Fetch live data from Firestore as source of truth
   try {
     const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
     if (fs.existsSync(configPath)) {
       const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-      if (config?.projectId && config?.firestoreDatabaseId) {
+      if (config?.projectId && config?.firestoreDatabaseId && config?.apiKey) {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2500);
-        const resp = await fetch(
-          `https://firestore.googleapis.com/v1/projects/${config.projectId}/databases/${config.firestoreDatabaseId}/documents/stories?pageSize=300`,
-          { signal: controller.signal }
-        );
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
+        const url = `https://firestore.googleapis.com/v1/projects/${config.projectId}/databases/${config.firestoreDatabaseId}/documents/stories?key=${config.apiKey}&pageSize=300`;
+        const resp = await fetch(url, { signal: controller.signal });
         clearTimeout(timeoutId);
         if (resp.ok) {
           const data = (await resp.json()) as any;
           if (data.documents && Array.isArray(data.documents)) {
-            const seenSlugs = new Set(stories.map((s) => s.slug));
             for (const doc of data.documents) {
               const fields = doc.fields || {};
               const slug = fields.slug?.stringValue;
@@ -615,87 +621,147 @@ async function getSitemapStoriesList() {
                 continue;
               }
               const published = fields.published?.booleanValue !== false;
+              if (!slug || !published) continue;
+
               const coverImage = fields.coverImage?.stringValue || '';
               const updatedDate =
                 fields.updatedDate?.stringValue ||
                 fields.uploadDate?.stringValue ||
-                fields.uploadedDate?.stringValue;
-              if (slug && published && !seenSlugs.has(slug)) {
-                stories.push({
-                  id,
-                  slug,
-                  title,
-                  published,
-                  coverImage,
-                  updatedDate,
-                  category: fields.category?.stringValue || 'love',
-                  uploadDate: updatedDate,
-                  uploadedDate: updatedDate,
-                  author: { name: fields.authorName?.stringValue || 'Walkathawa' },
-                  views: 0,
-                  likes: 0,
-                  readingTime: 5,
-                  tags: [],
-                  body: '',
-                  content: '',
-                } as any);
-                seenSlugs.add(slug);
-              }
+                fields.uploadedDate?.stringValue ||
+                doc.updateTime ||
+                doc.createTime;
+
+              const storyObj: Story = {
+                id,
+                slug,
+                title,
+                published: true,
+                coverImage,
+                updatedDate,
+                category: fields.category?.stringValue || 'wife',
+                categoryName: fields.categoryName?.stringValue || fields.category?.stringValue || 'Wife',
+                uploadDate: updatedDate,
+                uploadedDate: updatedDate,
+                description: fields.description?.stringValue || '',
+                shortDescription: fields.shortDescription?.stringValue || fields.description?.stringValue || '',
+                fullContent: fields.fullContent?.stringValue || fields.content?.stringValue || '',
+                content: fields.fullContent?.stringValue || fields.content?.stringValue || '',
+                body: fields.fullContent?.stringValue || fields.content?.stringValue || '',
+                author: { name: fields.authorName?.stringValue || 'Walkathawa' },
+                views: Number(fields.views?.integerValue || 0),
+                likes: Number(fields.likes?.integerValue || 0),
+                readingTime: Number(fields.readingTime?.integerValue || 5),
+                tags: [],
+              } as any;
+
+              storiesMap.set(slug, storyObj);
             }
           }
         }
       }
     }
   } catch {
-    // Non-fatal, fall back seamlessly to db.stories
+    // Non-fatal, fall back seamlessly to local db
   }
-  return stories.filter((s) => !isMockStoryRecord(s));
+
+  return Array.from(storiesMap.values()).filter((s) => !isMockStoryRecord(s));
 }
 
-// --- DYNAMIC SEO SITEMAP (/sitemap and /sitemap.xml) ---
-app.get(['/sitemap', '/sitemap.xml', '/sitemap/'], async (req: Request, res: Response) => {
+// 301 redirect legacy /sitemap and /sitemap/ to canonical /sitemap.xml
+app.get(['/sitemap', '/sitemap/'], (_req: Request, res: Response) => {
+  return res.redirect(301, '/sitemap.xml');
+});
+
+// --- CANONICAL XML SITEMAP (/sitemap.xml) ---
+app.get('/sitemap.xml', async (req: Request, res: Response) => {
   const baseUrl = 'https://www.walkathawa.site';
   const publishedStories = await getSitemapStoriesList();
-  const nowISO = new Date().toISOString();
+
+  // Find latest story updated date for site-level timestamps
+  let latestStoryDate: string | null = null;
+  for (const s of publishedStories) {
+    const rawDate = s.updatedDate || s.uploadDate || s.uploadedDate;
+    if (rawDate) {
+      try {
+        const d = new Date(rawDate);
+        if (!isNaN(d.getTime())) {
+          const iso = d.toISOString();
+          if (!latestStoryDate || d > new Date(latestStoryDate)) {
+            latestStoryDate = iso;
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  const defaultStableDate = latestStoryDate || '2026-09-08T12:00:00.000Z';
 
   let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
   xml += `<?xml-stylesheet type="text/xsl" href="/sitemap.xsl"?>\n`;
-  xml += `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:news="http://www.google.com/schemas/sitemap-news/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n`;
+  xml += `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n`;
 
   // 1. Homepage (Root canonical URL)
   xml += `  <url>\n`;
   xml += `    <loc>${baseUrl}/</loc>\n`;
-  xml += `    <lastmod>${nowISO}</lastmod>\n`;
+  xml += `    <lastmod>${defaultStableDate}</lastmod>\n`;
   xml += `    <changefreq>daily</changefreq>\n`;
   xml += `    <priority>1.0</priority>\n`;
   xml += `  </url>\n`;
 
-  // 2. Directory Page
+  // 2. Directory Page (Canonical story directory URL)
   xml += `  <url>\n`;
   xml += `    <loc>${baseUrl}/directory</loc>\n`;
-  xml += `    <lastmod>${nowISO}</lastmod>\n`;
+  xml += `    <lastmod>${defaultStableDate}</lastmod>\n`;
   xml += `    <changefreq>daily</changefreq>\n`;
   xml += `    <priority>0.8</priority>\n`;
   xml += `  </url>\n`;
 
-  // 3. Category Pages (Canonical clean URLs only, no query parameters)
+  // 3. Category Pages (Canonical clean URLs only: /category/{slug})
   INITIAL_CATEGORIES.filter((c) => c.slug !== 'all').forEach((cat) => {
+    let catLatestDate: string | null = null;
+    for (const s of publishedStories) {
+      if (s.category === cat.slug) {
+        const rawDate = s.updatedDate || s.uploadDate || s.uploadedDate;
+        if (rawDate) {
+          try {
+            const d = new Date(rawDate);
+            if (!isNaN(d.getTime())) {
+              const iso = d.toISOString();
+              if (!catLatestDate || d > new Date(catLatestDate)) {
+                catLatestDate = iso;
+              }
+            }
+          } catch {
+            // ignore
+          }
+        }
+      }
+    }
+    const catLastMod = catLatestDate || defaultStableDate;
+
     xml += `  <url>\n`;
     xml += `    <loc>${baseUrl}/category/${cat.slug}</loc>\n`;
-    xml += `    <lastmod>${nowISO}</lastmod>\n`;
+    xml += `    <lastmod>${catLastMod}</lastmod>\n`;
     xml += `    <changefreq>weekly</changefreq>\n`;
     xml += `    <priority>0.8</priority>\n`;
     xml += `  </url>\n`;
   });
 
-  // 4. Published Stories (Canonical clean URLs)
+  // 4. Published Stories (Canonical clean URLs: /story/{slug})
   publishedStories.forEach((story) => {
-    const rawModTime = story.updatedDate || story.uploadDate || story.uploadedDate || nowISO;
-    let validModTime = nowISO;
-    try {
-      validModTime = new Date(rawModTime).toISOString();
-    } catch {
-      validModTime = nowISO;
+    const rawModTime = story.updatedDate || story.uploadDate || story.uploadedDate;
+    let validModTime = defaultStableDate;
+    if (rawModTime) {
+      try {
+        const d = new Date(rawModTime);
+        if (!isNaN(d.getTime())) {
+          validModTime = d.toISOString();
+        }
+      } catch {
+        validModTime = defaultStableDate;
+      }
     }
 
     const storyUrl = `${baseUrl}/story/${story.slug}`;
@@ -711,8 +777,14 @@ app.get(['/sitemap', '/sitemap.xml', '/sitemap/'], async (req: Request, res: Res
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&apos;');
+      const sanitizedCover = story.coverImage
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
       xml += `    <image:image>\n`;
-      xml += `      <image:loc>${story.coverImage.replace(/&/g, '&amp;')}</image:loc>\n`;
+      xml += `      <image:loc>${sanitizedCover}</image:loc>\n`;
       xml += `      <image:title>${sanitizedTitle}</image:title>\n`;
       xml += `    </image:image>\n`;
     }
@@ -722,8 +794,8 @@ app.get(['/sitemap', '/sitemap.xml', '/sitemap/'], async (req: Request, res: Res
   xml += `</urlset>`;
 
   res.header('Content-Type', 'application/xml; charset=utf-8');
-  res.header('Cache-Control', 'public, max-age=3600, s-maxage=3600');
-  res.header('X-Robots-Tag', 'all');
+  res.header('Cache-Control', 'public, max-age=1800, s-maxage=3600');
+  res.header('X-Robots-Tag', getRobotsTagForRequest(req));
   res.status(200).send(xml);
 });
 
@@ -1239,10 +1311,16 @@ function getRobotsTagForRequest(req: Request): string {
   const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0';
   const isCanonicalProd = host === 'www.walkathawa.site';
 
-  if (isCanonicalProd || isLocal) {
-    return 'all';
+  if (!isCanonicalProd && !isLocal) {
+    return 'noindex, nofollow, noarchive';
   }
-  return 'noindex, nofollow, noarchive';
+
+  // Search result pages or query search parameters must be noindex, follow
+  if (req.path === '/search' || req.query.search || req.query.q) {
+    return 'noindex, follow';
+  }
+
+  return 'all';
 }
 
 function escapeHtml(str: string): string {
@@ -1254,6 +1332,207 @@ function escapeHtml(str: string): string {
     .replace(/'/g, '&#39;');
 }
 
+const VALID_CATEGORY_SLUGS = new Set([
+  'wife',
+  'school',
+  'akka-malli',
+  'romantic',
+  'love',
+  'short',
+  'family',
+  'fantasy',
+  'trending',
+]);
+
+function isValidCategorySlug(slug: string): boolean {
+  if (!slug || slug === 'all') return false;
+  let decoded = '';
+  try {
+    decoded = decodeURIComponent(slug).toLowerCase();
+  } catch {
+    decoded = slug.toLowerCase();
+  }
+  if (VALID_CATEGORY_SLUGS.has(decoded)) return true;
+  for (const cat of INITIAL_CATEGORIES) {
+    if (cat.slug && cat.slug.toLowerCase() === decoded && cat.slug !== 'all') {
+      return true;
+    }
+  }
+  if (db.categories && Array.isArray(db.categories)) {
+    for (const cat of db.categories) {
+      if (cat.slug && cat.slug.toLowerCase() === decoded && cat.slug !== 'all') {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+async function findPublishedStory(slug: string): Promise<Story | null> {
+  if (!slug) return null;
+  let normalizedSlug = '';
+  try {
+    normalizedSlug = decodeURIComponent(slug).trim().toLowerCase();
+  } catch {
+    normalizedSlug = slug.trim().toLowerCase();
+  }
+
+  // 1. Check in-memory / local db
+  const localMatch = (db.stories || []).find((s) => {
+    if (!s || s.published === false || isMockStoryRecord(s)) return false;
+    const sSlug = String(s.slug || '').trim().toLowerCase();
+    const sId = String(s.id || '').trim().toLowerCase();
+    return sSlug === normalizedSlug || sId === normalizedSlug;
+  });
+
+  if (localMatch) {
+    return localMatch;
+  }
+
+  // 2. Fetch live from Firestore if not in local cache
+  try {
+    const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+    if (fs.existsSync(configPath)) {
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      if (config?.projectId && config?.firestoreDatabaseId && config?.apiKey) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3500);
+        const url = `https://firestore.googleapis.com/v1/projects/${config.projectId}/databases/${config.firestoreDatabaseId}/documents/stories?key=${config.apiKey}&pageSize=200`;
+        const resp = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeoutId);
+        if (resp.ok) {
+          const data = (await resp.json()) as any;
+          if (data.documents && Array.isArray(data.documents)) {
+            for (const doc of data.documents) {
+              const fields = doc.fields || {};
+              const docSlug = fields.slug?.stringValue || '';
+              const docTitle = fields.title?.stringValue || '';
+              const docId = doc.name.split('/').pop() || docSlug;
+              const isPublished = fields.published?.booleanValue !== false;
+
+              if (isMockStoryRecord({ id: docId, slug: docSlug, title: docTitle })) continue;
+              if (!isPublished) continue;
+
+              const docSlugNorm = docSlug.trim().toLowerCase();
+              const docIdNorm = docId.trim().toLowerCase();
+
+              if (docSlugNorm === normalizedSlug || docIdNorm === normalizedSlug) {
+                const rawDate =
+                  fields.updatedDate?.stringValue ||
+                  fields.uploadDate?.stringValue ||
+                  fields.uploadedDate?.stringValue ||
+                  doc.updateTime ||
+                  doc.createTime;
+
+                const loadedStory: Story = {
+                  id: docId,
+                  slug: docSlug || docId,
+                  title: docTitle,
+                  description: fields.description?.stringValue || '',
+                  shortDescription: fields.shortDescription?.stringValue || fields.description?.stringValue || '',
+                  fullContent: fields.fullContent?.stringValue || fields.content?.stringValue || '',
+                  content: fields.fullContent?.stringValue || fields.content?.stringValue || '',
+                  body: fields.fullContent?.stringValue || fields.content?.stringValue || '',
+                  category: fields.category?.stringValue || 'wife',
+                  categoryName: fields.categoryName?.stringValue || fields.category?.stringValue || 'Wife',
+                  coverImage: fields.coverImage?.stringValue || '',
+                  author: {
+                    name: fields.authorName?.stringValue || 'Walkathawa',
+                  },
+                  uploadDate: rawDate,
+                  uploadedDate: rawDate,
+                  updatedDate: rawDate,
+                  views: Number(fields.views?.integerValue || 0),
+                  likes: Number(fields.likes?.integerValue || 0),
+                  readingTime: Number(fields.readingTime?.integerValue || 5),
+                  published: true,
+                  tags: [],
+                } as any;
+
+                // Cache in memory
+                const existingIdx = db.stories.findIndex((s) => s.slug === loadedStory.slug);
+                if (existingIdx >= 0) {
+                  db.stories[existingIdx] = loadedStory;
+                } else {
+                  db.stories.push(loadedStory);
+                }
+
+                return loadedStory;
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[findPublishedStory] Firestore lookup warning:', err);
+  }
+
+  return null;
+}
+
+function render404Html(rawHtml: string, req: Request, message?: string): string {
+  const title = 'පිටුව සොයාගත නොහැක (404 Not Found) | Walkathawa (වල් කතාව)';
+  const description = 'ඔබ සොයන පිටුව හෝ කතාව සොයා ගැනීමට නොහැකි විය. කරුණාකර මුල් පිටුවෙන් හෝ කතා නාමාවලියෙන් වෙනත් කතාවක් තෝරාගන්න.';
+
+  let html = rawHtml;
+
+  // 1. Ensure <html lang="si">
+  if (/<html[^>]*>/i.test(html)) {
+    html = html.replace(/<html[^>]*>/i, '<html lang="si">');
+  }
+
+  // 2. Set 404 Title
+  html = html.replace(/<title>.*?<\/title>/i, `<title>${escapeHtml(title)}</title>`);
+
+  // 3. Remove any canonical tag on 404
+  html = html.replace(/<link\s+[^>]*rel=["']canonical["'][^>]*\/?>/gi, '');
+
+  // 4. Force noindex, nofollow robots meta
+  const robotsTag = `<meta name="robots" content="noindex, nofollow, noarchive" />`;
+  if (/<meta\s+[^>]*name=["']robots["'][^>]*\/?>/i.test(html)) {
+    html = html.replace(/<meta\s+[^>]*name=["']robots["'][^>]*\/?>/i, robotsTag);
+  } else {
+    html = html.replace('</head>', `  ${robotsTag}\n</head>`);
+  }
+
+  // 5. Remove any structured data on 404
+  html = html.replace(/<script\s+[^>]*type=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi, '');
+
+  // 6. User-friendly 404 content
+  const notFoundContent = `
+  <div style="min-height: 80vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem; text-align: center; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #cbd5e1; background-color: #020617;">
+    <div style="max-width: 620px; background-color: #0f172a; border: 1px solid #1e293b; border-radius: 1rem; padding: 2.5rem; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
+      <h1 style="font-size: 2.75rem; font-weight: 800; color: #f87171; margin-bottom: 0.75rem;">404</h1>
+      <h2 style="font-size: 1.5rem; font-weight: 700; color: #ffffff; margin-bottom: 1rem;">කතාව හෝ පිටුව සොයාගත නොහැක</h2>
+      <p style="font-size: 1.05rem; color: #94a3b8; line-height: 1.6; margin-bottom: 1.75rem;">
+        ${escapeHtml(message || description)}
+      </p>
+      <div style="display: flex; flex-wrap: wrap; gap: 0.75rem; justify-content: center; margin-bottom: 2rem;">
+        <a href="/" style="display: inline-block; padding: 0.75rem 1.5rem; background-color: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 0.5rem; font-weight: 600;">මුල් පිටුවට (Home)</a>
+        <a href="/directory" style="display: inline-block; padding: 0.75rem 1.5rem; background-color: #1e293b; color: #e2e8f0; text-decoration: none; border-radius: 0.5rem; font-weight: 600; border: 1px solid #334155;">සියලු කතා නාමාවලිය (Directory)</a>
+      </div>
+      <div style="border-top: 1px solid #1e293b; padding-top: 1.5rem;">
+        <p style="font-size: 0.875rem; color: #64748b; margin-bottom: 0.75rem;">ප්‍රධාන වර්ගීකරණ (Categories):</p>
+        <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center;">
+          <a href="/category/wife" style="color: #818cf8; text-decoration: none; font-size: 0.875rem; padding: 0.35rem 0.85rem; background-color: #1e1b4b; border-radius: 0.375rem;">වයිෆ් (Wife)</a>
+          <a href="/category/school" style="color: #818cf8; text-decoration: none; font-size: 0.875rem; padding: 0.35rem 0.85rem; background-color: #1e1b4b; border-radius: 0.375rem;">පාසල් (School)</a>
+          <a href="/category/akka-malli" style="color: #818cf8; text-decoration: none; font-size: 0.875rem; padding: 0.35rem 0.85rem; background-color: #1e1b4b; border-radius: 0.375rem;">අක්කා-මල්ලි</a>
+          <a href="/category/romantic" style="color: #818cf8; text-decoration: none; font-size: 0.875rem; padding: 0.35rem 0.85rem; background-color: #1e1b4b; border-radius: 0.375rem;">ආදර කතා (Romantic)</a>
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+  if (html.includes('<div id="root"></div>')) {
+    html = html.replace('<div id="root"></div>', `<div id="root">${notFoundContent}</div>`);
+  } else {
+    html = html.replace('</body>', `${notFoundContent}\n</body>`);
+  }
+
+  return html;
+}
+
 interface InjectSeoOptions {
   title: string;
   description: string;
@@ -1261,35 +1540,45 @@ interface InjectSeoOptions {
   ogType: 'website' | 'article';
   ogImage?: string;
   schema: object;
+  ssrContent?: string;
   noscriptContent?: string;
   req?: Request;
+  noIndex?: boolean;
 }
 
 function applyPageSeo(rawHtml: string, options: InjectSeoOptions): string {
   let html = rawHtml;
 
-  // 1. Replace <title>
+  // 1. Ensure <html lang="si">
+  if (/<html[^>]*>/i.test(html)) {
+    html = html.replace(/<html[^>]*>/i, '<html lang="si">');
+  }
+
+  // 2. Replace <title>
   html = html.replace(/<title>.*?<\/title>/i, `<title>${escapeHtml(options.title)}</title>`);
 
-  // 2. Replace or insert meta description
+  // 3. Replace or insert meta description
   if (/<meta\s+[^>]*name=["']description["'][^>]*\/?>/i.test(html)) {
     html = html.replace(/<meta\s+[^>]*name=["']description["'][^>]*\/?>/i, `<meta name="description" content="${escapeHtml(options.description)}" />`);
   } else {
     html = html.replace('</head>', `  <meta name="description" content="${escapeHtml(options.description)}" />\n</head>`);
   }
 
-  // 3. Replace or insert canonical link
+  // 4. Replace or insert canonical link
   if (/<link\s+[^>]*rel=["']canonical["'][^>]*\/?>/i.test(html)) {
     html = html.replace(/<link\s+[^>]*rel=["']canonical["'][^>]*\/?>/i, `<link rel="canonical" href="${options.canonicalUrl}" />`);
   } else {
     html = html.replace('</head>', `  <link rel="canonical" href="${options.canonicalUrl}" />\n</head>`);
   }
 
-  // 4. Ensure robots meta: index on canonical www.walkathawa.site, noindex on preview/staging domains
-  const isProd = options.req ? (getRobotsTagForRequest(options.req) === 'all') : true;
-  const robotsTag = isProd
-    ? `<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />`
-    : `<meta name="robots" content="noindex, nofollow, noarchive" />`;
+  // 5. Ensure robots meta:
+  const robotsSetting = options.noIndex ? 'noindex, follow' : (options.req ? getRobotsTagForRequest(options.req) : 'all');
+  let robotsTag = `<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />`;
+  if (robotsSetting === 'noindex, follow') {
+    robotsTag = `<meta name="robots" content="noindex, follow" />`;
+  } else if (robotsSetting !== 'all') {
+    robotsTag = `<meta name="robots" content="noindex, nofollow, noarchive" />`;
+  }
 
   if (/<meta\s+[^>]*name=["']robots["'][^>]*\/?>/i.test(html)) {
     html = html.replace(/<meta\s+[^>]*name=["']robots["'][^>]*\/?>/i, robotsTag);
@@ -1297,7 +1586,7 @@ function applyPageSeo(rawHtml: string, options: InjectSeoOptions): string {
     html = html.replace('</head>', `  ${robotsTag}\n</head>`);
   }
 
-  // 5. Replace or insert Open Graph tags
+  // 6. Replace or insert Open Graph tags
   const defaultImage = 'https://www.walkathawa.site/icon.png';
   const ogTags: Record<string, string> = {
     'og:title': options.title,
@@ -1319,7 +1608,7 @@ function applyPageSeo(rawHtml: string, options: InjectSeoOptions): string {
     }
   }
 
-  // 6. Replace or insert Twitter tags
+  // 7. Replace or insert Twitter tags
   const twitterDesc = options.description.length > 160 ? `${options.description.slice(0, 157)}...` : options.description;
   const twitterTags: Record<string, string> = {
     'twitter:card': 'summary_large_image',
@@ -1338,14 +1627,21 @@ function applyPageSeo(rawHtml: string, options: InjectSeoOptions): string {
     }
   }
 
-  // 7. Remove ANY existing application/ld+json scripts to guarantee EXACTLY ONE clean schema
+  // 8. Remove ANY existing application/ld+json scripts to guarantee EXACTLY ONE clean schema
   html = html.replace(/<script\s+[^>]*type=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi, '');
 
-  // 8. Inject single clean schema before </head>
+  // 9. Inject single clean schema before </head>
   const scriptTag = `  <script type="application/ld+json" id="structured-data">\n${JSON.stringify(options.schema, null, 2)}\n  </script>\n`;
   html = html.replace('</head>', `${scriptTag}</head>`);
 
-  // 9. Remove any old injected non-font noscripts
+  // 10. SSR Content Injection into <div id="root">
+  if (options.ssrContent) {
+    if (html.includes('<div id="root"></div>')) {
+      html = html.replace('<div id="root"></div>', `<div id="root">${options.ssrContent}</div>`);
+    }
+  }
+
+  // 11. Remove any old injected non-font noscripts and inject noscript fallback
   html = html.replace(/<noscript>(?![\s\S]*?fonts\.googleapis\.com)[\s\S]*?<\/noscript>/gi, '');
 
   if (options.noscriptContent) {
@@ -1356,8 +1652,14 @@ function applyPageSeo(rawHtml: string, options: InjectSeoOptions): string {
 }
 
 function injectHomeSeo(rawHtml: string, req?: Request): string {
-  const title = 'Walkathawa (වල් කතාව) | Sinhala Stories Online';
-  const description = 'Walkathawa (වල් කතාව) is a place to read Sinhala stories online. Discover new wal katha, walkatha, sinhala wela katha, romantic stories, and short stories updated regularly.';
+  const isSearch = Boolean(req && (req.query.search || req.query.q || req.path === '/search'));
+  const searchQuery = String(req?.query?.search || req?.query?.q || '');
+  const title = isSearch
+    ? `Search: "${searchQuery}" | Walkathawa (වල් කතාව)`
+    : 'Walkathawa (වල් කතාව) | Sinhala Stories Online';
+  const description = isSearch
+    ? `Explore Sinhala short stories and katha matching "${searchQuery}" on Walkathawa (වල් කතාව).`
+    : 'Walkathawa (වල් කතාව) is a place to read Sinhala stories online. Discover new wal katha, romantic tales, and short stories updated regularly.';
   const canonicalUrl = 'https://www.walkathawa.site/';
 
   const schema = {
@@ -1393,36 +1695,41 @@ function injectHomeSeo(rawHtml: string, req?: Request): string {
 
   const categoriesHtml = INITIAL_CATEGORIES
     .filter((c) => c.slug !== 'all')
-    .map((c) => `<li><a href="/category/${c.slug}">${escapeHtml(c.name)}</a></li>`)
+    .map((c) => `<li style="display: inline-block; margin: 0.35rem;"><a href="/category/${c.slug}" style="color: #818cf8; text-decoration: none; padding: 0.4rem 0.85rem; background-color: #1e1b4b; border-radius: 0.375rem; display: inline-block;">${escapeHtml(c.name)}</a></li>`)
     .join('\n');
 
-  const publishedStories = db.stories.filter((s) => s.published);
+  const publishedStories = (db.stories || []).filter((s) => s.published && !isMockStoryRecord(s));
   const storiesHtml = publishedStories
     .slice(0, 30)
-    .map((s) => `<li><a href="/story/${s.slug}">${escapeHtml(s.title)}</a> (${escapeHtml(s.categoryName || s.category)})</li>`)
+    .map((s) => `<li style="padding: 0.75rem 1rem; margin-bottom: 0.5rem; background-color: #0f172a; border-radius: 0.5rem; border: 1px solid #1e293b;"><a href="/story/${s.slug}" style="color: #38bdf8; font-weight: 600; text-decoration: none; font-size: 1.1rem;">${escapeHtml(s.title)}</a> <span style="color: #94a3b8; font-size: 0.875rem;">(${escapeHtml(s.categoryName || s.category)})</span></li>`)
     .join('\n');
 
-  const noscriptContent = `
-<noscript>
-  <main style="max-width: 900px; margin: 2rem auto; padding: 1.5rem; font-family: sans-serif; line-height: 1.6;">
-    <h1>${escapeHtml(title)}</h1>
-    <p>${escapeHtml(description)}</p>
-    
-    <h2>කතා වර්ගීකරණ (Story Categories)</h2>
-    <nav aria-label="Categories">
-      <ul>
-        ${categoriesHtml}
+  const mainContent = `
+  <main style="max-width: 900px; margin: 2rem auto; padding: 1.5rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.7; color: #e2e8f0; background-color: #0b1120; border-radius: 12px; border: 1px solid #1e293b;">
+    <header style="margin-bottom: 2rem; border-bottom: 1px solid #1e293b; padding-bottom: 1.5rem;">
+      <h1 style="font-size: 2.2rem; font-weight: 800; color: #ffffff; margin-bottom: 0.5rem;">${escapeHtml(title)}</h1>
+      <p style="font-size: 1.05rem; color: #94a3b8; line-height: 1.6;">${escapeHtml(description)}</p>
+    </header>
+    <section style="margin-bottom: 2rem;">
+      <h2 style="font-size: 1.25rem; font-weight: 700; color: #f1f5f9; margin-bottom: 1rem;">කතා වර්ගීකරණ (Story Categories)</h2>
+      <nav aria-label="Story Categories">
+        <ul style="list-style-type: none; padding: 0; display: flex; flex-wrap: wrap;">
+          ${categoriesHtml}
+        </ul>
+      </nav>
+    </section>
+    <section style="margin-bottom: 2rem;">
+      <h2 style="font-size: 1.25rem; font-weight: 700; color: #f1f5f9; margin-bottom: 1rem;">නවතම සිංහල කතා (Latest Sinhala Stories)</h2>
+      <ul style="list-style-type: none; padding: 0;">
+        ${storiesHtml}
       </ul>
-    </nav>
+    </section>
+    <p style="text-align: center; margin-top: 2rem;">
+      <a href="/directory" style="color: #818cf8; font-weight: 600; text-decoration: none; font-size: 1.1rem;">සියලු කතා නාමාවලිය බලන්න (View All Stories Directory) &rarr;</a>
+    </p>
+  </main>`;
 
-    <h2>නවතම සිංහල කතා (Latest Sinhala Stories)</h2>
-    <ul>
-      ${storiesHtml}
-    </ul>
-
-    <p><a href="/directory">සම්පූර්ණ කතා නාමාවලිය බලන්න (View All Stories Directory) &rarr;</a></p>
-  </main>
-</noscript>`;
+  const noscriptContent = `<noscript>${mainContent}</noscript>`;
 
   return applyPageSeo(rawHtml, {
     title,
@@ -1430,8 +1737,10 @@ function injectHomeSeo(rawHtml: string, req?: Request): string {
     canonicalUrl,
     ogType: 'website',
     schema,
+    ssrContent: mainContent,
     noscriptContent,
     req,
+    noIndex: isSearch,
   });
 }
 
@@ -1480,28 +1789,36 @@ function injectCategorySeo(rawHtml: string, categorySlug: string, req?: Request)
     ]
   };
 
-  const matchingStories = db.stories.filter((s) => s.published && s.category === categorySlug);
+  const matchingStories = (db.stories || []).filter(
+    (s) => s.published && !isMockStoryRecord(s) && (s.category === categorySlug || (s.categoryName && s.categoryName.toLowerCase() === categorySlug.toLowerCase()))
+  );
   const storiesHtml = matchingStories.length > 0
-    ? matchingStories.map((s) => `<li><a href="/story/${s.slug}">${escapeHtml(s.title)}</a></li>`).join('\n')
-    : `<li>කතා තවමත් එකතු කර නොමැත.</li>`;
+    ? matchingStories.map((s) => `<li style="padding: 0.75rem 1rem; margin-bottom: 0.5rem; background-color: #0f172a; border-radius: 0.5rem; border: 1px solid #1e293b;"><a href="/story/${s.slug}" style="color: #38bdf8; font-weight: 600; text-decoration: none; font-size: 1.1rem;">${escapeHtml(s.title)}</a></li>`).join('\n')
+    : `<li style="color: #94a3b8; font-style: italic;">කතා තවමත් එකතු කර නොමැත.</li>`;
 
-  const noscriptContent = `
-<noscript>
-  <main style="max-width: 900px; margin: 2rem auto; padding: 1.5rem; font-family: sans-serif; line-height: 1.6;">
-    <nav aria-label="Breadcrumb">
-      <a href="/">මුල් පිටුව (Home)</a> &gt; <span>${escapeHtml(catName)}</span>
+  const mainContent = `
+  <main style="max-width: 900px; margin: 2rem auto; padding: 1.5rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.7; color: #e2e8f0; background-color: #0b1120; border-radius: 12px; border: 1px solid #1e293b;">
+    <nav aria-label="Breadcrumb" style="margin-bottom: 1.5rem; font-size: 0.875rem; color: #94a3b8;">
+      <a href="/" style="color: #818cf8; text-decoration: none;">මුල් පිටුව (Home)</a> &gt; 
+      <span style="color: #cbd5e1;">${escapeHtml(catName)}</span>
     </nav>
-    <h1>${escapeHtml(title)}</h1>
-    <p>${escapeHtml(description)}</p>
-    
-    <h2>${escapeHtml(catName)} කතා ලැයිස්තුව</h2>
-    <ul>
-      ${storiesHtml}
-    </ul>
+    <header style="margin-bottom: 2rem; border-bottom: 1px solid #1e293b; padding-bottom: 1rem;">
+      <h1 style="font-size: 2rem; font-weight: 800; color: #ffffff; margin-bottom: 0.5rem;">${escapeHtml(catName)} Stories (සිංහල කතා)</h1>
+      <p style="font-size: 1rem; color: #94a3b8;">${escapeHtml(description)}</p>
+    </header>
+    <section>
+      <h2 style="font-size: 1.25rem; font-weight: 700; color: #f1f5f9; margin-bottom: 1rem;">${escapeHtml(catName)} කතා ලැයිස්තුව</h2>
+      <ul style="list-style-type: none; padding: 0;">
+        ${storiesHtml}
+      </ul>
+    </section>
+    <footer style="margin-top: 2.5rem; padding-top: 1rem; border-top: 1px solid #1e293b; display: flex; justify-content: space-between;">
+      <a href="/" style="color: #818cf8; text-decoration: none; font-weight: 600;">&larr; මුල් පිටුවට</a>
+      <a href="/directory" style="color: #818cf8; text-decoration: none; font-weight: 600;">සියලු කතා නාමාවලිය &rarr;</a>
+    </footer>
+  </main>`;
 
-    <p><a href="/">ආපසු මුල් පිටුවට &rarr;</a></p>
-  </main>
-</noscript>`;
+  const noscriptContent = `<noscript>${mainContent}</noscript>`;
 
   return applyPageSeo(rawHtml, {
     title,
@@ -1509,6 +1826,7 @@ function injectCategorySeo(rawHtml: string, categorySlug: string, req?: Request)
     canonicalUrl,
     ogType: 'website',
     schema,
+    ssrContent: mainContent,
     noscriptContent,
     req,
   });
@@ -1593,25 +1911,39 @@ function injectStorySeo(rawHtml: string, story: Story, req?: Request): string {
   const paragraphsHtml = (story.fullContent || story.content || '')
     .split('\n\n')
     .filter((p) => p.trim().length > 0)
-    .map((p) => `<p>${escapeHtml(p)}</p>`)
+    .map((p) => `<p style="margin-bottom: 1.25rem;">${escapeHtml(p)}</p>`)
     .join('\n');
 
-  const noscriptContent = `
-<noscript>
-  <article style="max-width: 800px; margin: 2rem auto; padding: 1rem; font-family: sans-serif; line-height: 1.6;">
-    <nav aria-label="Breadcrumb">
-      <a href="/">Home</a> &gt; <a href="${categoryUrl}">${escapeHtml(catName)}</a> &gt; <span>${escapeHtml(story.title)}</span>
+  const mainContent = `
+  <article style="max-width: 850px; margin: 2rem auto; padding: 1.5rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.8; color: #e2e8f0; background-color: #0b1120; border-radius: 12px; border: 1px solid #1e293b;">
+    <nav aria-label="Breadcrumb" style="margin-bottom: 1.5rem; font-size: 0.875rem; color: #94a3b8;">
+      <a href="/" style="color: #818cf8; text-decoration: none;">මුල් පිටුව</a> &gt; 
+      <a href="${categoryUrl}" style="color: #818cf8; text-decoration: none;">${escapeHtml(catName)}</a> &gt; 
+      <span style="color: #cbd5e1;">${escapeHtml(story.title)}</span>
     </nav>
-    <h1>${escapeHtml(story.title)}</h1>
-    <p><strong>Published:</strong> ${escapeHtml(new Date(publishedTime).toLocaleDateString())} | <strong>Category:</strong> <a href="${categoryUrl}">${escapeHtml(catName)}</a></p>
-    <p><em>${escapeHtml(cleanDesc)}</em></p>
-    <div>
+    <header style="margin-bottom: 2rem; border-bottom: 1px solid #1e293b; padding-bottom: 1.5rem;">
+      <h1 style="font-size: 2.2rem; font-weight: 800; color: #ffffff; line-height: 1.3; margin-bottom: 1rem;">${escapeHtml(story.title)}</h1>
+      <div style="font-size: 0.875rem; color: #94a3b8; display: flex; flex-wrap: wrap; gap: 1rem; align-items: center;">
+        <span><strong>කර්තෘ:</strong> ${escapeHtml(story.author?.name || 'Walkathawa')}</span>
+        <span>•</span>
+        <span><strong>වර්ගීකරණය:</strong> <a href="${categoryUrl}" style="color: #818cf8; text-decoration: none;">${escapeHtml(catName)}</a></span>
+        <span>•</span>
+        <time datetime="${publishedTime}"><strong>දිනය:</strong> ${escapeHtml(new Date(publishedTime).toLocaleDateString())}</time>
+      </div>
+      ${cleanDesc ? `<p style="margin-top: 1rem; font-size: 1rem; font-style: italic; color: #94a3b8; background-color: #0f172a; padding: 1rem; border-radius: 8px; border-left: 4px solid #6366f1;">${escapeHtml(cleanDesc)}</p>` : ''}
+    </header>
+    <div style="font-size: 1.125rem; color: #e2e8f0; line-height: 1.85;">
       ${paragraphsHtml}
     </div>
-    <hr style="margin: 2rem 0;" />
-    <p><a href="${categoryUrl}">&larr; තවත් ${escapeHtml(catName)} කතා කියවන්න</a> | <a href="/">මුල් පිටුව</a></p>
-  </article>
-</noscript>`;
+    <footer style="margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #1e293b;">
+      <div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 1rem; align-items: center;">
+        <a href="${categoryUrl}" style="color: #818cf8; text-decoration: none; font-weight: 600;">&larr; තවත් ${escapeHtml(catName)} කතා කියවන්න</a>
+        <a href="/directory" style="color: #818cf8; text-decoration: none; font-weight: 600;">සියලු කතා නාමාවලිය &rarr;</a>
+      </div>
+    </footer>
+  </article>`;
+
+  const noscriptContent = `<noscript>${mainContent}</noscript>`;
 
   return applyPageSeo(rawHtml, {
     title,
@@ -1620,13 +1952,14 @@ function injectStorySeo(rawHtml: string, story: Story, req?: Request): string {
     ogType: 'article',
     ogImage: coverImage,
     schema,
+    ssrContent: mainContent,
     noscriptContent,
     req,
   });
 }
 
 function injectDirectorySeo(rawHtml: string, req?: Request): string {
-  const title = 'All Sinhala Stories Directory | Walkathawa (වල් කතාව)';
+  const title = 'All Sinhala Stories Directory (සියලු කතා සූචිය) | Walkathawa (වල් කතාව)';
   const description = 'Browse the complete collection and archive of Sinhala stories, wal katha, and romantic novels on Walkathawa. Updated regularly with easy navigation.';
   const canonicalUrl = 'https://www.walkathawa.site/directory';
 
@@ -1668,25 +2001,44 @@ function injectDirectorySeo(rawHtml: string, req?: Request): string {
     ]
   };
 
-  const storiesList = db.stories
-    .filter((s) => s.published)
-    .map((s) => `<li><a href="/story/${s.slug}">${escapeHtml(s.title)}</a> (<a href="/category/${encodeURIComponent(s.category)}">${escapeHtml(s.categoryName || s.category)}</a>)</li>`)
+  const categoriesListHtml = INITIAL_CATEGORIES
+    .filter((c) => c.slug !== 'all')
+    .map((c) => `<li style="display: inline-block; margin: 0.35rem;"><a href="/category/${c.slug}" style="color: #818cf8; text-decoration: none; padding: 0.4rem 0.85rem; background-color: #1e1b4b; border-radius: 0.375rem; display: inline-block;">${escapeHtml(c.name)}</a></li>`)
     .join('\n');
 
-  const noscriptContent = `
-<noscript>
-  <main style="max-width: 800px; margin: 2rem auto; padding: 1rem; font-family: sans-serif; line-height: 1.6;">
-    <nav aria-label="Breadcrumb">
-      <a href="/">Home</a> &gt; <span>Directory</span>
+  const publishedStories = (db.stories || []).filter((s) => s.published && !isMockStoryRecord(s));
+  const storiesList = publishedStories
+    .map((s) => `<li style="padding: 0.75rem 1rem; margin-bottom: 0.5rem; background-color: #0f172a; border-radius: 0.5rem; border: 1px solid #1e293b;"><a href="/story/${s.slug}" style="color: #38bdf8; font-weight: 600; text-decoration: none; font-size: 1.1rem;">${escapeHtml(s.title)}</a> <span style="color: #94a3b8; font-size: 0.875rem;">(<a href="/category/${encodeURIComponent(s.category)}" style="color: #818cf8; text-decoration: none;">${escapeHtml(s.categoryName || s.category)}</a>)</span></li>`)
+    .join('\n');
+
+  const mainContent = `
+  <main style="max-width: 900px; margin: 2rem auto; padding: 1.5rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.7; color: #e2e8f0; background-color: #0b1120; border-radius: 12px; border: 1px solid #1e293b;">
+    <nav aria-label="Breadcrumb" style="margin-bottom: 1.5rem; font-size: 0.875rem; color: #94a3b8;">
+      <a href="/" style="color: #818cf8; text-decoration: none;">මුල් පිටුව</a> &gt; 
+      <span style="color: #cbd5e1;">කතා නාමාවලිය (Directory)</span>
     </nav>
-    <h1>${escapeHtml(title)}</h1>
-    <p>${escapeHtml(description)}</p>
-    <ul>
-      ${storiesList}
-    </ul>
-    <p><a href="/">ආපසු මුල් පිටුවට &rarr;</a></p>
-  </main>
-</noscript>`;
+    <header style="margin-bottom: 2rem; border-bottom: 1px solid #1e293b; padding-bottom: 1rem;">
+      <h1 style="font-size: 2rem; font-weight: 800; color: #ffffff; margin-bottom: 0.5rem;">${escapeHtml(title)}</h1>
+      <p style="font-size: 1rem; color: #94a3b8;">${escapeHtml(description)}</p>
+    </header>
+    <section style="margin-bottom: 2rem;">
+      <h2 style="font-size: 1.25rem; font-weight: 700; color: #f1f5f9; margin-bottom: 1rem;">ප්‍රධාන කතා වර්ගීකරණ (Categories)</h2>
+      <ul style="list-style-type: none; padding: 0; display: flex; flex-wrap: wrap;">
+        ${categoriesListHtml}
+      </ul>
+    </section>
+    <section>
+      <h2 style="font-size: 1.25rem; font-weight: 700; color: #f1f5f9; margin-bottom: 1rem;">සියලුම පළකළ කතා (${publishedStories.length})</h2>
+      <ul style="list-style-type: none; padding: 0;">
+        ${storiesList}
+      </ul>
+    </section>
+    <footer style="margin-top: 2.5rem; padding-top: 1rem; border-top: 1px solid #1e293b;">
+      <a href="/" style="color: #818cf8; text-decoration: none; font-weight: 600;">&larr; මුල් පිටුවට</a>
+    </footer>
+  </main>`;
+
+  const noscriptContent = `<noscript>${mainContent}</noscript>`;
 
   return applyPageSeo(rawHtml, {
     title,
@@ -1694,13 +2046,40 @@ function injectDirectorySeo(rawHtml: string, req?: Request): string {
     canonicalUrl,
     ogType: 'website',
     schema,
+    ssrContent: mainContent,
     noscriptContent,
     req,
   });
 }
 
+// Helper to get index.html template (works in dev and prod)
+function getHtmlTemplate(): string {
+  const isProd = process.env.NODE_ENV === 'production';
+  const distIndex = path.join(process.cwd(), 'dist', 'index.html');
+  const srcIndex = path.join(process.cwd(), 'index.html');
+
+  if (isProd && fs.existsSync(distIndex)) {
+    return fs.readFileSync(distIndex, 'utf-8');
+  }
+  if (fs.existsSync(srcIndex)) {
+    return fs.readFileSync(srcIndex, 'utf-8');
+  }
+  if (fs.existsSync(distIndex)) {
+    return fs.readFileSync(distIndex, 'utf-8');
+  }
+  return '<!DOCTYPE html><html lang="si"><head><meta charset="UTF-8" /></head><body><div id="root"></div></body></html>';
+}
+
 async function startServer() {
   const httpServer = http.createServer(app);
+
+  // 1. 301 Permanent Redirects for legacy directory routes
+  app.get(
+    ['/stories-directory', '/stories-directory/', '/sitemap.html', '/sitemap-index', '/sitemap-index/'],
+    (_req: Request, res: Response) => {
+      return res.redirect(301, '/directory');
+    }
+  );
 
   if (process.env.NODE_ENV !== 'production') {
     const isHmrDisabled = process.env.DISABLE_HMR === 'true';
@@ -1712,50 +2091,73 @@ async function startServer() {
       appType: 'spa',
     });
 
-    // Dev SEO prerender for /, /category/:slug, /story/:slug, and /directory
-    app.get(['/', '/category/:slug', '/story/:slug', '/directory', '/stories-directory', '/sitemap.html'], async (req, res, next) => {
-      try {
-        // If visiting root with query param category (e.g. /?category=school), 301 redirect to canonical /category/:slug
-        if (req.path === '/' && req.query.category && typeof req.query.category === 'string' && req.query.category !== 'all') {
-          return res.redirect(301, `/category/${encodeURIComponent(req.query.category)}`);
-        }
-
-        const indexFile = path.join(process.cwd(), 'index.html');
-        if (fs.existsSync(indexFile)) {
-          let template = fs.readFileSync(indexFile, 'utf-8');
-          template = await vite.transformIndexHtml(req.originalUrl, template);
-
-          if (req.path.startsWith('/story/') && req.params.slug) {
-            const slug = req.params.slug;
-            const story = db.stories.find((s) => s.slug === slug || s.id === slug);
-            if (story && story.published) {
-              const rendered = injectStorySeo(template, story, req);
-              res.setHeader('Content-Type', 'text/html; charset=utf-8');
-              res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
-              return res.send(rendered);
-            }
-          } else if (req.path.startsWith('/category/') && req.params.slug) {
-            const categorySlug = req.params.slug;
-            const rendered = injectCategorySeo(template, categorySlug, req);
-            res.setHeader('Content-Type', 'text/html; charset=utf-8');
-            res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
-            return res.send(rendered);
-          } else if (req.path === '/directory' || req.path === '/stories-directory' || req.path === '/sitemap.html') {
-            const rendered = injectDirectorySeo(template, req);
-            res.setHeader('Content-Type', 'text/html; charset=utf-8');
-            res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
-            return res.send(rendered);
-          } else if (req.path === '/') {
-            const rendered = injectHomeSeo(template, req);
-            res.setHeader('Content-Type', 'text/html; charset=utf-8');
-            res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
-            return res.send(rendered);
-          }
-        }
-      } catch (err) {
-        console.error('Error rendering SEO template in dev:', err);
+    // 2. Canonical SEO routes in development
+    app.get('/', async (req: Request, res: Response) => {
+      if (req.query.category && typeof req.query.category === 'string') {
+        const cat = req.query.category;
+        return res.redirect(301, cat === 'all' ? '/' : `/category/${encodeURIComponent(cat)}`);
       }
-      next();
+      let template = getHtmlTemplate();
+      template = await vite.transformIndexHtml(req.originalUrl, template);
+      const rendered = injectHomeSeo(template, req);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
+      return res.status(200).send(rendered);
+    });
+
+    app.get('/search', async (req: Request, res: Response) => {
+      let template = getHtmlTemplate();
+      template = await vite.transformIndexHtml(req.originalUrl, template);
+      const rendered = injectHomeSeo(template, req);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('X-Robots-Tag', 'noindex, follow');
+      return res.status(200).send(rendered);
+    });
+
+    app.get('/category/:slug', async (req: Request, res: Response) => {
+      const categorySlug = req.params.slug;
+      let template = getHtmlTemplate();
+      template = await vite.transformIndexHtml(req.originalUrl, template);
+
+      if (!isValidCategorySlug(categorySlug)) {
+        const notFoundHtml = render404Html(template, req, `"${categorySlug}" වර්ගීකරණය සොයාගත නොහැක.`);
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+        return res.status(404).send(notFoundHtml);
+      }
+
+      const rendered = injectCategorySeo(template, categorySlug, req);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
+      return res.status(200).send(rendered);
+    });
+
+    app.get('/story/:slug', async (req: Request, res: Response) => {
+      const slug = req.params.slug;
+      let template = getHtmlTemplate();
+      template = await vite.transformIndexHtml(req.originalUrl, template);
+
+      const story = await findPublishedStory(slug);
+      if (!story || !story.published) {
+        const notFoundHtml = render404Html(template, req, 'ඔබ සොයන කතාව සොයා ගැනීමට නොහැකි විය.');
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+        return res.status(404).send(notFoundHtml);
+      }
+
+      const rendered = injectStorySeo(template, story, req);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
+      return res.status(200).send(rendered);
+    });
+
+    app.get('/directory', async (req: Request, res: Response) => {
+      let template = getHtmlTemplate();
+      template = await vite.transformIndexHtml(req.originalUrl, template);
+      const rendered = injectDirectorySeo(template, req);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
+      return res.status(200).send(rendered);
     });
 
     app.use(vite.middlewares);
@@ -1773,10 +2175,10 @@ async function startServer() {
     }));
 
     // Production Server-Side SEO Render for Homepage
-    app.get('/', (req, res) => {
-      // If visiting root with query param category, 301 redirect to canonical /category/:slug
-      if (req.query.category && typeof req.query.category === 'string' && req.query.category !== 'all') {
-        return res.redirect(301, `/category/${encodeURIComponent(req.query.category)}`);
+    app.get('/', (req: Request, res: Response) => {
+      if (req.query.category && typeof req.query.category === 'string') {
+        const cat = req.query.category;
+        return res.redirect(301, cat === 'all' ? '/' : `/category/${encodeURIComponent(cat)}`);
       }
 
       if (fs.existsSync(indexPath)) {
@@ -1785,62 +2187,93 @@ async function startServer() {
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=3600');
         res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
-        return res.send(rendered);
+        return res.status(200).send(rendered);
+      }
+      res.setHeader('Cache-Control', 'no-cache');
+      res.sendFile(indexPath);
+    });
+
+    // Production Search page (noindex, follow)
+    app.get('/search', (req: Request, res: Response) => {
+      if (fs.existsSync(indexPath)) {
+        const raw = fs.readFileSync(indexPath, 'utf-8');
+        const rendered = injectHomeSeo(raw, req);
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=3600');
+        res.setHeader('X-Robots-Tag', 'noindex, follow');
+        return res.status(200).send(rendered);
       }
       res.setHeader('Cache-Control', 'no-cache');
       res.sendFile(indexPath);
     });
 
     // Production Server-Side SEO Render for Category Pages
-    app.get('/category/:slug', (req, res) => {
+    app.get('/category/:slug', (req: Request, res: Response) => {
       const categorySlug = req.params.slug;
       if (fs.existsSync(indexPath)) {
         const raw = fs.readFileSync(indexPath, 'utf-8');
+        if (!isValidCategorySlug(categorySlug)) {
+          const notFoundHtml = render404Html(raw, req, `"${categorySlug}" වර්ගීකරණය සොයාගත නොහැක.`);
+          res.setHeader('Content-Type', 'text/html; charset=utf-8');
+          res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+          return res.status(404).send(notFoundHtml);
+        }
         const rendered = injectCategorySeo(raw, categorySlug, req);
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=3600');
         res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
-        return res.send(rendered);
+        return res.status(200).send(rendered);
       }
       res.setHeader('Cache-Control', 'no-cache');
       res.sendFile(indexPath);
     });
 
     // Production Server-Side SEO Render for Story Readers
-    app.get('/story/:slug', (req, res) => {
+    app.get('/story/:slug', async (req: Request, res: Response) => {
       const slug = req.params.slug;
       if (fs.existsSync(indexPath)) {
         const raw = fs.readFileSync(indexPath, 'utf-8');
-        const story = db.stories.find((s) => s.slug === slug || s.id === slug);
-        if (story && story.published) {
-          const rendered = injectStorySeo(raw, story, req);
+        const story = await findPublishedStory(slug);
+        if (!story || !story.published) {
+          const notFoundHtml = render404Html(raw, req, 'ඔබ සොයන කතාව සොයා ගැනීමට නොහැකි විය.');
           res.setHeader('Content-Type', 'text/html; charset=utf-8');
-          res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=3600');
-          res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
-          return res.send(rendered);
+          res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+          return res.status(404).send(notFoundHtml);
         }
+        const rendered = injectStorySeo(raw, story, req);
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=3600');
+        res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
+        return res.status(200).send(rendered);
       }
       res.setHeader('Cache-Control', 'no-cache');
       res.sendFile(indexPath);
     });
 
     // Production Server-Side SEO Render for Directory
-    app.get(['/directory', '/stories-directory', '/sitemap.html'], (req, res) => {
+    app.get('/directory', (req: Request, res: Response) => {
       if (fs.existsSync(indexPath)) {
         const raw = fs.readFileSync(indexPath, 'utf-8');
         const rendered = injectDirectorySeo(raw, req);
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=3600');
         res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
-        return res.send(rendered);
+        return res.status(200).send(rendered);
       }
       res.setHeader('Cache-Control', 'no-cache');
       res.sendFile(indexPath);
     });
 
-    app.get('*', (_req, res) => {
+    app.get('*', (req: Request, res: Response) => {
+      if (fs.existsSync(indexPath)) {
+        const raw = fs.readFileSync(indexPath, 'utf-8');
+        const notFoundHtml = render404Html(raw, req);
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+        return res.status(404).send(notFoundHtml);
+      }
       res.setHeader('Cache-Control', 'no-cache');
-      res.sendFile(indexPath);
+      res.status(404).send('Not Found');
     });
   }
 

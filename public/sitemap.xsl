@@ -113,7 +113,7 @@
         <div class="container">
           <h1>Walkathawa XML Sitemap <span>(වල් කතාව සයිට්මැප්)</span></h1>
           <p class="desc">
-            This XML sitemap is generated dynamically for search engines like Google, Bing, and web crawlers, indexable at <strong>/sitemap.xml</strong> and <strong>/sitemap</strong>.
+            This XML sitemap is generated for search engines like Google, Bing, and web crawlers, indexable at <strong>/sitemap.xml</strong>.
           </p>
           <div class="stats">
             <div class="stat-badge">Total URLs: <strong><xsl:value-of select="count(sitemap:urlset/sitemap:url)"/></strong></div>

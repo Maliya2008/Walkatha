@@ -13,6 +13,7 @@ export interface SEOData {
   ogType?: 'website' | 'article';
   categorySlug?: string;
   categoryName?: string;
+  noIndex?: boolean;
   articleData?: {
     publishedTime: string;
     modifiedTime: string;
@@ -30,7 +31,7 @@ export class SEOService {
   public static readonly DEFAULT_DESCRIPTION =
     'Walkathawa (වල් කතාව) is a place to read Sinhala stories online. Discover new Sinhala katha, romantic stories, fictional stories, and interesting short stories updated regularly.';
   public static readonly DEFAULT_KEYWORDS =
-    'wal katha, walkatha, sinhala wal katha, wela katha, wala katha, sinhala wela katha, walkatha sinhala, sinhala wala katha, walkatha9, wal katha sinhala, new wal katha, aluth wal katha, wal katha 2025, wal katha 2026, sinhala wal katha 2025, sinhala wal katha 2026, wela katha sinhala, wala katha sinhala, walakatha, walkatha new, amma wal katha, wife wal katha, aunty wal katha, nanda wal katha, akka wal katha, malli wal katha, ayya wal katha, teacher wal katha, bus wal katha, family wal katha, pawule wal katha, cuckold wal katha, milf wal katha, hostel wal katha, spa wal katha, hukana katha, sinhala sex katha, sex katha sinhala, badu katha, wal chithra katha, wal katha free, wal katha pdf, sinhala wal katha pdf, wela katha lokaya, wal katha full story, new wela katha, aluthma wal katha, sinhala wal katha blog, වල් කතා, සිංහල වල් කතා, වැල කතා, සිංහල වැල කතා, වලා කතා, අලුත් වල් කතා, අම්මා වල් කතා, වයිෆ් වල් කතා, ඇන්ටි වල් කතා, නැන්දා වල් කතා, amma putha wal katha, akka malli wal katha, ayya nangi wal katha, wife change wal katha, school wal katha, campus wal katha, birinda wal katha, hora katha, rasika katha, walkathawa, sinhala stories, sinhala short stories';
+    'Walkathawa, Sinhala stories, wal katha, wela katha, සිංහල කතා, sinhala short stories';
   public static readonly DEFAULT_IMAGE =
     'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1200&q=80';
 
@@ -58,7 +59,11 @@ export class SEOService {
     this.setMeta('name', 'description', description);
     this.setMeta('name', 'keywords', keywords);
     this.setMeta('name', 'author', siteTitle);
-    this.setMeta('name', 'robots', 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1');
+    if (seo.noIndex) {
+      this.setMeta('name', 'robots', 'noindex, follow');
+    } else {
+      this.setMeta('name', 'robots', 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1');
+    }
 
     // Open Graph / Facebook
     this.setMeta('property', 'og:site_name', siteTitle);
@@ -197,7 +202,7 @@ export class SEOService {
               {
                 '@type': 'Person',
                 'name': seo.articleData.authorName,
-                'url': `${CANONICAL_SITE_URL}/?search=${encodeURIComponent(seo.articleData.authorName)}`
+                'url': `${CANONICAL_SITE_URL}/`
               }
             ],
             'publisher': {
@@ -376,8 +381,9 @@ export class SEOService {
       return {
         title: `Search: "${searchQuery}"`,
         description: `Explore Sinhala short stories and katha matching "${searchQuery}" on Walkathawa (වල් කතාව).`,
-        canonicalUrl: `${CANONICAL_SITE_URL}/?search=${encodeURIComponent(searchQuery)}`,
+        canonicalUrl: `${CANONICAL_SITE_URL}/`,
         ogType: 'website',
+        noIndex: true,
       };
     }
 

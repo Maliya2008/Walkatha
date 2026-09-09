@@ -152,6 +152,11 @@ export default function App() {
         } catch {
           categorySlug = hashCategoryMatch[1];
         }
+      } else if (searchParams.get('category')) {
+        const queryCat = searchParams.get('category') || '';
+        if (queryCat && queryCat !== 'all') {
+          categorySlug = queryCat;
+        }
       }
     }
 
@@ -204,7 +209,7 @@ export default function App() {
       return;
     }
     if (isSitemapView) {
-      document.title = 'Walkathawa Sitemap (වල් කතාව සයිට්මැප්) | All Sinhala Stories Directory';
+      SEOService.updateHead(SEOService.generateDirectorySEO(), siteSettings);
       return;
     }
     if (currentSlug && activeStory) {
@@ -212,7 +217,7 @@ export default function App() {
     } else if (!currentSlug) {
       const catObj = categories.find((c) => c.slug === params.category);
       const catName = catObj ? catObj.name : undefined;
-      SEOService.updateHead(SEOService.generateHomeSEO(catName, params.search), siteSettings);
+      SEOService.updateHead(SEOService.generateHomeSEO(params.category, catName, params.search), siteSettings);
     }
   }, [isAdminView, isSitemapView, currentSlug, activeStory, params.category, params.search, categories, siteSettings]);
 

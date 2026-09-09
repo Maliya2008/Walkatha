@@ -287,14 +287,17 @@ export const SitemapPage: React.FC<SitemapPageProps> = ({
               .map((cat) => {
                 const count = stories.filter((s) => s.published && s.category === cat.slug).length;
                 return (
-                  <button
+                  <a
                     key={cat.id || cat.slug}
-                    type="button"
-                    onClick={() => {
-                      if (onSelectCategory) {
-                        onSelectCategory(cat.slug);
-                      } else {
-                        window.location.href = `/?category=${cat.slug}`;
+                    href={`/category/${cat.slug}`}
+                    onClick={(e) => {
+                      if (!e.ctrlKey && !e.metaKey) {
+                        e.preventDefault();
+                        if (onSelectCategory) {
+                          onSelectCategory(cat.slug);
+                        } else {
+                          window.location.href = `/category/${cat.slug}`;
+                        }
                       }
                     }}
                     className="px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-indigo-500 dark:hover:border-indigo-500 text-xs font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2 shadow-xs transition-all cursor-pointer"
@@ -303,7 +306,7 @@ export const SitemapPage: React.FC<SitemapPageProps> = ({
                     <span className="px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[10px] text-slate-500">
                       {count}
                     </span>
-                  </button>
+                  </a>
                 );
               })}
           </div>

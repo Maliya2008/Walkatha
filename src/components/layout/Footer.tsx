@@ -76,13 +76,19 @@ export const Footer: React.FC<FooterProps> = ({
                 .filter((c) => c.slug !== 'all')
                 .slice(0, 6)
                 .map((cat) => (
-                  <button
+                  <a
                     key={cat.id}
-                    onClick={() => onSelectCategory(cat.slug)}
-                    className="text-left text-slate-600 dark:text-slate-400 sepia:text-[#5b4636] hover:text-indigo-600 dark:hover:text-indigo-400 sepia:hover:text-[#251910] transition-colors py-0.5 cursor-pointer truncate"
+                    href={`/category/${cat.slug}`}
+                    onClick={(e) => {
+                      if (!e.ctrlKey && !e.metaKey) {
+                        e.preventDefault();
+                        onSelectCategory(cat.slug);
+                      }
+                    }}
+                    className="text-left text-slate-600 dark:text-slate-400 sepia:text-[#5b4636] hover:text-indigo-600 dark:hover:text-indigo-400 sepia:hover:text-[#251910] transition-colors py-0.5 cursor-pointer truncate block"
                   >
                     • {cat.name}
-                  </button>
+                  </a>
                 ))}
             </div>
           </div>

@@ -20,6 +20,36 @@ app.use((_req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
+// Canonical Host Enforcement & Anti-Indexing for Staging/Preview Domains
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const forwardedHost = (req.headers['x-forwarded-host'] as string) || '';
+  const hostHeader = req.get('host') || '';
+  const host = (forwardedHost || hostHeader).split(':')[0].toLowerCase();
+  const proto = ((req.headers['x-forwarded-proto'] as string) || req.protocol || 'https').toLowerCase();
+
+  const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0';
+  const isCanonicalProd = host === 'www.walkathawa.site';
+  const isApexProd = host === 'walkathawa.site';
+
+  // 1. If apex domain 'walkathawa.site', permanently (301) redirect to 'https://www.walkathawa.site'
+  if (isApexProd) {
+    return res.redirect(301, `https://www.walkathawa.site${req.originalUrl}`);
+  }
+
+  // 2. If HTTP on canonical domain, redirect to HTTPS
+  if (isCanonicalProd && proto === 'http') {
+    return res.redirect(301, `https://www.walkathawa.site${req.originalUrl}`);
+  }
+
+  // 3. If accessed via Cloud Run domain (*.run.app) or any preview/staging host (not local dev):
+  // Strictly prevent search engines from crawling or indexing these staging/dev domains!
+  if (!isCanonicalProd && !isLocal) {
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+  }
+
+  next();
+});
+
 // Parse incoming JSON requests with generous limit for cover images
 app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
@@ -624,7 +654,7 @@ async function getSitemapStoriesList() {
 
 // --- DYNAMIC SEO SITEMAP (/sitemap and /sitemap.xml) ---
 app.get(['/sitemap', '/sitemap.xml', '/sitemap/'], async (req: Request, res: Response) => {
-  const baseUrl = getBasePublicUrl(req);
+  const baseUrl = 'https://www.walkathawa.site';
   const publishedStories = await getSitemapStoriesList();
   const nowISO = new Date().toISOString();
 
@@ -632,7 +662,7 @@ app.get(['/sitemap', '/sitemap.xml', '/sitemap/'], async (req: Request, res: Res
   xml += `<?xml-stylesheet type="text/xsl" href="/sitemap.xsl"?>\n`;
   xml += `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:news="http://www.google.com/schemas/sitemap-news/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n`;
 
-  // 1. Homepage
+  // 1. Homepage (Root canonical URL)
   xml += `  <url>\n`;
   xml += `    <loc>${baseUrl}/</loc>\n`;
   xml += `    <lastmod>${nowISO}</lastmod>\n`;
@@ -640,17 +670,25 @@ app.get(['/sitemap', '/sitemap.xml', '/sitemap/'], async (req: Request, res: Res
   xml += `    <priority>1.0</priority>\n`;
   xml += `  </url>\n`;
 
-  // 2. Categories
+  // 2. Directory Page
+  xml += `  <url>\n`;
+  xml += `    <loc>${baseUrl}/directory</loc>\n`;
+  xml += `    <lastmod>${nowISO}</lastmod>\n`;
+  xml += `    <changefreq>daily</changefreq>\n`;
+  xml += `    <priority>0.8</priority>\n`;
+  xml += `  </url>\n`;
+
+  // 3. Category Pages (Canonical clean URLs only, no query parameters)
   INITIAL_CATEGORIES.filter((c) => c.slug !== 'all').forEach((cat) => {
     xml += `  <url>\n`;
-    xml += `    <loc>${baseUrl}/?category=${cat.slug}</loc>\n`;
+    xml += `    <loc>${baseUrl}/category/${cat.slug}</loc>\n`;
     xml += `    <lastmod>${nowISO}</lastmod>\n`;
     xml += `    <changefreq>weekly</changefreq>\n`;
     xml += `    <priority>0.8</priority>\n`;
     xml += `  </url>\n`;
   });
 
-  // 3. Published Stories
+  // 4. Published Stories (Canonical clean URLs)
   publishedStories.forEach((story) => {
     const rawModTime = story.updatedDate || story.uploadDate || story.uploadedDate || nowISO;
     let validModTime = nowISO;
@@ -691,17 +729,29 @@ app.get(['/sitemap', '/sitemap.xml', '/sitemap/'], async (req: Request, res: Res
 
 // --- ROBOTS.TXT ---
 app.get(['/robots.txt'], (req: Request, res: Response) => {
-  const baseUrl = getBasePublicUrl(req);
+  const forwardedHost = (req.headers['x-forwarded-host'] as string) || '';
+  const hostHeader = req.get('host') || '';
+  const host = (forwardedHost || hostHeader).split(':')[0].toLowerCase();
+  const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0';
+  const isCanonicalProd = host === 'www.walkathawa.site';
 
-  const robots = `# Robots.txt for Walkathawa (වල් කතාව)
+  // If accessed from non-canonical domains (e.g. *.run.app, staging, test URLs), block all crawlers
+  if (!isCanonicalProd && !isLocal) {
+    res.header('Content-Type', 'text/plain; charset=utf-8');
+    res.header('Cache-Control', 'public, max-age=300');
+    res.header('X-Robots-Tag', 'noindex, nofollow, noarchive');
+    return res.status(200).send(`# Disallow all crawlers on staging / preview domains\nUser-agent: *\nDisallow: /\n`);
+  }
+
+  const robots = `# Robots.txt for Walkathawa (වල් කතාව) - Official Canonical Domain
 User-agent: *
 Allow: /
 Disallow: /admin
 Disallow: /api/admin
 Disallow: /api/auth
 
-# Sitemap Endpoints
-Sitemap: ${baseUrl}/sitemap.xml
+# Official Canonical Sitemap
+Sitemap: https://www.walkathawa.site/sitemap.xml
 `;
 
   res.header('Content-Type', 'text/plain; charset=utf-8');
@@ -1182,6 +1232,19 @@ app.put('/api/admin/settings', requireAuth, (req: AuthenticatedRequest, res: Res
 });
 
 // --- SERVER & VITE INTEGRATION ---
+function getRobotsTagForRequest(req: Request): string {
+  const forwardedHost = (req.headers['x-forwarded-host'] as string) || '';
+  const hostHeader = req.get('host') || '';
+  const host = (forwardedHost || hostHeader).split(':')[0].toLowerCase();
+  const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0';
+  const isCanonicalProd = host === 'www.walkathawa.site';
+
+  if (isCanonicalProd || isLocal) {
+    return 'all';
+  }
+  return 'noindex, nofollow, noarchive';
+}
+
 function escapeHtml(str: string): string {
   return String(str || '')
     .replace(/&/g, '&amp;')
@@ -1191,7 +1254,267 @@ function escapeHtml(str: string): string {
     .replace(/'/g, '&#39;');
 }
 
-function injectStorySeo(rawHtml: string, story: Story): string {
+interface InjectSeoOptions {
+  title: string;
+  description: string;
+  canonicalUrl: string;
+  ogType: 'website' | 'article';
+  ogImage?: string;
+  schema: object;
+  noscriptContent?: string;
+  req?: Request;
+}
+
+function applyPageSeo(rawHtml: string, options: InjectSeoOptions): string {
+  let html = rawHtml;
+
+  // 1. Replace <title>
+  html = html.replace(/<title>.*?<\/title>/i, `<title>${escapeHtml(options.title)}</title>`);
+
+  // 2. Replace or insert meta description
+  if (/<meta\s+[^>]*name=["']description["'][^>]*\/?>/i.test(html)) {
+    html = html.replace(/<meta\s+[^>]*name=["']description["'][^>]*\/?>/i, `<meta name="description" content="${escapeHtml(options.description)}" />`);
+  } else {
+    html = html.replace('</head>', `  <meta name="description" content="${escapeHtml(options.description)}" />\n</head>`);
+  }
+
+  // 3. Replace or insert canonical link
+  if (/<link\s+[^>]*rel=["']canonical["'][^>]*\/?>/i.test(html)) {
+    html = html.replace(/<link\s+[^>]*rel=["']canonical["'][^>]*\/?>/i, `<link rel="canonical" href="${options.canonicalUrl}" />`);
+  } else {
+    html = html.replace('</head>', `  <link rel="canonical" href="${options.canonicalUrl}" />\n</head>`);
+  }
+
+  // 4. Ensure robots meta: index on canonical www.walkathawa.site, noindex on preview/staging domains
+  const isProd = options.req ? (getRobotsTagForRequest(options.req) === 'all') : true;
+  const robotsTag = isProd
+    ? `<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />`
+    : `<meta name="robots" content="noindex, nofollow, noarchive" />`;
+
+  if (/<meta\s+[^>]*name=["']robots["'][^>]*\/?>/i.test(html)) {
+    html = html.replace(/<meta\s+[^>]*name=["']robots["'][^>]*\/?>/i, robotsTag);
+  } else {
+    html = html.replace('</head>', `  ${robotsTag}\n</head>`);
+  }
+
+  // 5. Replace or insert Open Graph tags
+  const defaultImage = 'https://www.walkathawa.site/icon.png';
+  const ogTags: Record<string, string> = {
+    'og:title': options.title,
+    'og:description': options.description,
+    'og:url': options.canonicalUrl,
+    'og:type': options.ogType,
+    'og:site_name': 'Walkathawa (වල් කතාව)',
+    'og:locale': 'si_LK',
+    'og:image': options.ogImage || defaultImage,
+  };
+
+  for (const [prop, val] of Object.entries(ogTags)) {
+    const regex = new RegExp(`<meta\\s+[^>]*property=["']${prop}["'][^>]*\\/?>`, 'i');
+    const newTag = `<meta property="${prop}" content="${escapeHtml(val)}" />`;
+    if (regex.test(html)) {
+      html = html.replace(regex, newTag);
+    } else {
+      html = html.replace('</head>', `  ${newTag}\n</head>`);
+    }
+  }
+
+  // 6. Replace or insert Twitter tags
+  const twitterDesc = options.description.length > 160 ? `${options.description.slice(0, 157)}...` : options.description;
+  const twitterTags: Record<string, string> = {
+    'twitter:card': 'summary_large_image',
+    'twitter:title': options.title,
+    'twitter:description': twitterDesc,
+    'twitter:image': options.ogImage || defaultImage,
+  };
+
+  for (const [name, val] of Object.entries(twitterTags)) {
+    const regex = new RegExp(`<meta\\s+[^>]*name=["']${name}["'][^>]*\\/?>`, 'i');
+    const newTag = `<meta name="${name}" content="${escapeHtml(val)}" />`;
+    if (regex.test(html)) {
+      html = html.replace(regex, newTag);
+    } else {
+      html = html.replace('</head>', `  ${newTag}\n</head>`);
+    }
+  }
+
+  // 7. Remove ANY existing application/ld+json scripts to guarantee EXACTLY ONE clean schema
+  html = html.replace(/<script\s+[^>]*type=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>/gi, '');
+
+  // 8. Inject single clean schema before </head>
+  const scriptTag = `  <script type="application/ld+json" id="structured-data">\n${JSON.stringify(options.schema, null, 2)}\n  </script>\n`;
+  html = html.replace('</head>', `${scriptTag}</head>`);
+
+  // 9. Remove any old injected non-font noscripts
+  html = html.replace(/<noscript>(?![\s\S]*?fonts\.googleapis\.com)[\s\S]*?<\/noscript>/gi, '');
+
+  if (options.noscriptContent) {
+    html = html.replace('</body>', `${options.noscriptContent}\n</body>`);
+  }
+
+  return html;
+}
+
+function injectHomeSeo(rawHtml: string, req?: Request): string {
+  const title = 'Walkathawa (වල් කතාව) | Sinhala Stories Online';
+  const description = 'Walkathawa (වල් කතාව) is a place to read Sinhala stories online. Discover new wal katha, walkatha, sinhala wela katha, romantic stories, and short stories updated regularly.';
+  const canonicalUrl = 'https://www.walkathawa.site/';
+
+  const schema = {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'WebSite',
+        '@id': 'https://www.walkathawa.site/#website',
+        'url': canonicalUrl,
+        'name': 'Walkathawa (වල් කතාව)',
+        'description': description,
+        'inLanguage': 'si',
+        'publisher': {
+          '@type': 'Organization',
+          'name': 'Walkathawa (වල් කතාව)',
+          'url': canonicalUrl,
+          'logo': {
+            '@type': 'ImageObject',
+            'url': 'https://www.walkathawa.site/icon.png'
+          }
+        },
+        'potentialAction': {
+          '@type': 'SearchAction',
+          'target': {
+            '@type': 'EntryPoint',
+            'urlTemplate': 'https://www.walkathawa.site/?search={search_term_string}'
+          },
+          'query-input': 'required name=search_term_string'
+        }
+      }
+    ]
+  };
+
+  const categoriesHtml = INITIAL_CATEGORIES
+    .filter((c) => c.slug !== 'all')
+    .map((c) => `<li><a href="/category/${c.slug}">${escapeHtml(c.name)}</a></li>`)
+    .join('\n');
+
+  const publishedStories = db.stories.filter((s) => s.published);
+  const storiesHtml = publishedStories
+    .slice(0, 30)
+    .map((s) => `<li><a href="/story/${s.slug}">${escapeHtml(s.title)}</a> (${escapeHtml(s.categoryName || s.category)})</li>`)
+    .join('\n');
+
+  const noscriptContent = `
+<noscript>
+  <main style="max-width: 900px; margin: 2rem auto; padding: 1.5rem; font-family: sans-serif; line-height: 1.6;">
+    <h1>${escapeHtml(title)}</h1>
+    <p>${escapeHtml(description)}</p>
+    
+    <h2>කතා වර්ගීකරණ (Story Categories)</h2>
+    <nav aria-label="Categories">
+      <ul>
+        ${categoriesHtml}
+      </ul>
+    </nav>
+
+    <h2>නවතම සිංහල කතා (Latest Sinhala Stories)</h2>
+    <ul>
+      ${storiesHtml}
+    </ul>
+
+    <p><a href="/directory">සම්පූර්ණ කතා නාමාවලිය බලන්න (View All Stories Directory) &rarr;</a></p>
+  </main>
+</noscript>`;
+
+  return applyPageSeo(rawHtml, {
+    title,
+    description,
+    canonicalUrl,
+    ogType: 'website',
+    schema,
+    noscriptContent,
+    req,
+  });
+}
+
+function injectCategorySeo(rawHtml: string, categorySlug: string, req?: Request): string {
+  const catObj = INITIAL_CATEGORIES.find((c) => c.slug === categorySlug || c.id === categorySlug);
+  const catName = catObj ? catObj.name : categorySlug;
+  const canonicalUrl = `https://www.walkathawa.site/category/${encodeURIComponent(categorySlug)}`;
+  const title = `${catName} Stories (සිංහල කතා) | Walkathawa (වල් කතාව)`;
+  const description = `Read the latest ${catName} Sinhala stories, wal katha, and romantic tales on Walkathawa (වල් කතාව). Updated regularly with new collections.`;
+
+  const schema = {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'CollectionPage',
+        '@id': `${canonicalUrl}#collection`,
+        'url': canonicalUrl,
+        'name': title,
+        'description': description,
+        'isPartOf': {
+          '@type': 'WebSite',
+          '@id': 'https://www.walkathawa.site/#website',
+          'name': 'Walkathawa (වල් කතාව)',
+          'url': 'https://www.walkathawa.site'
+        },
+        'inLanguage': 'si'
+      },
+      {
+        '@type': 'BreadcrumbList',
+        '@id': `${canonicalUrl}#breadcrumb`,
+        'itemListElement': [
+          {
+            '@type': 'ListItem',
+            'position': 1,
+            'name': 'Home',
+            'item': 'https://www.walkathawa.site/'
+          },
+          {
+            '@type': 'ListItem',
+            'position': 2,
+            'name': catName,
+            'item': canonicalUrl
+          }
+        ]
+      }
+    ]
+  };
+
+  const matchingStories = db.stories.filter((s) => s.published && s.category === categorySlug);
+  const storiesHtml = matchingStories.length > 0
+    ? matchingStories.map((s) => `<li><a href="/story/${s.slug}">${escapeHtml(s.title)}</a></li>`).join('\n')
+    : `<li>කතා තවමත් එකතු කර නොමැත.</li>`;
+
+  const noscriptContent = `
+<noscript>
+  <main style="max-width: 900px; margin: 2rem auto; padding: 1.5rem; font-family: sans-serif; line-height: 1.6;">
+    <nav aria-label="Breadcrumb">
+      <a href="/">මුල් පිටුව (Home)</a> &gt; <span>${escapeHtml(catName)}</span>
+    </nav>
+    <h1>${escapeHtml(title)}</h1>
+    <p>${escapeHtml(description)}</p>
+    
+    <h2>${escapeHtml(catName)} කතා ලැයිස්තුව</h2>
+    <ul>
+      ${storiesHtml}
+    </ul>
+
+    <p><a href="/">ආපසු මුල් පිටුවට &rarr;</a></p>
+  </main>
+</noscript>`;
+
+  return applyPageSeo(rawHtml, {
+    title,
+    description,
+    canonicalUrl,
+    ogType: 'website',
+    schema,
+    noscriptContent,
+    req,
+  });
+}
+
+function injectStorySeo(rawHtml: string, story: Story, req?: Request): string {
   const title = `${story.title} | Walkathawa (වල් කතාව)`;
   const rawDesc = story.shortDescription || story.description || (story.fullContent ? story.fullContent.slice(0, 160) : '');
   const cleanDesc = rawDesc.length > 160 ? `${rawDesc.slice(0, 157)}...` : rawDesc;
@@ -1199,25 +1522,9 @@ function injectStorySeo(rawHtml: string, story: Story): string {
   const coverImage = story.coverImage || 'https://www.walkathawa.site/icon.png';
   const publishedTime = new Date(story.uploadDate || story.uploadedDate || Date.now()).toISOString();
   const modifiedTime = new Date(story.updatedDate || story.uploadDate || story.uploadedDate || Date.now()).toISOString();
-
-  let html = rawHtml;
-
-  // Replace Title
-  html = html.replace(/<title>.*?<\/title>/i, `<title>${escapeHtml(title)}</title>`);
-
-  // Replace Meta Description
-  if (/<meta\s+name="description"/i.test(html)) {
-    html = html.replace(/<meta\s+name="description"\s+content=".*?"\s*\/?>/i, `<meta name="description" content="${escapeHtml(cleanDesc)}" />`);
-  } else {
-    html = html.replace('</head>', `  <meta name="description" content="${escapeHtml(cleanDesc)}" />\n</head>`);
-  }
-
-  // Canonical tag
-  if (html.includes('rel="canonical"')) {
-    html = html.replace(/<link\s+rel="canonical"\s+href=".*?"\s*\/?>/i, `<link rel="canonical" href="${canonicalUrl}" />`);
-  } else {
-    html = html.replace('</head>', `  <link rel="canonical" href="${canonicalUrl}" />\n</head>`);
-  }
+  const catSlug = story.category || 'other';
+  const catName = story.categoryName || story.category || 'Sinhala Stories';
+  const categoryUrl = `https://www.walkathawa.site/category/${encodeURIComponent(catSlug)}`;
 
   // Schema.org Article & BreadcrumbList
   const schema = {
@@ -1253,7 +1560,7 @@ function injectStorySeo(rawHtml: string, story: Story): string {
           '@type': 'WebPage',
           '@id': canonicalUrl
         },
-        'articleSection': story.categoryName || story.category,
+        'articleSection': catName,
         'inLanguage': 'si'
       },
       {
@@ -1269,8 +1576,8 @@ function injectStorySeo(rawHtml: string, story: Story): string {
           {
             '@type': 'ListItem',
             'position': 2,
-            'name': story.categoryName || story.category,
-            'item': `https://www.walkathawa.site/?category=${encodeURIComponent(story.category)}`
+            'name': catName,
+            'item': categoryUrl
           },
           {
             '@type': 'ListItem',
@@ -1283,22 +1590,6 @@ function injectStorySeo(rawHtml: string, story: Story): string {
     ]
   };
 
-  const seoTags = `
-  <meta property="og:site_name" content="Walkathawa (වල් කතාව)" />
-  <meta property="og:type" content="article" />
-  <meta property="og:title" content="${escapeHtml(story.title)} - Walkathawa (වල් කතාව)" />
-  <meta property="og:description" content="${escapeHtml(cleanDesc)}" />
-  <meta property="og:image" content="${escapeHtml(coverImage)}" />
-  <meta property="og:url" content="${canonicalUrl}" />
-  <meta property="og:locale" content="si_LK" />
-  <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="${escapeHtml(story.title)}" />
-  <meta name="twitter:description" content="${escapeHtml(cleanDesc)}" />
-  <meta name="twitter:image" content="${escapeHtml(coverImage)}" />
-  <script type="application/ld+json" id="server-injected-schema">
-${JSON.stringify(schema, null, 2)}
-  </script>`;
-
   const paragraphsHtml = (story.fullContent || story.content || '')
     .split('\n\n')
     .filter((p) => p.trim().length > 0)
@@ -1307,62 +1598,105 @@ ${JSON.stringify(schema, null, 2)}
 
   const noscriptContent = `
 <noscript>
-  <article style="max-width: 800px; margin: 2rem auto; padding: 1rem; font-family: sans-serif;">
+  <article style="max-width: 800px; margin: 2rem auto; padding: 1rem; font-family: sans-serif; line-height: 1.6;">
     <nav aria-label="Breadcrumb">
-      <a href="/">Home</a> &gt; <a href="/?category=${encodeURIComponent(story.category)}">${escapeHtml(story.categoryName || story.category)}</a> &gt; <span>${escapeHtml(story.title)}</span>
+      <a href="/">Home</a> &gt; <a href="${categoryUrl}">${escapeHtml(catName)}</a> &gt; <span>${escapeHtml(story.title)}</span>
     </nav>
     <h1>${escapeHtml(story.title)}</h1>
-    <p><strong>Published:</strong> ${escapeHtml(new Date(publishedTime).toLocaleDateString())}</p>
+    <p><strong>Published:</strong> ${escapeHtml(new Date(publishedTime).toLocaleDateString())} | <strong>Category:</strong> <a href="${categoryUrl}">${escapeHtml(catName)}</a></p>
     <p><em>${escapeHtml(cleanDesc)}</em></p>
     <div>
       ${paragraphsHtml}
     </div>
+    <hr style="margin: 2rem 0;" />
+    <p><a href="${categoryUrl}">&larr; තවත් ${escapeHtml(catName)} කතා කියවන්න</a> | <a href="/">මුල් පිටුව</a></p>
   </article>
 </noscript>`;
 
-  html = html.replace('</head>', `${seoTags}\n</head>`);
-  html = html.replace('</body>', `${noscriptContent}\n</body>`);
-
-  return html;
+  return applyPageSeo(rawHtml, {
+    title,
+    description: cleanDesc,
+    canonicalUrl,
+    ogType: 'article',
+    ogImage: coverImage,
+    schema,
+    noscriptContent,
+    req,
+  });
 }
 
-function injectDirectorySeo(rawHtml: string): string {
-  const title = `All Sinhala Stories Directory | Walkathawa (වල් කතාව)`;
-  const description = `Browse the complete collection and archive of Sinhala stories, wal katha, and romantic novels on Walkathawa. Updated regularly with easy navigation.`;
-  const canonicalUrl = `https://www.walkathawa.site/directory`;
+function injectDirectorySeo(rawHtml: string, req?: Request): string {
+  const title = 'All Sinhala Stories Directory | Walkathawa (වල් කතාව)';
+  const description = 'Browse the complete collection and archive of Sinhala stories, wal katha, and romantic novels on Walkathawa. Updated regularly with easy navigation.';
+  const canonicalUrl = 'https://www.walkathawa.site/directory';
 
-  let html = rawHtml;
-  html = html.replace(/<title>.*?<\/title>/i, `<title>${escapeHtml(title)}</title>`);
-  if (/<meta\s+name="description"/i.test(html)) {
-    html = html.replace(/<meta\s+name="description"\s+content=".*?"\s*\/?>/i, `<meta name="description" content="${escapeHtml(description)}" />`);
-  } else {
-    html = html.replace('</head>', `  <meta name="description" content="${escapeHtml(description)}" />\n</head>`);
-  }
-
-  if (html.includes('rel="canonical"')) {
-    html = html.replace(/<link\s+rel="canonical"\s+href=".*?"\s*\/?>/i, `<link rel="canonical" href="${canonicalUrl}" />`);
-  } else {
-    html = html.replace('</head>', `  <link rel="canonical" href="${canonicalUrl}" />\n</head>`);
-  }
+  const schema = {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'CollectionPage',
+        '@id': `${canonicalUrl}#collection`,
+        'url': canonicalUrl,
+        'name': title,
+        'description': description,
+        'isPartOf': {
+          '@type': 'WebSite',
+          '@id': 'https://www.walkathawa.site/#website',
+          'name': 'Walkathawa (වල් කතාව)',
+          'url': 'https://www.walkathawa.site'
+        },
+        'inLanguage': 'si'
+      },
+      {
+        '@type': 'BreadcrumbList',
+        '@id': `${canonicalUrl}#breadcrumb`,
+        'itemListElement': [
+          {
+            '@type': 'ListItem',
+            'position': 1,
+            'name': 'Home',
+            'item': 'https://www.walkathawa.site/'
+          },
+          {
+            '@type': 'ListItem',
+            'position': 2,
+            'name': 'Directory',
+            'item': canonicalUrl
+          }
+        ]
+      }
+    ]
+  };
 
   const storiesList = db.stories
     .filter((s) => s.published)
-    .map((s) => `<li><a href="/story/${s.slug}">${escapeHtml(s.title)}</a> (${escapeHtml(s.categoryName || s.category)})</li>`)
+    .map((s) => `<li><a href="/story/${s.slug}">${escapeHtml(s.title)}</a> (<a href="/category/${encodeURIComponent(s.category)}">${escapeHtml(s.categoryName || s.category)}</a>)</li>`)
     .join('\n');
 
   const noscriptContent = `
 <noscript>
-  <main style="max-width: 800px; margin: 2rem auto; padding: 1rem; font-family: sans-serif;">
-    <h1>All Sinhala Stories Directory</h1>
+  <main style="max-width: 800px; margin: 2rem auto; padding: 1rem; font-family: sans-serif; line-height: 1.6;">
+    <nav aria-label="Breadcrumb">
+      <a href="/">Home</a> &gt; <span>Directory</span>
+    </nav>
+    <h1>${escapeHtml(title)}</h1>
     <p>${escapeHtml(description)}</p>
     <ul>
       ${storiesList}
     </ul>
+    <p><a href="/">ආපසු මුල් පිටුවට &rarr;</a></p>
   </main>
 </noscript>`;
 
-  html = html.replace('</body>', `${noscriptContent}\n</body>`);
-  return html;
+  return applyPageSeo(rawHtml, {
+    title,
+    description,
+    canonicalUrl,
+    ogType: 'website',
+    schema,
+    noscriptContent,
+    req,
+  });
 }
 
 async function startServer() {
@@ -1378,27 +1712,43 @@ async function startServer() {
       appType: 'spa',
     });
 
-    // Dev SEO prerender for /story/:slug and /directory
-    app.get(['/story/:slug', '/directory', '/stories-directory', '/sitemap.html'], async (req, res, next) => {
+    // Dev SEO prerender for /, /category/:slug, /story/:slug, and /directory
+    app.get(['/', '/category/:slug', '/story/:slug', '/directory', '/stories-directory', '/sitemap.html'], async (req, res, next) => {
       try {
-        const slug = req.params.slug;
+        // If visiting root with query param category (e.g. /?category=school), 301 redirect to canonical /category/:slug
+        if (req.path === '/' && req.query.category && typeof req.query.category === 'string' && req.query.category !== 'all') {
+          return res.redirect(301, `/category/${encodeURIComponent(req.query.category)}`);
+        }
+
         const indexFile = path.join(process.cwd(), 'index.html');
         if (fs.existsSync(indexFile)) {
           let template = fs.readFileSync(indexFile, 'utf-8');
           template = await vite.transformIndexHtml(req.originalUrl, template);
 
-          if (req.path.startsWith('/story/') && slug) {
+          if (req.path.startsWith('/story/') && req.params.slug) {
+            const slug = req.params.slug;
             const story = db.stories.find((s) => s.slug === slug || s.id === slug);
             if (story && story.published) {
-              const rendered = injectStorySeo(template, story);
+              const rendered = injectStorySeo(template, story, req);
               res.setHeader('Content-Type', 'text/html; charset=utf-8');
-              res.setHeader('X-Robots-Tag', 'all');
+              res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
               return res.send(rendered);
             }
-          } else if (req.path === '/directory' || req.path === '/stories-directory' || req.path === '/sitemap.html') {
-            const rendered = injectDirectorySeo(template);
+          } else if (req.path.startsWith('/category/') && req.params.slug) {
+            const categorySlug = req.params.slug;
+            const rendered = injectCategorySeo(template, categorySlug, req);
             res.setHeader('Content-Type', 'text/html; charset=utf-8');
-            res.setHeader('X-Robots-Tag', 'all');
+            res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
+            return res.send(rendered);
+          } else if (req.path === '/directory' || req.path === '/stories-directory' || req.path === '/sitemap.html') {
+            const rendered = injectDirectorySeo(template, req);
+            res.setHeader('Content-Type', 'text/html; charset=utf-8');
+            res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
+            return res.send(rendered);
+          } else if (req.path === '/') {
+            const rendered = injectHomeSeo(template, req);
+            res.setHeader('Content-Type', 'text/html; charset=utf-8');
+            res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
             return res.send(rendered);
           }
         }
@@ -1422,6 +1772,40 @@ async function startServer() {
       maxAge: '1h',
     }));
 
+    // Production Server-Side SEO Render for Homepage
+    app.get('/', (req, res) => {
+      // If visiting root with query param category, 301 redirect to canonical /category/:slug
+      if (req.query.category && typeof req.query.category === 'string' && req.query.category !== 'all') {
+        return res.redirect(301, `/category/${encodeURIComponent(req.query.category)}`);
+      }
+
+      if (fs.existsSync(indexPath)) {
+        const raw = fs.readFileSync(indexPath, 'utf-8');
+        const rendered = injectHomeSeo(raw, req);
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=3600');
+        res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
+        return res.send(rendered);
+      }
+      res.setHeader('Cache-Control', 'no-cache');
+      res.sendFile(indexPath);
+    });
+
+    // Production Server-Side SEO Render for Category Pages
+    app.get('/category/:slug', (req, res) => {
+      const categorySlug = req.params.slug;
+      if (fs.existsSync(indexPath)) {
+        const raw = fs.readFileSync(indexPath, 'utf-8');
+        const rendered = injectCategorySeo(raw, categorySlug, req);
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=3600');
+        res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
+        return res.send(rendered);
+      }
+      res.setHeader('Cache-Control', 'no-cache');
+      res.sendFile(indexPath);
+    });
+
     // Production Server-Side SEO Render for Story Readers
     app.get('/story/:slug', (req, res) => {
       const slug = req.params.slug;
@@ -1429,10 +1813,10 @@ async function startServer() {
         const raw = fs.readFileSync(indexPath, 'utf-8');
         const story = db.stories.find((s) => s.slug === slug || s.id === slug);
         if (story && story.published) {
-          const rendered = injectStorySeo(raw, story);
+          const rendered = injectStorySeo(raw, story, req);
           res.setHeader('Content-Type', 'text/html; charset=utf-8');
           res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=3600');
-          res.setHeader('X-Robots-Tag', 'all');
+          res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
           return res.send(rendered);
         }
       }
@@ -1441,13 +1825,13 @@ async function startServer() {
     });
 
     // Production Server-Side SEO Render for Directory
-    app.get(['/directory', '/stories-directory', '/sitemap.html'], (_req, res) => {
+    app.get(['/directory', '/stories-directory', '/sitemap.html'], (req, res) => {
       if (fs.existsSync(indexPath)) {
         const raw = fs.readFileSync(indexPath, 'utf-8');
-        const rendered = injectDirectorySeo(raw);
+        const rendered = injectDirectorySeo(raw, req);
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=3600');
-        res.setHeader('X-Robots-Tag', 'all');
+        res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
         return res.send(rendered);
       }
       res.setHeader('Cache-Control', 'no-cache');

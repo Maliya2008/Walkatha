@@ -121,7 +121,7 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
               return (
                 <a
                   key={cat.id || cat.slug}
-                  href={`/?category=${catKey}`}
+                  href={catKey === 'all' ? '/' : `/category/${catKey}`}
                   id={`category-btn-${catKey}`}
                   onClick={(e) => {
                     if (!e.ctrlKey && !e.metaKey) {

@@ -54,23 +54,38 @@
     </noscript>
 
     <!-- Schema.org WebSite Structured Data -->
-    <script type="application/ld+json">
+    <script type="application/ld+json" id="structured-data">
     {
       "@context": "https://schema.org",
-      "@type": "WebSite",
-      "name": "Walkathawa",
-      "alternateName": "වල් කතාව",
-      "url": "https://www.walkathawa.site/",
-      "description": "Walkathawa (වල් කතාව) is a place to read Sinhala stories online. Discover new Sinhala katha, romantic stories, fictional stories, and interesting short stories updated regularly.",
-      "inLanguage": "si",
-      "potentialAction": {
-        "@type": "SearchAction",
-        "target": {
-          "@type": "EntryPoint",
-          "urlTemplate": "https://www.walkathawa.site/?search={search_term_string}"
-        },
-        "query-input": "required name=search_term_string"
-      }
+      "@graph": [
+        {
+          "@type": "WebSite",
+          "@id": "https://www.walkathawa.site/#website",
+          "name": "Walkathawa",
+          "alternateName": "වල් කතාව",
+          "url": "https://www.walkathawa.site/",
+          "description": "Walkathawa (වල් කතාව) is a place to read Sinhala stories online. Discover new Sinhala katha, romantic stories, fictional stories, and interesting short stories updated regularly.",
+          "inLanguage": "si",
+          "publisher": {
+            "@type": "Organization",
+            "@id": "https://www.walkathawa.site/#organization",
+            "name": "Walkathawa (වල් කතාව)",
+            "url": "https://www.walkathawa.site/",
+            "logo": {
+              "@type": "ImageObject",
+              "url": "https://www.walkathawa.site/icon.png"
+            }
+          },
+          "potentialAction": {
+            "@type": "SearchAction",
+            "target": {
+              "@type": "EntryPoint",
+              "urlTemplate": "https://www.walkathawa.site/search?q={search_term_string}"
+            },
+            "query-input": "required name=search_term_string"
+          }
+        }
+      ]
     }
     </script>
     <script>

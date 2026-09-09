@@ -1,6 +1,8 @@
 import { Story } from '../types/story';
 import { SiteSettings } from '../types/admin';
 
+export const CANONICAL_SITE_URL = 'https://www.walkathawa.site';
+
 export interface SEOData {
   title?: string;
   rawTitle?: string;
@@ -9,6 +11,8 @@ export interface SEOData {
   canonicalUrl?: string;
   ogImage?: string;
   ogType?: 'website' | 'article';
+  categorySlug?: string;
+  categoryName?: string;
   articleData?: {
     publishedTime: string;
     modifiedTime: string;
@@ -45,7 +49,7 @@ export class SEOService {
       seo.keywords || settings?.keywords || this.DEFAULT_KEYWORDS;
     const image =
       seo.ogImage || settings?.ogImage || this.DEFAULT_IMAGE;
-    const url = seo.canonicalUrl || window.location.href;
+    const url = seo.canonicalUrl || `${CANONICAL_SITE_URL}/`;
 
     // Document Title
     document.title = finalTitle;
@@ -58,7 +62,7 @@ export class SEOService {
 
     // Open Graph / Facebook
     this.setMeta('property', 'og:site_name', siteTitle);
-    this.setMeta('property', 'og:title', seo.ogType === 'article' && seo.title ? `${seo.title} - ${siteTitle}` : (settings?.metaTitle || 'Walkathawa (වල් කතාව) - Sinhala Stories Online'));
+    this.setMeta('property', 'og:title', seo.ogType === 'article' && seo.title ? `${seo.title} - ${siteTitle}` : (seo.title ? `${seo.title} | ${siteTitle}` : (settings?.metaTitle || 'Walkathawa (වල් කතාව) - Sinhala Stories Online')));
     this.setMeta('property', 'og:description', description);
     this.setMeta('property', 'og:image', image);
     this.setMeta('property', 'og:url', url);
@@ -71,7 +75,7 @@ export class SEOService {
     this.setMeta('name', 'twitter:description', seo.description ? (seo.description.length > 160 ? `${seo.description.slice(0, 157)}...` : seo.description) : 'Read Sinhala stories online.');
     this.setMeta('name', 'twitter:image', image);
 
-    // Canonical link tag
+    // Canonical link tag (guarantee self-referencing canonical URL)
     let linkCanonical = document.querySelector('link[rel="canonical"]') as HTMLLinkElement | null;
     if (!linkCanonical) {
       linkCanonical = document.createElement('link');
@@ -108,7 +112,7 @@ export class SEOService {
       this.injectGoogleAnalytics(settings.googleAnalyticsId);
     }
 
-    // Schema.org Structured Data
+    // Schema.org Structured Data (deduplicated clean single implementation)
     this.updateStructuredData(seo, settings);
   }
 
@@ -143,34 +147,45 @@ export class SEOService {
     }
   }
 
+  /**
+   * Maintains exactly ONE clean Schema.org application/ld+json tag in the document,
+   * removing any duplicate, orphan, or conflicting scripts.
+   */
   private static updateStructuredData(seo: SEOData, settings?: Partial<SiteSettings>): void {
-    const scriptId = 'schema-structured-data';
-    let script = document.getElementById(scriptId) as HTMLScriptElement | null;
-    if (!script) {
+    const allLdScripts = document.querySelectorAll('script[type="application/ld+json"]');
+    let script: HTMLScriptElement;
+
+    if (allLdScripts.length > 0) {
+      script = allLdScripts[0] as HTMLScriptElement;
+      for (let i = 1; i < allLdScripts.length; i++) {
+        allLdScripts[i].remove();
+      }
+    } else {
       script = document.createElement('script');
-      script.id = scriptId;
       script.type = 'application/ld+json';
       document.head.appendChild(script);
     }
+    script.id = 'structured-data';
 
     const siteName = settings?.siteName || this.SITE_NAME;
     const publisherName = settings?.publisherName || siteName;
-    const logoUrl = settings?.logo || `${window.location.origin}/icon.png`;
+    const logoUrl = settings?.logo || `${CANONICAL_SITE_URL}/icon.png`;
+    const canonicalUrl = seo.canonicalUrl || `${CANONICAL_SITE_URL}/`;
 
     if (seo.ogType === 'article' && seo.articleData) {
-      // Schema.org Article Structured Data + Breadcrumbs
+      // Story Article Schema Graph + Breadcrumbs
       const articleGraph = {
         '@context': 'https://schema.org',
         '@graph': [
           {
             '@type': 'Article',
-            '@id': `${seo.canonicalUrl || window.location.href}#article`,
+            '@id': `${canonicalUrl}#article`,
             'isPartOf': {
               '@type': 'WebSite',
-              '@id': `${window.location.origin}/#website`,
+              '@id': `${CANONICAL_SITE_URL}/#website`,
               'name': siteName,
               'alternateName': this.ALTERNATE_NAME,
-              'url': window.location.origin
+              'url': `${CANONICAL_SITE_URL}/`
             },
             'headline': seo.title,
             'description': seo.description,
@@ -182,14 +197,15 @@ export class SEOService {
               {
                 '@type': 'Person',
                 'name': seo.articleData.authorName,
-                'url': `${window.location.origin}/?search=${encodeURIComponent(seo.articleData.authorName)}`
+                'url': `${CANONICAL_SITE_URL}/?search=${encodeURIComponent(seo.articleData.authorName)}`
               }
             ],
             'publisher': {
               '@type': 'Organization',
+              '@id': `${CANONICAL_SITE_URL}/#organization`,
               'name': publisherName,
               'alternateName': this.ALTERNATE_NAME,
-              'url': window.location.origin,
+              'url': `${CANONICAL_SITE_URL}/`,
               'logo': {
                 '@type': 'ImageObject',
                 'url': logoUrl
@@ -197,73 +213,127 @@ export class SEOService {
             },
             'mainEntityOfPage': {
               '@type': 'WebPage',
-              '@id': seo.canonicalUrl || window.location.href
+              '@id': canonicalUrl
             },
             'articleSection': seo.articleData.section,
             'keywords': seo.articleData.tags.join(', ')
           },
           {
             '@type': 'BreadcrumbList',
-            '@id': `${seo.canonicalUrl || window.location.href}#breadcrumb`,
+            '@id': `${canonicalUrl}#breadcrumb`,
             'itemListElement': [
               {
                 '@type': 'ListItem',
                 'position': 1,
                 'name': 'Home',
-                'item': window.location.origin
+                'item': `${CANONICAL_SITE_URL}/`
               },
               {
                 '@type': 'ListItem',
                 'position': 2,
                 'name': seo.articleData.section,
-                'item': `${window.location.origin}/?category=${encodeURIComponent(seo.articleData.section.toLowerCase())}`
+                'item': `${CANONICAL_SITE_URL}/category/${encodeURIComponent(seo.articleData.section.toLowerCase())}`
               },
               {
                 '@type': 'ListItem',
                 'position': 3,
                 'name': seo.title,
-                'item': seo.canonicalUrl || window.location.href
+                'item': canonicalUrl
               }
             ]
           }
         ]
       };
       script.textContent = JSON.stringify(articleGraph, null, 2);
-    } else {
-      // Schema.org WebSite Structured Data
-      const websiteSchema = {
+    } else if (seo.categorySlug && seo.categorySlug !== 'all') {
+      // Category CollectionPage Schema Graph + Breadcrumbs
+      const catDisplayName = seo.categoryName || seo.categorySlug;
+      const categoryGraph = {
         '@context': 'https://schema.org',
-        '@type': 'WebSite',
-        '@id': `${window.location.origin}/#website`,
-        'name': 'Walkathawa',
-        'alternateName': 'වල් කතාව',
-        'url': window.location.origin,
-        'description': settings?.metaDescription || this.DEFAULT_DESCRIPTION,
-        'inLanguage': 'si',
-        'potentialAction': {
-          '@type': 'SearchAction',
-          'target': {
-            '@type': 'EntryPoint',
-            'urlTemplate': `${window.location.origin}/?search={search_term_string}`
+        '@graph': [
+          {
+            '@type': 'CollectionPage',
+            '@id': `${canonicalUrl}#webpage`,
+            'url': canonicalUrl,
+            'name': `${catDisplayName} Stories | ${siteName}`,
+            'description': seo.description,
+            'inLanguage': 'si',
+            'isPartOf': {
+              '@type': 'WebSite',
+              '@id': `${CANONICAL_SITE_URL}/#website`,
+              'name': siteName,
+              'alternateName': this.ALTERNATE_NAME,
+              'url': `${CANONICAL_SITE_URL}/`
+            }
           },
-          'query-input': 'required name=search_term_string'
-        }
+          {
+            '@type': 'BreadcrumbList',
+            '@id': `${canonicalUrl}#breadcrumb`,
+            'itemListElement': [
+              {
+                '@type': 'ListItem',
+                'position': 1,
+                'name': 'Home',
+                'item': `${CANONICAL_SITE_URL}/`
+              },
+              {
+                '@type': 'ListItem',
+                'position': 2,
+                'name': catDisplayName,
+                'item': canonicalUrl
+              }
+            ]
+          }
+        ]
       };
-      script.textContent = JSON.stringify(websiteSchema, null, 2);
+      script.textContent = JSON.stringify(categoryGraph, null, 2);
+    } else {
+      // Homepage WebSite + Organization Schema Graph
+      const websiteGraph = {
+        '@context': 'https://schema.org',
+        '@graph': [
+          {
+            '@type': 'WebSite',
+            '@id': `${CANONICAL_SITE_URL}/#website`,
+            'name': 'Walkathawa',
+            'alternateName': this.ALTERNATE_NAME,
+            'url': `${CANONICAL_SITE_URL}/`,
+            'description': settings?.metaDescription || this.DEFAULT_DESCRIPTION,
+            'inLanguage': 'si',
+            'publisher': {
+              '@type': 'Organization',
+              '@id': `${CANONICAL_SITE_URL}/#organization`,
+              'name': publisherName,
+              'alternateName': this.ALTERNATE_NAME,
+              'url': `${CANONICAL_SITE_URL}/`,
+              'logo': {
+                '@type': 'ImageObject',
+                'url': logoUrl
+              }
+            },
+            'potentialAction': {
+              '@type': 'SearchAction',
+              'target': {
+                '@type': 'EntryPoint',
+                'urlTemplate': `${CANONICAL_SITE_URL}/?search={search_term_string}`
+              },
+              'query-input': 'required name=search_term_string'
+            }
+          }
+        ]
+      };
+      script.textContent = JSON.stringify(websiteGraph, null, 2);
     }
   }
 
   /**
    * Generates dynamic SEO payload for an individual story
-   * Sets title: "${story.title}" (which gets suffixed with "| Walkathawa (වල් කතාව)")
-   * Sets description: automatically from first 160 characters of story description
+   * Sets self-referencing canonical URL: https://www.walkathawa.site/story/${story.slug}
    */
   public static generateStorySEO(story: Story): SEOData {
-    // Generate clean meta description from the first part of description or content
     const rawDesc = story.shortDescription || story.fullContent.replace(/[\n\r]+/g, ' ').trim();
     const cleanDesc = rawDesc.length > 160 ? `${rawDesc.slice(0, 157)}...` : rawDesc;
 
-    // Combine primary keywords with specific story tags
     const storyKeywords = Array.from(
       new Set([
         ...story.tags,
@@ -280,11 +350,11 @@ export class SEOService {
     ).join(', ');
 
     return {
-      title: story.title, // Rendered as: "${story.title} | Walkathawa (වල් කතාව)"
+      title: story.title,
       rawTitle: story.title,
       description: cleanDesc,
       keywords: storyKeywords,
-      canonicalUrl: `${window.location.origin}/story/${story.slug}`,
+      canonicalUrl: `${CANONICAL_SITE_URL}/story/${story.slug}`,
       ogImage: story.coverImage,
       ogType: 'article',
       articleData: {
@@ -299,32 +369,49 @@ export class SEOService {
   }
 
   /**
-   * Generates SEO payload for home catalog or category view
+   * Generates SEO payload for home catalog, category view, or directory view
    */
-  public static generateHomeSEO(activeCategoryName?: string, searchQuery?: string): SEOData {
+  public static generateHomeSEO(activeCategorySlug?: string, activeCategoryName?: string, searchQuery?: string): SEOData {
     if (searchQuery) {
       return {
         title: `Search: "${searchQuery}"`,
         description: `Explore Sinhala short stories and katha matching "${searchQuery}" on Walkathawa (වල් කතාව).`,
-        canonicalUrl: `${window.location.origin}/?search=${encodeURIComponent(searchQuery)}`,
+        canonicalUrl: `${CANONICAL_SITE_URL}/?search=${encodeURIComponent(searchQuery)}`,
         ogType: 'website',
       };
     }
 
-    if (activeCategoryName && activeCategoryName !== 'All' && activeCategoryName !== 'All Stories') {
+    if (activeCategorySlug && activeCategorySlug !== 'all') {
+      const displayName = activeCategoryName || activeCategorySlug;
       return {
-        title: `${activeCategoryName} Stories`,
-        description: `Read the latest ${activeCategoryName} Sinhala stories, katha, and novels on Walkathawa (වල් කතාව). Updated regularly with new collections.`,
-        canonicalUrl: `${window.location.origin}/?category=${encodeURIComponent(activeCategoryName.toLowerCase())}`,
+        title: `${displayName} Stories (සිංහල කතා)`,
+        description: `Read the latest ${displayName} Sinhala stories, wal katha, and romantic tales on Walkathawa (වල් කතාව). Updated regularly with new collections.`,
+        canonicalUrl: `${CANONICAL_SITE_URL}/category/${encodeURIComponent(activeCategorySlug)}`,
         ogType: 'website',
+        categorySlug: activeCategorySlug,
+        categoryName: displayName,
       };
     }
 
+    // Root URL canonical is always https://www.walkathawa.site/
     return {
       description: this.DEFAULT_DESCRIPTION,
       keywords: this.DEFAULT_KEYWORDS,
-      canonicalUrl: window.location.origin,
+      canonicalUrl: `${CANONICAL_SITE_URL}/`,
+      ogType: 'website',
+    };
+  }
+
+  /**
+   * Generates SEO payload for the Directory / Sitemap view
+   */
+  public static generateDirectorySEO(): SEOData {
+    return {
+      title: 'All Sinhala Stories Directory (සියලු කතා සූචිය)',
+      description: 'Complete directory and archive of Sinhala stories, wal katha, and novels on Walkathawa (වල් කතාව). Easily explore by genre, author, or title.',
+      canonicalUrl: `${CANONICAL_SITE_URL}/directory`,
       ogType: 'website',
     };
   }
 }
+

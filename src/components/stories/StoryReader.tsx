@@ -191,11 +191,11 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
               <>
                 <li>
                   <a
-                    href={`/?category=${story.category}`}
+                    href={`/category/${encodeURIComponent(story.category)}`}
                     onClick={(e) => {
                       if (!e.ctrlKey && !e.metaKey) {
                         e.preventDefault();
-                        window.location.href = `/?category=${story.category}`;
+                        window.location.href = `/category/${encodeURIComponent(story.category)}`;
                       }
                     }}
                     className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"

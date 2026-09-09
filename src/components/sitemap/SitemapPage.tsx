@@ -14,6 +14,8 @@ import {
   BookOpen
 } from 'lucide-react';
 import { Story, Category } from '../../types/story';
+import { HorizontalAdBanner } from '../common/HorizontalAdBanner';
+import { SkyscraperAdBanner } from '../common/SkyscraperAdBanner';
 
 interface SitemapPageProps {
   stories: Story[];
@@ -84,7 +86,19 @@ export const SitemapPage: React.FC<SitemapPageProps> = ({
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 md:py-12">
+      <div className="relative max-w-6xl mx-auto px-4 sm:px-6 py-8 md:py-12">
+        {/* Side Skyscraper Ad Banners on Wide Screens (Gutter margin) */}
+        <div className="hidden xl:block absolute left-[calc(100%+24px)] top-28 select-none">
+          <div className="sticky top-20">
+            <SkyscraperAdBanner id="sitemap-right-skyscraper" />
+          </div>
+        </div>
+        <div className="hidden 2xl:block absolute right-[calc(100%+24px)] top-28 select-none">
+          <div className="sticky top-20">
+            <SkyscraperAdBanner id="sitemap-left-skyscraper" />
+          </div>
+        </div>
+
         {/* Navigation & Header */}
         <div className="mb-8">
           <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 mb-4">
@@ -195,6 +209,9 @@ export const SitemapPage: React.FC<SitemapPageProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Top Horizontal Ad Banner */}
+        <HorizontalAdBanner id="sitemap-top-ad" showLabel={true} className="my-6" />
 
         {/* Section 1: Main Platform Pages */}
         <div className="mb-10">
@@ -380,6 +397,9 @@ export const SitemapPage: React.FC<SitemapPageProps> = ({
             )}
           </div>
         </div>
+
+        {/* Bottom Horizontal Ad Banner */}
+        <HorizontalAdBanner id="sitemap-bottom-ad" showLabel={true} className="my-8" />
 
         {/* XML Sitemap Submission Instructions for Webmasters */}
         <div className="mt-12 p-6 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/30">

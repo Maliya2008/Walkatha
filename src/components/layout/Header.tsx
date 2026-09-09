@@ -20,10 +20,16 @@ export const Header: React.FC<HeaderProps> = ({
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
         {/* Brand Logo & Title */}
-        <div
+        <a
+          href="/"
           id="brand-logo-btn"
-          onClick={onHomeClick}
-          className="flex items-center gap-2.5 cursor-pointer group select-none"
+          onClick={(e) => {
+            if (!e.ctrlKey && !e.metaKey) {
+              e.preventDefault();
+              onHomeClick();
+            }
+          }}
+          className="flex items-center gap-2.5 cursor-pointer group select-none text-inherit no-underline"
         >
           <div className="flex items-center justify-center w-8 h-8 rounded-lg overflow-hidden bg-black border border-slate-700/50 shadow-xs group-hover:scale-105 transition-transform">
             <img
@@ -44,10 +50,20 @@ export const Header: React.FC<HeaderProps> = ({
               Sinhala Stories Online
             </span>
           </div>
-        </div>
+        </a>
 
         {/* Action Controls */}
         <div className="flex items-center gap-2">
+          {/* Directory Link for SEO & Navigation */}
+          <a
+            href="/directory"
+            id="header-directory-link"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-medium transition-colors"
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Directory</span>
+          </a>
+
           {/* Theme Toggle Button */}
           <button
             type="button"

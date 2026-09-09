@@ -1,14 +1,18 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { ArrowLeft, Calendar, Eye, Bookmark, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Calendar, Eye, Bookmark, CheckCircle2, ChevronRight, Home } from 'lucide-react';
 import { Story, ReadingTheme, FontSize, FontFamily } from '../../types/story';
 import { Badge } from '../common/Badge';
 import { ReadingControls } from './ReadingControls';
 import { SocialShare } from './SocialShare';
 import { RelatedStories } from './RelatedStories';
+import { SkyscraperAdBanner } from '../common/SkyscraperAdBanner';
+import { HorizontalAdBanner } from '../common/HorizontalAdBanner';
 
 interface StoryReaderProps {
   story: Story;
   relatedStories: Story[];
+  prevStory?: Story | null;
+  nextStory?: Story | null;
   onBack: () => void;
   onSelectStory: (slug: string) => void;
   theme: ReadingTheme;
@@ -22,6 +26,8 @@ interface StoryReaderProps {
 export const StoryReader: React.FC<StoryReaderProps> = ({
   story,
   relatedStories,
+  prevStory,
+  nextStory,
   onBack,
   onSelectStory,
   theme,
@@ -108,21 +114,37 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
         />
       </div>
 
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
+      <div className="relative max-w-3xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
+        {/* Sticky Skyscraper Ad Banner (Right Gutter) on XL screens (1280px+) */}
+        <div className="hidden xl:block absolute left-[calc(100%+24px)] 2xl:left-[calc(100%+36px)] top-28 select-none">
+          <div className="sticky top-20">
+            <SkyscraperAdBanner id="reader-right-skyscraper" />
+          </div>
+        </div>
+
+        {/* Sticky Skyscraper Ad Banner (Left Gutter) on 2XL screens (1536px+) */}
+        <div className="hidden 2xl:block absolute right-[calc(100%+36px)] top-28 select-none">
+          <div className="sticky top-20">
+            <SkyscraperAdBanner id="reader-left-skyscraper" />
+          </div>
+        </div>
+
         {/* Navigation & Toolbar */}
-        <div className="flex items-center justify-between gap-4 mb-4">
-          <button
-            type="button"
+        <div className="flex items-center justify-between gap-4 mb-3">
+          <a
+            href="/"
             id="reader-back-btn"
             onClick={(e) => {
-              e.stopPropagation();
-              onBack();
+              if (!e.ctrlKey && !e.metaKey) {
+                e.preventDefault();
+                onBack();
+              }
             }}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-medium transition-colors cursor-pointer"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             <span>Back to Stories</span>
-          </button>
+          </a>
 
           <div className="flex items-center gap-2">
             <button
@@ -143,6 +165,54 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
             </button>
           </div>
         </div>
+
+        {/* Breadcrumb Navigation for SEO & Fast Context */}
+        <nav aria-label="Breadcrumb" className="mb-4 text-xs text-slate-500 dark:text-slate-400">
+          <ol className="flex items-center flex-wrap gap-1.5 list-none p-0 m-0">
+            <li>
+              <a
+                href="/"
+                onClick={(e) => {
+                  if (!e.ctrlKey && !e.metaKey) {
+                    e.preventDefault();
+                    onBack();
+                  }
+                }}
+                className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors flex items-center gap-1"
+              >
+                <Home className="w-3 h-3" />
+                <span>Home</span>
+              </a>
+            </li>
+            <li aria-hidden="true">
+              <ChevronRight className="w-3 h-3 text-slate-400" />
+            </li>
+            {story.category && (
+              <>
+                <li>
+                  <a
+                    href={`/?category=${story.category}`}
+                    onClick={(e) => {
+                      if (!e.ctrlKey && !e.metaKey) {
+                        e.preventDefault();
+                        window.location.href = `/?category=${story.category}`;
+                      }
+                    }}
+                    className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                  >
+                    {story.categoryName || story.category}
+                  </a>
+                </li>
+                <li aria-hidden="true">
+                  <ChevronRight className="w-3 h-3 text-slate-400" />
+                </li>
+              </>
+            )}
+            <li aria-current="page" className="font-semibold text-slate-800 dark:text-slate-200 truncate max-w-[200px] sm:max-w-xs">
+              {story.title}
+            </li>
+          </ol>
+        </nav>
 
         {/* Story Header */}
         <header className="max-w-[750px] mx-auto mt-2 mb-6">
@@ -201,16 +271,24 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
         {/* Main Content Body */}
         <main id="reader-story-body" className={`max-w-[750px] mx-auto my-6 ${fontFamClass} ${fontSizes}`}>
           {paragraphs.map((paragraph, index) => (
-            <p key={`p-${index}`} className={`mb-5 text-left leading-[1.8] sm:leading-loose ${paragraphTextClasses}`}>
-              {paragraph}
-            </p>
+            <React.Fragment key={`p-${index}`}>
+              <p className={`mb-5 text-left leading-[1.8] sm:leading-loose ${paragraphTextClasses}`}>
+                {paragraph}
+              </p>
+              {paragraphs.length >= 4 && index === Math.floor(paragraphs.length / 2) && (
+                <HorizontalAdBanner id={`in-article-ad-${index}`} showLabel={true} className="my-7" />
+              )}
+            </React.Fragment>
           ))}
 
-          <div className="text-center my-8 flex flex-col items-center justify-center gap-2">
+          <div className="text-center my-6 flex flex-col items-center justify-center gap-2">
             <div className="flex items-center gap-1.5 text-xs text-slate-400 uppercase tracking-widest font-semibold">
               <span>- End of Story -</span>
             </div>
           </div>
+
+          {/* Post-Story Horizontal Ad Banner */}
+          <HorizontalAdBanner id="reader-post-story-ad" showLabel={true} className="my-6" />
 
           {story.tags && story.tags.length > 0 && (
             <div className="flex flex-wrap items-center gap-2 my-4 pt-3 border-t border-slate-200 dark:border-slate-800">
@@ -226,11 +304,64 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
           <div>
             <SocialShare story={story} />
           </div>
+
+          {/* Previous & Next Story Navigation for SEO crawling and user flow */}
+          {(prevStory || nextStory) && (
+            <nav aria-label="Adjacent Stories" className="my-8 grid grid-cols-1 sm:grid-cols-2 gap-3 pt-6 border-t border-slate-200/80 dark:border-slate-800">
+              {prevStory ? (
+                <a
+                  href={`/story/${prevStory.slug}`}
+                  onClick={(e) => {
+                    if (!e.ctrlKey && !e.metaKey) {
+                      e.preventDefault();
+                      onSelectStory(prevStory.slug);
+                    }
+                  }}
+                  className="p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 hover:shadow-xs transition-all flex flex-col group text-left"
+                >
+                  <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1 mb-1">
+                    <ArrowLeft className="w-3 h-3 group-hover:-translate-x-0.5 transition-transform" />
+                    <span>Previous Story</span>
+                  </span>
+                  <span className="font-serif font-bold text-sm text-slate-800 dark:text-slate-200 line-clamp-1 group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
+                    {prevStory.title}
+                  </span>
+                </a>
+              ) : (
+                <div />
+              )}
+              {nextStory ? (
+                <a
+                  href={`/story/${nextStory.slug}`}
+                  onClick={(e) => {
+                    if (!e.ctrlKey && !e.metaKey) {
+                      e.preventDefault();
+                      onSelectStory(nextStory.slug);
+                    }
+                  }}
+                  className="p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 hover:shadow-xs transition-all flex flex-col sm:items-end group text-left sm:text-right"
+                >
+                  <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1 mb-1">
+                    <span>Next Story</span>
+                    <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+                  </span>
+                  <span className="font-serif font-bold text-sm text-slate-800 dark:text-slate-200 line-clamp-1 group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
+                    {nextStory.title}
+                  </span>
+                </a>
+              ) : (
+                <div />
+              )}
+            </nav>
+          )}
         </main>
 
         <div>
           <RelatedStories stories={relatedStories} onRead={onSelectStory} />
         </div>
+
+        {/* Bottom Horizontal Ad Banner */}
+        <HorizontalAdBanner id="reader-bottom-ad" showLabel={true} className="mt-8 mb-4" />
       </div>
     </div>
   );

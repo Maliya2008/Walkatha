@@ -1182,6 +1182,189 @@ app.put('/api/admin/settings', requireAuth, (req: AuthenticatedRequest, res: Res
 });
 
 // --- SERVER & VITE INTEGRATION ---
+function escapeHtml(str: string): string {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function injectStorySeo(rawHtml: string, story: Story): string {
+  const title = `${story.title} | Walkathawa (වල් කතාව)`;
+  const rawDesc = story.shortDescription || story.description || (story.fullContent ? story.fullContent.slice(0, 160) : '');
+  const cleanDesc = rawDesc.length > 160 ? `${rawDesc.slice(0, 157)}...` : rawDesc;
+  const canonicalUrl = `https://www.walkathawa.site/story/${story.slug}`;
+  const coverImage = story.coverImage || 'https://www.walkathawa.site/icon.png';
+  const publishedTime = new Date(story.uploadDate || story.uploadedDate || Date.now()).toISOString();
+  const modifiedTime = new Date(story.updatedDate || story.uploadDate || story.uploadedDate || Date.now()).toISOString();
+
+  let html = rawHtml;
+
+  // Replace Title
+  html = html.replace(/<title>.*?<\/title>/i, `<title>${escapeHtml(title)}</title>`);
+
+  // Replace Meta Description
+  if (/<meta\s+name="description"/i.test(html)) {
+    html = html.replace(/<meta\s+name="description"\s+content=".*?"\s*\/?>/i, `<meta name="description" content="${escapeHtml(cleanDesc)}" />`);
+  } else {
+    html = html.replace('</head>', `  <meta name="description" content="${escapeHtml(cleanDesc)}" />\n</head>`);
+  }
+
+  // Canonical tag
+  if (html.includes('rel="canonical"')) {
+    html = html.replace(/<link\s+rel="canonical"\s+href=".*?"\s*\/?>/i, `<link rel="canonical" href="${canonicalUrl}" />`);
+  } else {
+    html = html.replace('</head>', `  <link rel="canonical" href="${canonicalUrl}" />\n</head>`);
+  }
+
+  // Schema.org Article & BreadcrumbList
+  const schema = {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'Article',
+        '@id': `${canonicalUrl}#article`,
+        'isPartOf': {
+          '@type': 'WebSite',
+          '@id': 'https://www.walkathawa.site/#website',
+          'name': 'Walkathawa (වල් කතාව)',
+          'url': 'https://www.walkathawa.site'
+        },
+        'headline': story.title,
+        'description': cleanDesc,
+        'image': coverImage,
+        'datePublished': publishedTime,
+        'dateModified': modifiedTime,
+        'author': {
+          '@type': 'Person',
+          'name': story.author?.name || 'Walkathawa'
+        },
+        'publisher': {
+          '@type': 'Organization',
+          'name': 'Walkathawa (වල් කතාව)',
+          'logo': {
+            '@type': 'ImageObject',
+            'url': 'https://www.walkathawa.site/icon.png'
+          }
+        },
+        'mainEntityOfPage': {
+          '@type': 'WebPage',
+          '@id': canonicalUrl
+        },
+        'articleSection': story.categoryName || story.category,
+        'inLanguage': 'si'
+      },
+      {
+        '@type': 'BreadcrumbList',
+        '@id': `${canonicalUrl}#breadcrumb`,
+        'itemListElement': [
+          {
+            '@type': 'ListItem',
+            'position': 1,
+            'name': 'Home',
+            'item': 'https://www.walkathawa.site/'
+          },
+          {
+            '@type': 'ListItem',
+            'position': 2,
+            'name': story.categoryName || story.category,
+            'item': `https://www.walkathawa.site/?category=${encodeURIComponent(story.category)}`
+          },
+          {
+            '@type': 'ListItem',
+            'position': 3,
+            'name': story.title,
+            'item': canonicalUrl
+          }
+        ]
+      }
+    ]
+  };
+
+  const seoTags = `
+  <meta property="og:site_name" content="Walkathawa (වල් කතාව)" />
+  <meta property="og:type" content="article" />
+  <meta property="og:title" content="${escapeHtml(story.title)} - Walkathawa (වල් කතාව)" />
+  <meta property="og:description" content="${escapeHtml(cleanDesc)}" />
+  <meta property="og:image" content="${escapeHtml(coverImage)}" />
+  <meta property="og:url" content="${canonicalUrl}" />
+  <meta property="og:locale" content="si_LK" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="${escapeHtml(story.title)}" />
+  <meta name="twitter:description" content="${escapeHtml(cleanDesc)}" />
+  <meta name="twitter:image" content="${escapeHtml(coverImage)}" />
+  <script type="application/ld+json" id="server-injected-schema">
+${JSON.stringify(schema, null, 2)}
+  </script>`;
+
+  const paragraphsHtml = (story.fullContent || story.content || '')
+    .split('\n\n')
+    .filter((p) => p.trim().length > 0)
+    .map((p) => `<p>${escapeHtml(p)}</p>`)
+    .join('\n');
+
+  const noscriptContent = `
+<noscript>
+  <article style="max-width: 800px; margin: 2rem auto; padding: 1rem; font-family: sans-serif;">
+    <nav aria-label="Breadcrumb">
+      <a href="/">Home</a> &gt; <a href="/?category=${encodeURIComponent(story.category)}">${escapeHtml(story.categoryName || story.category)}</a> &gt; <span>${escapeHtml(story.title)}</span>
+    </nav>
+    <h1>${escapeHtml(story.title)}</h1>
+    <p><strong>Published:</strong> ${escapeHtml(new Date(publishedTime).toLocaleDateString())}</p>
+    <p><em>${escapeHtml(cleanDesc)}</em></p>
+    <div>
+      ${paragraphsHtml}
+    </div>
+  </article>
+</noscript>`;
+
+  html = html.replace('</head>', `${seoTags}\n</head>`);
+  html = html.replace('</body>', `${noscriptContent}\n</body>`);
+
+  return html;
+}
+
+function injectDirectorySeo(rawHtml: string): string {
+  const title = `All Sinhala Stories Directory | Walkathawa (වල් කතාව)`;
+  const description = `Browse the complete collection and archive of Sinhala stories, wal katha, and romantic novels on Walkathawa. Updated regularly with easy navigation.`;
+  const canonicalUrl = `https://www.walkathawa.site/directory`;
+
+  let html = rawHtml;
+  html = html.replace(/<title>.*?<\/title>/i, `<title>${escapeHtml(title)}</title>`);
+  if (/<meta\s+name="description"/i.test(html)) {
+    html = html.replace(/<meta\s+name="description"\s+content=".*?"\s*\/?>/i, `<meta name="description" content="${escapeHtml(description)}" />`);
+  } else {
+    html = html.replace('</head>', `  <meta name="description" content="${escapeHtml(description)}" />\n</head>`);
+  }
+
+  if (html.includes('rel="canonical"')) {
+    html = html.replace(/<link\s+rel="canonical"\s+href=".*?"\s*\/?>/i, `<link rel="canonical" href="${canonicalUrl}" />`);
+  } else {
+    html = html.replace('</head>', `  <link rel="canonical" href="${canonicalUrl}" />\n</head>`);
+  }
+
+  const storiesList = db.stories
+    .filter((s) => s.published)
+    .map((s) => `<li><a href="/story/${s.slug}">${escapeHtml(s.title)}</a> (${escapeHtml(s.categoryName || s.category)})</li>`)
+    .join('\n');
+
+  const noscriptContent = `
+<noscript>
+  <main style="max-width: 800px; margin: 2rem auto; padding: 1rem; font-family: sans-serif;">
+    <h1>All Sinhala Stories Directory</h1>
+    <p>${escapeHtml(description)}</p>
+    <ul>
+      ${storiesList}
+    </ul>
+  </main>
+</noscript>`;
+
+  html = html.replace('</body>', `${noscriptContent}\n</body>`);
+  return html;
+}
+
 async function startServer() {
   const httpServer = http.createServer(app);
 
@@ -1194,9 +1377,42 @@ async function startServer() {
       },
       appType: 'spa',
     });
+
+    // Dev SEO prerender for /story/:slug and /directory
+    app.get(['/story/:slug', '/directory', '/stories-directory', '/sitemap.html'], async (req, res, next) => {
+      try {
+        const slug = req.params.slug;
+        const indexFile = path.join(process.cwd(), 'index.html');
+        if (fs.existsSync(indexFile)) {
+          let template = fs.readFileSync(indexFile, 'utf-8');
+          template = await vite.transformIndexHtml(req.originalUrl, template);
+
+          if (req.path.startsWith('/story/') && slug) {
+            const story = db.stories.find((s) => s.slug === slug || s.id === slug);
+            if (story && story.published) {
+              const rendered = injectStorySeo(template, story);
+              res.setHeader('Content-Type', 'text/html; charset=utf-8');
+              res.setHeader('X-Robots-Tag', 'all');
+              return res.send(rendered);
+            }
+          } else if (req.path === '/directory' || req.path === '/stories-directory' || req.path === '/sitemap.html') {
+            const rendered = injectDirectorySeo(template);
+            res.setHeader('Content-Type', 'text/html; charset=utf-8');
+            res.setHeader('X-Robots-Tag', 'all');
+            return res.send(rendered);
+          }
+        }
+      } catch (err) {
+        console.error('Error rendering SEO template in dev:', err);
+      }
+      next();
+    });
+
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
+    const indexPath = path.join(distPath, 'index.html');
+
     // Long-lived caching for immutable hashed assets
     app.use('/assets', express.static(path.join(distPath, 'assets'), {
       maxAge: '1y',
@@ -1205,9 +1421,42 @@ async function startServer() {
     app.use(express.static(distPath, {
       maxAge: '1h',
     }));
+
+    // Production Server-Side SEO Render for Story Readers
+    app.get('/story/:slug', (req, res) => {
+      const slug = req.params.slug;
+      if (fs.existsSync(indexPath)) {
+        const raw = fs.readFileSync(indexPath, 'utf-8');
+        const story = db.stories.find((s) => s.slug === slug || s.id === slug);
+        if (story && story.published) {
+          const rendered = injectStorySeo(raw, story);
+          res.setHeader('Content-Type', 'text/html; charset=utf-8');
+          res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=3600');
+          res.setHeader('X-Robots-Tag', 'all');
+          return res.send(rendered);
+        }
+      }
+      res.setHeader('Cache-Control', 'no-cache');
+      res.sendFile(indexPath);
+    });
+
+    // Production Server-Side SEO Render for Directory
+    app.get(['/directory', '/stories-directory', '/sitemap.html'], (_req, res) => {
+      if (fs.existsSync(indexPath)) {
+        const raw = fs.readFileSync(indexPath, 'utf-8');
+        const rendered = injectDirectorySeo(raw);
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=3600');
+        res.setHeader('X-Robots-Tag', 'all');
+        return res.send(rendered);
+      }
+      res.setHeader('Cache-Control', 'no-cache');
+      res.sendFile(indexPath);
+    });
+
     app.get('*', (_req, res) => {
       res.setHeader('Cache-Control', 'no-cache');
-      res.sendFile(path.join(distPath, 'index.html'));
+      res.sendFile(indexPath);
     });
   }
 

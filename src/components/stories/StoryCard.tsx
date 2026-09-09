@@ -22,9 +22,16 @@ export const StoryCard: React.FC<StoryCardProps> = ({ story, onRead, priority = 
       className="group flex flex-col bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-xl overflow-hidden hover:border-slate-300 dark:hover:border-slate-700 transition-all duration-200 hover:shadow-sm"
     >
       {/* Cover Image */}
-      <div
-        className="relative aspect-[16/9] w-full overflow-hidden bg-slate-100 dark:bg-slate-800 cursor-pointer"
-        onClick={() => onRead(story.slug)}
+      <a
+        href={`/story/${story.slug}`}
+        onClick={(e) => {
+          if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
+            e.preventDefault();
+            onRead(story.slug);
+          }
+        }}
+        aria-label={`Read ${story.title}`}
+        className="relative aspect-[16/9] w-full overflow-hidden bg-slate-100 dark:bg-slate-800 cursor-pointer block"
       >
         <img
           src={story.coverImage}
@@ -36,7 +43,7 @@ export const StoryCard: React.FC<StoryCardProps> = ({ story, onRead, priority = 
           height={225}
           className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-300"
         />
-        <div className="absolute top-2.5 left-2.5 flex gap-1.5 flex-wrap">
+        <div className="absolute top-2.5 left-2.5 flex gap-1.5 flex-wrap pointer-events-none">
           <Badge variant="accent" size="sm">
             {story.categoryName || story.category}
           </Badge>
@@ -46,17 +53,26 @@ export const StoryCard: React.FC<StoryCardProps> = ({ story, onRead, priority = 
             </Badge>
           )}
         </div>
-      </div>
+      </a>
 
       {/* Story Details Body */}
       <div className="flex flex-col flex-1 p-4">
         {/* Title */}
         <h3
           id={`story-title-${story.id}`}
-          onClick={() => onRead(story.slug)}
           className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer transition-colors line-clamp-2 mb-1.5 font-serif leading-snug"
         >
-          {story.title}
+          <a
+            href={`/story/${story.slug}`}
+            onClick={(e) => {
+              if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
+                e.preventDefault();
+                onRead(story.slug);
+              }
+            }}
+          >
+            {story.title}
+          </a>
         </h3>
 
         {/* Short Description */}
@@ -77,15 +93,20 @@ export const StoryCard: React.FC<StoryCardProps> = ({ story, onRead, priority = 
             </div>
           </div>
 
-          <button
-            type="button"
+          <a
+            href={`/story/${story.slug}`}
             id={`read-btn-${story.id}`}
-            onClick={() => onRead(story.slug)}
+            onClick={(e) => {
+              if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
+                e.preventDefault();
+                onRead(story.slug);
+              }
+            }}
             className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 hover:bg-indigo-600 dark:hover:bg-slate-200 text-xs font-medium transition-colors cursor-pointer"
           >
             <span>Read</span>
             <ArrowRight className="w-3 h-3" />
-          </button>
+          </a>
         </div>
       </div>
     </article>

@@ -3,6 +3,8 @@ import { Category, Story } from '../../types/story';
 import { StoryCard } from './StoryCard';
 import { SearchBar } from '../common/SearchBar';
 import { Pagination } from '../common/Pagination';
+import { HorizontalAdBanner } from '../common/HorizontalAdBanner';
+import { SkyscraperAdBanner } from '../common/SkyscraperAdBanner';
 
 interface StoryGalleryProps {
   stories: Story[];
@@ -40,7 +42,19 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
   isLoading,
 }) => {
   return (
-    <div id="story-gallery-container" className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
+    <div id="story-gallery-container" className="relative max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
+      {/* Side Skyscraper Ad Banners on Ultra-Wide Screens (gutter margin space) */}
+      <div className="hidden min-[1680px]:block absolute left-[calc(100%+24px)] top-28 select-none">
+        <div className="sticky top-20">
+          <SkyscraperAdBanner id="gallery-right-skyscraper" />
+        </div>
+      </div>
+      <div className="hidden min-[1920px]:block absolute right-[calc(100%+24px)] top-28 select-none">
+        <div className="sticky top-20">
+          <SkyscraperAdBanner id="gallery-left-skyscraper" />
+        </div>
+      </div>
+
       {/* Gallery Filter & Search Section */}
       <div className="mb-4 flex flex-col gap-3">
         {/* Search Bar & Sorter Controls */}
@@ -74,10 +88,15 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
 
         {/* Category Pills Slider */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-          <button
-            type="button"
+          <a
+            href="/"
             id="category-btn-all"
-            onClick={() => onSelectCategory('all')}
+            onClick={(e) => {
+              if (!e.ctrlKey && !e.metaKey) {
+                e.preventDefault();
+                onSelectCategory('all');
+              }
+            }}
             className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
               selectedCategory === 'all' || !selectedCategory
                 ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 shadow-xs'
@@ -85,7 +104,7 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
             }`}
           >
             <span>All Categories</span>
-          </button>
+          </a>
 
           {categories
             .filter((c) => c.slug !== 'all')
@@ -100,11 +119,16 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
                 );
 
               return (
-                <button
+                <a
                   key={cat.id || cat.slug}
-                  type="button"
+                  href={`/?category=${catKey}`}
                   id={`category-btn-${catKey}`}
-                  onClick={() => onSelectCategory(catKey)}
+                  onClick={(e) => {
+                    if (!e.ctrlKey && !e.metaKey) {
+                      e.preventDefault();
+                      onSelectCategory(catKey);
+                    }
+                  }}
                   className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
                     isSelected
                       ? 'bg-indigo-600 text-white shadow-xs dark:bg-indigo-500'
@@ -112,11 +136,14 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
                   }`}
                 >
                   <span>{cat.name}</span>
-                </button>
+                </a>
               );
             })}
         </div>
       </div>
+
+      {/* Top Horizontal Ad Banner (non-disturbing header break) */}
+      <HorizontalAdBanner id="gallery-top-ad" showLabel={true} className="my-3 sm:my-4" />
 
       {/* Gallery Header Title */}
       <div className="flex items-center justify-between mb-4">
@@ -180,6 +207,9 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
               />
             ))}
           </div>
+
+          {/* Bottom Horizontal Ad Banner (above Pagination) */}
+          <HorizontalAdBanner id="gallery-bottom-ad" showLabel={true} className="mt-8 mb-4" />
 
           <Pagination
             currentPage={currentPage}

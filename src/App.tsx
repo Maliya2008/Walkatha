@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, Suspense, lazy } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, Suspense, lazy } from 'react';
 import { useStories } from './hooks/useStories';
 import { useStory } from './hooks/useStory';
 import { useTheme } from './hooks/useTheme';
@@ -46,6 +46,20 @@ export default function App() {
     isLoading: isStoryLoading,
     error: storyError,
   } = useStory(currentSlug);
+
+  const { prevStory, nextStory } = useMemo(() => {
+    if (!activeStory || !stories || stories.length === 0) {
+      return { prevStory: null, nextStory: null };
+    }
+    const idx = stories.findIndex((s) => s.slug === activeStory.slug || s.id === activeStory.id);
+    if (idx === -1) {
+      return { prevStory: null, nextStory: null };
+    }
+    return {
+      prevStory: idx > 0 ? stories[idx - 1] : null,
+      nextStory: idx < stories.length - 1 ? stories[idx + 1] : null,
+    };
+  }, [activeStory, stories]);
 
   const [siteSettings, setSiteSettings] = useState<any>(null);
 
@@ -287,6 +301,8 @@ export default function App() {
               <StoryReader
                 story={activeStory}
                 relatedStories={relatedStories}
+                prevStory={prevStory}
+                nextStory={nextStory}
                 onBack={handleBackToGallery}
                 onSelectStory={handleReadStory}
                 theme={theme}

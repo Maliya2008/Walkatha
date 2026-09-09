@@ -35,16 +35,29 @@ export const Pagination: React.FC<PaginationProps> = ({
       aria-label="Stories pagination"
       className={`flex items-center justify-center gap-1.5 py-6 ${className}`}
     >
-      <button
-        type="button"
-        id="pagination-prev-btn"
-        disabled={currentPage === 1}
-        onClick={() => onPageChange(currentPage - 1)}
-        className="flex items-center justify-center w-9 h-9 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 disabled:opacity-40 disabled:pointer-events-none hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-sm"
-        aria-label="Previous page"
-      >
-        <ChevronLeft className="w-4 h-4" />
-      </button>
+      {currentPage > 1 ? (
+        <a
+          href={`/?page=${currentPage - 1}`}
+          id="pagination-prev-btn"
+          onClick={(e) => {
+            if (!e.ctrlKey && !e.metaKey) {
+              e.preventDefault();
+              onPageChange(currentPage - 1);
+            }
+          }}
+          className="flex items-center justify-center w-9 h-9 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-sm"
+          aria-label="Previous page"
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </a>
+      ) : (
+        <span
+          className="flex items-center justify-center w-9 h-9 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-300 dark:text-slate-700 opacity-40 cursor-not-allowed text-sm"
+          aria-hidden="true"
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </span>
+      )}
 
       {pages.map((p, idx) => {
         if (p === '...') {
@@ -62,32 +75,51 @@ export const Pagination: React.FC<PaginationProps> = ({
         const isActive = pageNum === currentPage;
 
         return (
-          <button
+          <a
             key={`page-${pageNum}`}
+            href={`/?page=${pageNum}`}
             id={`pagination-page-${pageNum}`}
-            onClick={() => onPageChange(pageNum)}
+            onClick={(e) => {
+              if (!e.ctrlKey && !e.metaKey) {
+                e.preventDefault();
+                onPageChange(pageNum);
+              }
+            }}
             aria-current={isActive ? 'page' : undefined}
-            className={`w-9 h-9 rounded-lg text-sm font-semibold transition-all ${
+            className={`flex items-center justify-center w-9 h-9 rounded-lg text-sm font-semibold transition-all ${
               isActive
                 ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm'
                 : 'border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
             }`}
           >
             {pageNum}
-          </button>
+          </a>
         );
       })}
 
-      <button
-        type="button"
-        id="pagination-next-btn"
-        disabled={currentPage === totalPages}
-        onClick={() => onPageChange(currentPage + 1)}
-        className="flex items-center justify-center w-9 h-9 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 disabled:opacity-40 disabled:pointer-events-none hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-sm"
-        aria-label="Next page"
-      >
-        <ChevronRight className="w-4 h-4" />
-      </button>
+      {currentPage < totalPages ? (
+        <a
+          href={`/?page=${currentPage + 1}`}
+          id="pagination-next-btn"
+          onClick={(e) => {
+            if (!e.ctrlKey && !e.metaKey) {
+              e.preventDefault();
+              onPageChange(currentPage + 1);
+            }
+          }}
+          className="flex items-center justify-center w-9 h-9 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-sm"
+          aria-label="Next page"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </a>
+      ) : (
+        <span
+          className="flex items-center justify-center w-9 h-9 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-300 dark:text-slate-700 opacity-40 cursor-not-allowed text-sm"
+          aria-hidden="true"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </span>
+      )}
     </nav>
   );
 };

@@ -8,6 +8,8 @@ import { FooterAdBanner } from './components/common/FooterAdBanner';
 import { StoryGallery } from './components/stories/StoryGallery';
 import { SitemapPage } from './components/sitemap/SitemapPage';
 import { SEOService } from './services/seoService';
+import { adminAdBlocker } from './services/adminAdBlocker';
+import { adService } from './services/adService';
 
 // Lazy-load heavy components to reduce initial JavaScript execution & bundle size
 const StoryReader = lazy(() =>
@@ -92,9 +94,14 @@ export default function App() {
     setIsAdminView(isAdmin);
 
     if (isAdmin) {
+      adminAdBlocker.enableAdminShield();
+      adService.setAdminMode(true);
       setIsSitemapView(false);
       setCurrentSlug(null);
       return;
+    } else {
+      adminAdBlocker.disableAdminShield();
+      adService.setAdminMode(false);
     }
 
     // Normalize legacy paths to canonical URLs

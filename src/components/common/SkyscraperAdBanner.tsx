@@ -1,4 +1,5 @@
 import React from 'react';
+import { adminAdBlocker } from '../../services/adminAdBlocker';
 
 interface SkyscraperAdBannerProps {
   id?: string;
@@ -9,6 +10,9 @@ export const SkyscraperAdBanner: React.FC<SkyscraperAdBannerProps> = ({
   id = 'skyscraper-ad-banner',
   className = '',
 }) => {
+  if (typeof window !== 'undefined' && adminAdBlocker.isAdminRoute()) {
+    return null;
+  }
   const adHtml = `<!DOCTYPE html>
 <html>
   <head>

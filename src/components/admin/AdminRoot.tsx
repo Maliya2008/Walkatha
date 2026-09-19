@@ -10,6 +10,8 @@ import { AdminStoryForm } from './AdminStoryForm';
 import { AdminCategories } from './AdminCategories';
 import { AdminSettings } from './AdminSettings';
 import { adminService } from '../../services/adminService';
+import { adminAdBlocker } from '../../services/adminAdBlocker';
+import { adService } from '../../services/adService';
 
 interface AdminRootProps {
   onBackToPublic: () => void;
@@ -24,6 +26,17 @@ export const AdminRoot: React.FC<AdminRootProps> = ({
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
   const [storyToEdit, setStoryToEdit] = useState<Story | null>(null);
+
+  // Strictly block and neutralize all advertisements inside the Admin Panel
+  useEffect(() => {
+    adminAdBlocker.enableAdminShield();
+    adService.setAdminMode(true);
+
+    return () => {
+      adminAdBlocker.disableAdminShield();
+      adService.setAdminMode(false);
+    };
+  }, []);
 
   // Subscribe to authentication changes & verify session on mount
   useEffect(() => {

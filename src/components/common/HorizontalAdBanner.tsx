@@ -1,4 +1,5 @@
 import React from 'react';
+import { adminAdBlocker } from '../../services/adminAdBlocker';
 
 interface HorizontalAdBannerProps {
   id?: string;
@@ -11,6 +12,9 @@ export const HorizontalAdBanner: React.FC<HorizontalAdBannerProps> = ({
   className = '',
   showLabel = false,
 }) => {
+  if (typeof window !== 'undefined' && adminAdBlocker.isAdminRoute()) {
+    return null;
+  }
   const adHtml = `<!DOCTYPE html>
 <html>
   <head>

@@ -22,12 +22,47 @@ class AdService {
   private config: AdvertisementSettings = { ...DEFAULT_CONFIG };
   private activeStoryState: StoryAdState | null = null;
   private isConfigLoaded = false;
+  private isAdminMode = false;
 
   constructor() {
     if (typeof window !== 'undefined') {
       this.initCachedConfig();
       this.fetchConfig();
     }
+  }
+
+  /**
+   * Toggles admin mode ad blocking.
+   * When enabled, eliminates all ad script containers and suppresses triggers.
+   */
+  public setAdminMode(enabled: boolean): void {
+    this.isAdminMode = enabled;
+    if (enabled) {
+      if (typeof document !== 'undefined') {
+        const existing = document.getElementById(SCRIPT_ELEMENT_ID);
+        if (existing) {
+          existing.remove();
+        }
+      }
+    } else {
+      this.applyGlobalScript();
+    }
+  }
+
+  /**
+   * Checks if current environment or URL represents the admin panel.
+   */
+  public isCurrentRouteAdmin(): boolean {
+    if (this.isAdminMode) return true;
+    if (typeof window === 'undefined') return false;
+    const path = window.location.pathname || '';
+    const hash = window.location.hash || '';
+    return (
+      path.startsWith('/admin') ||
+      hash === '#admin' ||
+      hash.startsWith('#/admin') ||
+      hash.startsWith('#admin')
+    );
   }
 
   private initCachedConfig(): void {
@@ -188,6 +223,7 @@ class AdService {
    * Checks if an ad redirect is currently allowed for the given story
    */
   public canRedirectForStory(storyKey: string): boolean {
+    if (this.isCurrentRouteAdmin()) return false;
     if (!this.config.enabled) return false;
     const cleanKey = (storyKey || '').trim();
     if (!cleanKey) return false;
@@ -208,6 +244,7 @@ class AdService {
    * Returns how many redirects have been used for the current story
    */
   public getStoryRedirectCount(storyKey: string): number {
+    if (this.isCurrentRouteAdmin()) return 0;
     const cleanKey = (storyKey || '').trim();
     if (this.activeStoryState && this.activeStoryState.storyId === cleanKey) {
       return this.activeStoryState.redirectsUsed;
@@ -221,6 +258,9 @@ class AdService {
    * Increment occurs ONLY on an actual redirect action, never on re-render.
    */
   public triggerStoryAd(storyKey: string): boolean {
+    if (this.isCurrentRouteAdmin()) {
+      return false;
+    }
     if (!this.config.enabled) {
       return false;
     }
@@ -262,6 +302,7 @@ class AdService {
    * Legacy trigger helper delegating to the active story
    */
   public triggerDirectAd(storyKey?: string): void {
+    if (this.isCurrentRouteAdmin()) return;
     const keyToUse = storyKey || (this.activeStoryState ? this.activeStoryState.storyId : '');
     if (keyToUse) {
       this.triggerStoryAd(keyToUse);
@@ -279,7 +320,8 @@ class AdService {
       existing.remove();
     }
 
-    if (!this.config.enabled || !this.config.globalAdCode.trim()) {
+    // In admin mode or admin route, suppress all global ad script injections
+    if (this.isCurrentRouteAdmin() || !this.config.enabled || !this.config.globalAdCode.trim()) {
       return;
     }
 

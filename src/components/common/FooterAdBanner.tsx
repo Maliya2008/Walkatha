@@ -1,6 +1,10 @@
 import React from 'react';
+import { adminAdBlocker } from '../../services/adminAdBlocker';
 
 export const FooterAdBanner: React.FC = () => {
+  if (typeof window !== 'undefined' && adminAdBlocker.isAdminRoute()) {
+    return null;
+  }
   const adHtml = `<!DOCTYPE html>
 <html>
   <head>

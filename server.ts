@@ -2264,6 +2264,18 @@ async function startServer() {
       res.sendFile(indexPath);
     });
 
+    // Production Admin Panel SPA route
+    app.get(['/admin', '/admin/*'], (_req: Request, res: Response) => {
+      if (fs.existsSync(indexPath)) {
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+        return res.sendFile(indexPath);
+      }
+      res.setHeader('Cache-Control', 'no-cache');
+      res.status(200).send('Admin Panel Loading...');
+    });
+
     app.get('*', (req: Request, res: Response) => {
       if (fs.existsSync(indexPath)) {
         const raw = fs.readFileSync(indexPath, 'utf-8');

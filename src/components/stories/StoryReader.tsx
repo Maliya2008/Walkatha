@@ -7,6 +7,7 @@ import { SocialShare } from './SocialShare';
 import { RelatedStories } from './RelatedStories';
 import { SkyscraperAdBanner } from '../common/SkyscraperAdBanner';
 import { HorizontalAdBanner } from '../common/HorizontalAdBanner';
+import { getStoryCanonicalCategory, getCategoryDisplayName } from '../../utils/categoryTaxonomy';
 
 interface StoryReaderProps {
   story: Story;
@@ -191,16 +192,16 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
               <>
                 <li>
                   <a
-                    href={`/category/${encodeURIComponent(story.category)}`}
+                    href={`/category/${getStoryCanonicalCategory(story)}`}
                     onClick={(e) => {
                       if (!e.ctrlKey && !e.metaKey) {
                         e.preventDefault();
-                        window.location.href = `/category/${encodeURIComponent(story.category)}`;
+                        window.location.href = `/category/${getStoryCanonicalCategory(story)}`;
                       }
                     }}
                     className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
                   >
-                    {story.categoryName || story.category}
+                    {getCategoryDisplayName(story.category)}
                   </a>
                 </li>
                 <li aria-hidden="true">
@@ -218,7 +219,7 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
         <header className="max-w-[750px] mx-auto mt-2 mb-6">
           <div className="flex items-center gap-2 mb-2">
             <Badge variant="accent" size="sm">
-              {story.categoryName || story.category}
+              {getCategoryDisplayName(story.category)}
             </Badge>
           </div>
 

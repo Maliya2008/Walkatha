@@ -80,6 +80,26 @@ const categories = [
   { slug: 'romantic', name: 'ආදර කතා (Romantic Stories)' },
 ];
 
+function normalizeCategory(raw) {
+  if (!raw) return 'wife';
+  const clean = String(raw).toLowerCase().trim();
+  if (clean.includes('වයිෆ්') || clean.includes('බිරිඳ') || clean.includes('wife')) return 'wife';
+  if (clean.includes('පාසල්') || clean.includes('school')) return 'school';
+  if (clean.includes('අක්කා') || clean.includes('මල්ලි') || clean.includes('akka')) return 'akka-malli';
+  if (clean.includes('ආදර') || clean.includes('romantic') || clean.includes('love')) return 'romantic';
+  return 'wife';
+}
+
+function formatCanonicalStoryUrl(slug) {
+  let cleanSlug = slug;
+  try {
+    cleanSlug = decodeURI(slug);
+  } catch {
+    cleanSlug = slug;
+  }
+  return `${baseUrl}/story/${encodeURI(cleanSlug)}`;
+}
+
 async function loadAllPublishedStories() {
   const storiesMap = new Map();
 
@@ -95,7 +115,7 @@ async function loadAllPublishedStories() {
               id: s.id || s.slug,
               slug: s.slug,
               title: s.title || '',
-              category: s.category || '',
+              category: normalizeCategory(s.category),
               published: true,
               coverImage: s.coverImage || '',
               updatedDate: parseValidIsoDate(s.updatedDate) || parseValidIsoDate(s.uploadDate) || parseValidIsoDate(s.uploadedDate),
@@ -108,14 +128,14 @@ async function loadAllPublishedStories() {
     }
   }
 
-  // 2. Fetch live data from Firestore as source of truth
+  // 2. Fetch live data from Firestore as source of truth with full pagination
   if (fs.existsSync(configPath)) {
     try {
       const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
       if (config?.projectId && config?.firestoreDatabaseId && config?.apiKey) {
         let pageToken = '';
         let pageCount = 0;
-        const maxPages = 15; // safeguard against infinite pagination
+        const maxPages = 50;
         do {
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 8000);
@@ -144,7 +164,8 @@ async function loadAllPublishedStories() {
               }
 
               const coverImage = fields.coverImage?.stringValue || '';
-              const category = fields.category?.stringValue || '';
+              const rawCategory = fields.category?.stringValue || fields.categoryName?.stringValue || '';
+              const category = normalizeCategory(rawCategory);
               const rawDate =
                 fields.updatedDate?.stringValue ||
                 fields.uploadDate?.stringValue ||
@@ -190,7 +211,7 @@ async function generate() {
     }
   }
 
-  // Fallback to a stable release date if no story dates exist (never generate new fake timestamps on every request)
+  // Fallback to a stable release date if no story dates exist
   const defaultStableDate = latestStoryDate || '2026-09-08T12:00:00.000Z';
 
   let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
@@ -215,7 +236,6 @@ async function generate() {
 
   // 3. Category Pages (Path-based canonical URLs ONLY: /category/{slug})
   for (const cat of categories) {
-    // Find latest story date specifically for this category
     let catLatestDate = null;
     for (const s of stories) {
       if (s.category === cat.slug && s.updatedDate) {
@@ -234,9 +254,9 @@ async function generate() {
     xml += `  </url>\n`;
   }
 
-  // 4. Published Story Pages (Canonical /story/{slug} URLs)
+  // 4. Published Story Pages (Canonical /story/{slug} URLs with RFC 3986 encoding)
   for (const story of stories) {
-    const storyUrl = `${baseUrl}/story/${story.slug}`;
+    const storyUrl = formatCanonicalStoryUrl(story.slug);
     const storyDate = story.updatedDate || defaultStableDate;
 
     xml += `  <url>\n`;
@@ -256,7 +276,7 @@ async function generate() {
 
   xml += `</urlset>`;
 
-  // Write ONLY the canonical sitemap.xml
+  // Write canonical sitemap.xml
   fs.writeFileSync(path.join(publicDir, 'sitemap.xml'), xml, 'utf-8');
   console.log(`[Sitemap Generator] Generated public/sitemap.xml with ${stories.length} stories.`);
 
@@ -275,163 +295,6 @@ Sitemap: ${baseUrl}/sitemap.xml
 
   fs.writeFileSync(path.join(publicDir, 'robots.txt'), robotsTxt, 'utf-8');
   console.log('[Sitemap Generator] Generated public/robots.txt.');
-
-  // Generate sitemap.xsl
-  const sitemapXsl = `<?xml version="1.0" encoding="UTF-8"?>
-<xsl:stylesheet version="2.0" 
-  xmlns:html="http://www.w3.org/TR/REC-html40"
-  xmlns:sitemap="http://www.sitemaps.org/schemas/sitemap/0.9"
-  xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"
-  xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
-  <xsl:output method="html" version="1.0" encoding="UTF-8" indent="yes"/>
-  <xsl:template match="/">
-    <html xmlns="http://www.w3.org/1999/xhtml" lang="si">
-      <head>
-        <title>XML Sitemap | Walkathawa (වල් කතාව)</title>
-        <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <style type="text/css">
-          body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
-            background: #090d16;
-            color: #cbd5e1;
-            margin: 0;
-            padding: 30px 20px;
-          }
-          .container {
-            max-width: 1100px;
-            margin: 0 auto;
-            background: #0f172a;
-            border-radius: 16px;
-            border: 1px solid #1e293b;
-            padding: 30px;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
-          }
-          h1 {
-            color: #ffffff;
-            font-size: 24px;
-            margin-top: 0;
-            margin-bottom: 8px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-          }
-          h1 span {
-            color: #818cf8;
-            font-size: 16px;
-            font-weight: normal;
-          }
-          p.desc {
-            color: #94a3b8;
-            font-size: 13px;
-            line-height: 1.6;
-            margin-bottom: 24px;
-          }
-          .stats {
-            display: flex;
-            gap: 15px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-          }
-          .stat-badge {
-            background: #1e293b;
-            border: 1px solid #334155;
-            padding: 8px 16px;
-            border-radius: 10px;
-            font-size: 12px;
-            color: #e2e8f0;
-          }
-          .stat-badge strong {
-            color: #38bdf8;
-          }
-          table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 12px;
-            text-align: left;
-          }
-          th {
-            background: #1e293b;
-            color: #f8fafc;
-            padding: 12px 14px;
-            font-weight: 600;
-            border-bottom: 1px solid #334155;
-          }
-          th:first-child { border-top-left-radius: 8px; }
-          th:last-child { border-top-right-radius: 8px; }
-          td {
-            padding: 10px 14px;
-            border-bottom: 1px solid #1e293b;
-            color: #94a3b8;
-          }
-          tr:hover td {
-            background: #131d33;
-            color: #f1f5f9;
-          }
-          a {
-            color: #818cf8;
-            text-decoration: none;
-            word-break: break-all;
-          }
-          a:hover {
-            text-decoration: underline;
-            color: #a5b4fc;
-          }
-          .priority-tag {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 6px;
-            font-weight: 600;
-            font-size: 11px;
-            background: #1e293b;
-            color: #38bdf8;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <h1>Walkathawa XML Sitemap <span>(වල් කතාව සයිට්මැප්)</span></h1>
-          <p class="desc">
-            This XML sitemap is generated for search engines like Google, Bing, and web crawlers, indexable at <strong>/sitemap.xml</strong>.
-          </p>
-          <div class="stats">
-            <div class="stat-badge">Total URLs: <strong><xsl:value-of select="count(sitemap:urlset/sitemap:url)"/></strong></div>
-            <div class="stat-badge">Website: <strong>Walkathawa</strong></div>
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th style="width: 50px;">#</th>
-                <th>URL Location</th>
-                <th style="width: 90px;">Priority</th>
-                <th style="width: 120px;">Change Freq</th>
-                <th style="width: 170px;">Last Modified</th>
-              </tr>
-            </thead>
-            <tbody>
-              <xsl:for-each select="sitemap:urlset/sitemap:url">
-                <tr>
-                  <td><xsl:value-of select="position()"/></td>
-                  <td>
-                    <a href="{sitemap:loc}" target="_blank">
-                      <xsl:value-of select="sitemap:loc"/>
-                    </a>
-                  </td>
-                  <td><span class="priority-tag"><xsl:value-of select="sitemap:priority"/></span></td>
-                  <td><xsl:value-of select="sitemap:changefreq"/></td>
-                  <td><xsl:value-of select="sitemap:lastmod"/></td>
-                </tr>
-              </xsl:for-each>
-            </tbody>
-          </table>
-        </div>
-      </body>
-    </html>
-  </xsl:template>
-</xsl:stylesheet>`;
-
-  fs.writeFileSync(path.join(publicDir, 'sitemap.xsl'), sitemapXsl, 'utf-8');
-  console.log('[Sitemap Generator] Generated public/sitemap.xsl.');
 }
 
 generate().catch((err) => {

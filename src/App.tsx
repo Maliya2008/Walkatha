@@ -10,6 +10,11 @@ import { SitemapPage } from './components/sitemap/SitemapPage';
 import { SEOService } from './services/seoService';
 import { adminAdBlocker } from './services/adminAdBlocker';
 import { adService } from './services/adService';
+import {
+  normalizeCategorySlug,
+  getCategoryDisplayName,
+  isValidCategorySlug,
+} from './utils/categoryTaxonomy';
 
 // Lazy-load heavy components to reduce initial JavaScript execution & bundle size
 const StoryReader = lazy(() =>
@@ -160,6 +165,11 @@ export default function App() {
       } catch {
         categorySlug = categoryMatch[1];
       }
+      const canonical = normalizeCategorySlug(categorySlug);
+      if (categorySlug !== canonical) {
+        window.history.replaceState(null, '', `/category/${canonical}`);
+      }
+      categorySlug = canonical;
     } else {
       const hashCategoryMatch = hash.match(/^#\/category\/([^/]+)/);
       if (hashCategoryMatch) {
@@ -168,13 +178,15 @@ export default function App() {
         } catch {
           categorySlug = hashCategoryMatch[1];
         }
-        if (categorySlug && categorySlug !== 'all') {
-          window.history.replaceState(null, '', `/category/${encodeURIComponent(categorySlug)}`);
-        }
+        const canonical = normalizeCategorySlug(categorySlug);
+        window.history.replaceState(null, '', `/category/${canonical}`);
+        categorySlug = canonical;
       } else if (searchParams.get('category')) {
         const queryCat = searchParams.get('category') || '';
         if (queryCat && queryCat !== 'all') {
-          categorySlug = queryCat;
+          const canonical = normalizeCategorySlug(queryCat);
+          window.history.replaceState(null, '', `/category/${canonical}`);
+          categorySlug = canonical;
         }
       }
     }
@@ -246,7 +258,7 @@ export default function App() {
 
   const handleReadStory = useCallback((slug: string) => {
     setIsSitemapView(false);
-    navigateTo(`/story/${slug}`);
+    navigateTo(`/story/${encodeURI(decodeURI(slug))}`);
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, [navigateTo]);
 
@@ -258,7 +270,8 @@ export default function App() {
 
   const handleSelectCategory = useCallback((catSlug: string) => {
     setIsSitemapView(false);
-    const targetPath = catSlug === 'all' ? '/' : `/category/${catSlug}`;
+    const targetCat = catSlug === 'all' ? 'all' : normalizeCategorySlug(catSlug);
+    const targetPath = targetCat === 'all' ? '/' : `/category/${targetCat}`;
     navigateTo(targetPath);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [navigateTo]);

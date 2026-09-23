@@ -8,10 +8,49 @@ import { SEOService } from '../services/seoService';
 let lastIncrementedStoryId: string | null = null;
 let lastIncrementTime: number = 0;
 
+function getInitialStory(slug: string | null): Story | null {
+  if (typeof window === 'undefined' || !slug) return null;
+  // 1. Check server-injected initial story data
+  try {
+    const el = document.getElementById('__INITIAL_STORY_DATA__');
+    if (el && el.textContent) {
+      const parsed = JSON.parse(el.textContent);
+      if (
+        parsed &&
+        (parsed.slug === slug ||
+          parsed.id === slug ||
+          decodeURIComponent(parsed.slug || '') === decodeURIComponent(slug))
+      ) {
+        return parsed;
+      }
+    }
+  } catch {}
+
+  // 2. Check synchronous memory cache
+  const cachedAll = storyService.getStoredStoriesSync();
+  const normalized = slug.trim().toLowerCase();
+  return (
+    cachedAll.find(
+      (s) =>
+        s.slug.trim().toLowerCase() === normalized ||
+        s.id.trim().toLowerCase() === normalized ||
+        decodeURIComponent(s.slug || '').trim().toLowerCase() === normalized
+    ) || null
+  );
+}
+
 export function useStory(slug: string | null) {
-  const [story, setStory] = useState<Story | null>(null);
-  const [relatedStories, setRelatedStories] = useState<Story[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [story, setStory] = useState<Story | null>(() => getInitialStory(slug));
+  const [relatedStories, setRelatedStories] = useState<Story[]>(() => {
+    const init = getInitialStory(slug);
+    if (!init) return [];
+    const cachedAll = storyService.getStoredStoriesSync();
+    const cat = (init.category || '').toLowerCase().trim();
+    return cachedAll
+      .filter((s) => s.id !== init.id && (s.category || '').toLowerCase().trim() === cat)
+      .slice(0, 3);
+  });
+  const [isLoading, setIsLoading] = useState<boolean>(() => !getInitialStory(slug) && Boolean(slug));
   const [error, setError] = useState<string | null>(null);
   const activeSlugRef = useRef<string | null>(null);
 

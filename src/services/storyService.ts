@@ -2,6 +2,13 @@ import { Category, PaginatedResponse, Story, StoryFilterParams } from '../types/
 import { INITIAL_STORIES, INITIAL_CATEGORIES } from '../data/seedStories';
 import { db } from '../lib/firebase';
 import {
+  CANONICAL_CATEGORIES,
+  normalizeCategorySlug,
+  storyMatchesCategory,
+  getStoryCanonicalCategory,
+  getCategoryDisplayName,
+} from '../utils/categoryTaxonomy';
+import {
   collection,
   getDocs,
   query,
@@ -182,10 +189,45 @@ class StoryService {
   }
 
   /**
-   * Hydrates memory caches from localStorage on initialization
+   * Hydrates memory caches from DOM SSR initial script tags and localStorage
    */
   private hydrateFromLocalStorage(): void {
-    if (typeof window === 'undefined' || !window.localStorage) return;
+    if (typeof window === 'undefined') return;
+
+    // 0. Check server SSR injected initial data (Zero hydration mismatch / Zero delay)
+    try {
+      const storyDataEl = document.getElementById('__INITIAL_STORY_DATA__');
+      if (storyDataEl && storyDataEl.textContent) {
+        const initialStory = JSON.parse(storyDataEl.textContent);
+        if (initialStory && !isMockStory(initialStory)) {
+          const norm = normalizeStoryDoc(initialStory.id, initialStory);
+          storyEntityCache.set(norm.id, { story: norm, timestamp: Date.now() });
+          if (norm.slug) storyEntityCache.set(norm.slug, { story: norm, timestamp: Date.now() });
+        }
+      }
+
+      const storiesDataEl = document.getElementById('__INITIAL_STORIES_DATA__');
+      if (storiesDataEl && storiesDataEl.textContent) {
+        const parsed = JSON.parse(storiesDataEl.textContent);
+        if (parsed && Array.isArray(parsed.stories)) {
+          const cleanStories: Story[] = parsed.stories.filter((s: any) => !isMockStory(s));
+          cleanStories.forEach((s) => {
+            const norm = normalizeStoryDoc(s.id, s);
+            storyEntityCache.set(norm.id, { story: norm, timestamp: Date.now() });
+            if (norm.slug) storyEntityCache.set(norm.slug, { story: norm, timestamp: Date.now() });
+          });
+          storyListCache.set(`ssr_${parsed.category || 'all'}_${parsed.page || 1}`, {
+            data: cleanStories,
+            total: parsed.total || cleanStories.length,
+            timestamp: Date.now(),
+          });
+        }
+      }
+    } catch {
+      // Ignore SSR parsing errors
+    }
+
+    if (!window.localStorage) return;
     try {
       // 1. Stories entity cache
       const storedMap = localStorage.getItem(STORAGE_STORY_MAP_KEY);
@@ -292,13 +334,27 @@ class StoryService {
   }
 
   /**
-   * Helper to load cached categories synchronously
+   * Helper to load cached categories synchronously with accurate story counts
    */
   public getInitialCategories(): Category[] {
-    if (categoryCache && categoryCache.categories.length > 0) {
-      return categoryCache.categories;
-    }
-    return DEFAULT_FALLBACK_CATEGORIES;
+    const stories = this.getStoredStoriesSync();
+    const allCount = stories.length;
+    return [
+      {
+        id: 'all',
+        name: 'සියලුම කතා (All Stories)',
+        slug: 'all',
+        description: 'සියලුම අලුත් සිංහල කතා සහ රසවත් කතා එකතුව',
+        storyCount: allCount,
+      },
+      ...CANONICAL_CATEGORIES.map((cat) => ({
+        id: cat.slug,
+        name: cat.name,
+        slug: cat.slug,
+        description: cat.description,
+        storyCount: stories.filter((s) => storyMatchesCategory(s, cat.slug)).length,
+      })),
+    ];
   }
 
   /**
@@ -326,19 +382,8 @@ class StoryService {
     let filtered = [...allStories];
 
     if (params.category && params.category !== 'all') {
-      const catFilter = params.category.toLowerCase().trim();
-      filtered = filtered.filter((s) => {
-        const cat = (s.category || '').toLowerCase().trim();
-        const catId = ((s as any).categoryId || '').toLowerCase().trim();
-        const catName = ((s as any).categoryName || '').toLowerCase().trim();
-        const catSlug = ((s as any).categorySlug || '').toLowerCase().trim();
-        return (
-          cat === catFilter ||
-          catId === catFilter ||
-          catName === catFilter ||
-          catSlug === catFilter
-        );
-      });
+      const targetCategory = params.category;
+      filtered = filtered.filter((s) => storyMatchesCategory(s, targetCategory));
     }
 
     if (params.search && params.search.trim()) {
@@ -775,25 +820,46 @@ class StoryService {
             if (!rawSlug || rawSlug === 'all') {
               rawSlug = docSnap.id;
             }
+            const normSlug = normalizeCategorySlug(rawSlug);
+            const def = CANONICAL_CATEGORIES.find((c) => c.slug === normSlug);
             categories.push({
-              id: docSnap.id,
-              name: (data.name || 'Category').toString().trim(),
-              slug: rawSlug,
-              description: data.description || '',
+              id: normSlug,
+              name: def ? def.name : (data.name || 'Category').toString().trim(),
+              slug: normSlug,
+              description: def ? def.description : (data.description || ''),
               storyCount: Number(data.storyCount || 0),
             });
           });
 
           if (categories.length > 0) {
-            categoryCache = { categories, timestamp: Date.now() };
+            // Deduplicate canonical categories and compute live story counts
+            const stories = this.getStoredStoriesSync();
+            const deduplicated: Category[] = [
+              {
+                id: 'all',
+                name: 'සියලුම කතා (All Stories)',
+                slug: 'all',
+                description: 'සියලුම අලුත් සිංහල කතා සහ රසවත් කතා එකතුව',
+                storyCount: stories.length,
+              },
+              ...CANONICAL_CATEGORIES.map((cat) => ({
+                id: cat.slug,
+                name: cat.name,
+                slug: cat.slug,
+                description: cat.description,
+                storyCount: stories.filter((s) => storyMatchesCategory(s, cat.slug)).length,
+              })),
+            ];
+
+            categoryCache = { categories: deduplicated, timestamp: Date.now() };
             try {
               if (typeof window !== 'undefined' && window.localStorage) {
-                localStorage.setItem(STORAGE_CATEGORIES_CACHE_KEY, JSON.stringify(categories));
+                localStorage.setItem(STORAGE_CATEGORIES_CACHE_KEY, JSON.stringify(deduplicated));
               }
             } catch {
               // Ignore
             }
-            return categories;
+            return deduplicated;
           }
         } catch (err: any) {
           if (isQuotaError(err)) {

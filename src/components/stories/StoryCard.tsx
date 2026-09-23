@@ -2,6 +2,7 @@ import React from 'react';
 import { Eye, Calendar, ArrowRight } from 'lucide-react';
 import { Story } from '../../types/story';
 import { Badge } from '../common/Badge';
+import { getCategoryDisplayName } from '../../utils/categoryTaxonomy';
 
 interface StoryCardProps {
   story: Story;
@@ -16,6 +17,8 @@ export const StoryCard: React.FC<StoryCardProps> = ({ story, onRead, priority = 
     year: 'numeric',
   });
 
+  const encodedSlug = encodeURI(decodeURI(story.slug));
+
   return (
     <article
       id={`story-card-${story.id}`}
@@ -23,7 +26,7 @@ export const StoryCard: React.FC<StoryCardProps> = ({ story, onRead, priority = 
     >
       {/* Cover Image */}
       <a
-        href={`/story/${story.slug}`}
+        href={`/story/${encodedSlug}`}
         onClick={(e) => {
           if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
             e.preventDefault();
@@ -45,7 +48,7 @@ export const StoryCard: React.FC<StoryCardProps> = ({ story, onRead, priority = 
         />
         <div className="absolute top-2.5 left-2.5 flex gap-1.5 flex-wrap pointer-events-none">
           <Badge variant="accent" size="sm">
-            {story.categoryName || story.category}
+            {getCategoryDisplayName(story.category)}
           </Badge>
           {story.featured && (
             <Badge variant="primary" size="sm">
@@ -63,7 +66,7 @@ export const StoryCard: React.FC<StoryCardProps> = ({ story, onRead, priority = 
           className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer transition-colors line-clamp-2 mb-1.5 font-serif leading-snug"
         >
           <a
-            href={`/story/${story.slug}`}
+            href={`/story/${encodedSlug}`}
             onClick={(e) => {
               if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
                 e.preventDefault();

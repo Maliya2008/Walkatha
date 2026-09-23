@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "node scripts/generate-sitemap.js && vite build",
+  "buildCommand": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
   "outputDirectory": "dist",
   "headers": [
     {
@@ -25,6 +25,32 @@
       ]
     },
     {
+      "source": "/assets/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/sitemap.xml",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/xml; charset=utf-8"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600, s-maxage=3600"
+        },
+        {
+          "key": "X-Robots-Tag",
+          "value": "all"
+        }
+      ]
+    },
+    {
       "source": "/robots.txt",
       "headers": [
         {
@@ -40,96 +66,56 @@
           "value": "all"
         }
       ]
-    },
-    {
-      "source": "/sitemap",
-      "headers": [
-        {
-          "key": "Content-Type",
-          "value": "application/xml; charset=utf-8"
-        },
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=3600, s-maxage=3600"
-        },
-        {
-          "key": "X-Robots-Tag",
-          "value": "all"
-        }
-      ]
-    },
-    {
-      "source": "/sitemap.xml",
-      "headers": [
-        {
-          "key": "Content-Type",
-          "value": "application/xml; charset=utf-8"
-        },
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=3600, s-maxage=3600"
-        },
-        {
-          "key": "X-Robots-Tag",
-          "value": "all"
-        }
-      ]
-    },
-    {
-      "source": "/sitemap.xsl",
-      "headers": [
-        {
-          "key": "Content-Type",
-          "value": "text/xsl; charset=utf-8"
-        },
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=86400, s-maxage=86400"
-        }
-      ]
-    },
-    {
-      "source": "/sw.js",
-      "headers": [
-        {
-          "key": "Content-Type",
-          "value": "application/javascript; charset=utf-8"
-        },
-        {
-          "key": "Service-Worker-Allowed",
-          "value": "/"
-        },
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=0, must-revalidate"
-        }
-      ]
     }
   ],
   "rewrites": [
     {
-      "source": "/sitemap",
-      "destination": "/sitemap.xml"
+      "source": "/assets/(.*)",
+      "destination": "/assets/$1"
     },
     {
-      "source": "/robots.txt",
-      "destination": "/robots.txt"
+      "source": "/favicon.(?:svg|ico)",
+      "destination": "/favicon.svg"
     },
     {
-      "source": "/sitemap.xml",
-      "destination": "/sitemap.xml"
+      "source": "/icon.(?:png|svg|jpg)",
+      "destination": "/icon.png"
+    },
+    {
+      "source": "/apple-touch-icon.png",
+      "destination": "/apple-touch-icon.png"
+    },
+    {
+      "source": "/manifest.json",
+      "destination": "/manifest.json"
     },
     {
       "source": "/sitemap.xsl",
       "destination": "/sitemap.xsl"
     },
     {
+      "source": "/google0a8bbd03676eca90.html",
+      "destination": "/google0a8bbd03676eca90.html"
+    },
+    {
       "source": "/sw.js",
       "destination": "/sw.js"
     },
     {
+      "source": "/sitemap",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/sitemap.xml",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/robots.txt",
+      "destination": "/api/index"
+    },
+    {
       "source": "/(.*)",
-      "destination": "/index.html"
+      "destination": "/api/index"
     }
   ]
 }

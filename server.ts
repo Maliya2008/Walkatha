@@ -3,7 +3,7 @@ import http from 'http';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
-import { createServer as createViteServer } from 'vite';
+import { fileURLToPath } from 'url';
 import { INITIAL_STORIES, INITIAL_CATEGORIES } from './src/data/seedStories';
 import { Story, Category } from './src/types/story';
 import { DirectAdSettings, SiteSettings, User } from './src/types/admin';
@@ -78,6 +78,24 @@ app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
 // --- DATABASE PERSISTENCE LAYER ---
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+function getDatabaseFilePath(): string {
+  const possiblePaths = [
+    path.join('/tmp', 'database.json'),
+    path.join(process.cwd(), 'data', 'database.json'),
+    path.join(__dirname, 'data', 'database.json'),
+    path.join(__dirname, '..', 'data', 'database.json'),
+  ];
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) {
+      return p;
+    }
+  }
+  return path.join(process.cwd(), 'data', 'database.json');
+}
+
 const DATA_DIR = path.join(process.cwd(), 'data');
 const DB_FILE = path.join(DATA_DIR, 'database.json');
 
@@ -201,9 +219,11 @@ function initDatabase(): void {
     publisherName: 'Walkathawa (වල් කතාව)',
   };
 
-  if (fs.existsSync(DB_FILE)) {
+  const targetDbFile = getDatabaseFilePath();
+
+  if (fs.existsSync(targetDbFile)) {
     try {
-      const raw = fs.readFileSync(DB_FILE, 'utf-8');
+      const raw = fs.readFileSync(targetDbFile, 'utf-8');
       db = JSON.parse(raw);
       if (!db.users || db.users.length === 0) {
         db.users = [defaultAdmin];
@@ -250,11 +270,20 @@ function initDatabase(): void {
 function saveDatabase(): void {
   try {
     if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
+      try {
+        fs.mkdirSync(DATA_DIR, { recursive: true });
+      } catch {
+        // read-only filesystem
+      }
     }
     fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf-8');
-  } catch (err) {
-    console.error('Error saving database:', err);
+  } catch {
+    // If read-only filesystem (like Vercel serverless / AWS Lambda), persist to /tmp
+    try {
+      fs.writeFileSync(path.join('/tmp', 'database.json'), JSON.stringify(db, null, 2), 'utf-8');
+    } catch {
+      // In-memory fallback
+    }
   }
 }
 
@@ -2591,283 +2620,282 @@ async function injectPopularSeo(rawHtml: string, req?: Request): Promise<string>
   });
 }
 
-// Helper to get index.html template (works in dev and prod)
+// Helper to get index.html template (works in dev, prod, and serverless)
 function getHtmlTemplate(): string {
-  const isProd = process.env.NODE_ENV === 'production';
-  const distIndex = path.join(process.cwd(), 'dist', 'index.html');
-  const srcIndex = path.join(process.cwd(), 'index.html');
+  const possiblePaths = [
+    path.join(process.cwd(), 'dist', 'index.html'),
+    path.join(__dirname, 'dist', 'index.html'),
+    path.join(__dirname, '..', 'dist', 'index.html'),
+    path.join(process.cwd(), 'index.html'),
+    path.join(__dirname, 'index.html'),
+    path.join(__dirname, '..', 'index.html'),
+  ];
 
-  if (isProd && fs.existsSync(distIndex)) {
-    return fs.readFileSync(distIndex, 'utf-8');
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) {
+      try {
+        return fs.readFileSync(p, 'utf-8');
+      } catch {
+        // try next
+      }
+    }
   }
-  if (fs.existsSync(srcIndex)) {
-    return fs.readFileSync(srcIndex, 'utf-8');
-  }
-  if (fs.existsSync(distIndex)) {
-    return fs.readFileSync(distIndex, 'utf-8');
-  }
-  return '<!DOCTYPE html><html lang="si"><head><meta charset="UTF-8" /></head><body><div id="root"></div></body></html>';
+
+  return '<!DOCTYPE html><html lang="si"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Walkathawa (වල් කතාව)</title></head><body><div id="root"></div></body></html>';
 }
 
-async function startServer() {
-  const httpServer = http.createServer(app);
+let serverInitPromise: Promise<void> | null = null;
 
-  // 1. 301 Permanent Redirects for legacy directory routes to canonical /archives
-  app.get(
-    ['/directory', '/directory/', '/stories-directory', '/stories-directory/', '/sitemap.html', '/sitemap-index', '/sitemap-index/'],
-    (_req: Request, res: Response) => {
-      return res.redirect(301, '/archives');
-    }
-  );
+async function startServer(): Promise<void> {
+  if (serverInitPromise) {
+    return serverInitPromise;
+  }
 
-  // 2. 301 Permanent Redirect for bare story post routes to episodes hub
-  app.get(['/posts/:story', '/posts/:story/'], (req: Request, res: Response) => {
-    return res.redirect(301, `/posts/${encodeURIComponent(req.params.story)}/episodes`);
-  });
+  serverInitPromise = (async () => {
+    const httpServer = http.createServer(app);
 
-  // 3. 301 Permanent Redirect for legacy /story/:slug to canonical /posts/:series/episodes/:episode
-  app.get('/story/:slug', async (req: Request, res: Response) => {
-    const slug = req.params.slug;
-    const story = await findPublishedStory(slug);
-    if (!story || !story.published) {
-      const template = getHtmlTemplate();
-      const notFoundHtml = render404Html(template, req, 'ඔබ සොයන කතාව සොයා ගැනීමට නොහැකි විය.');
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
-      return res.status(404).send(notFoundHtml);
-    }
-
-    const info = detectSeriesInfo(story);
-    const targetUrl = `/posts/${encodeURIComponent(info.seriesSlug)}/episodes/${info.episodeNumber}`;
-    return res.redirect(301, targetUrl);
-  });
-
-  if (process.env.NODE_ENV !== 'production') {
-    const isHmrDisabled = process.env.DISABLE_HMR === 'true';
-    const vite = await createViteServer({
-      server: {
-        middlewareMode: true,
-        hmr: isHmrDisabled ? false : { server: httpServer },
-      },
-      appType: 'spa',
-    });
-
-    // Development SSR Routes
-    app.get('/', async (req: Request, res: Response) => {
-      if (req.query.category && typeof req.query.category === 'string') {
-        const cat = req.query.category;
-        const norm = normalizeCategorySlug(cat);
-        return res.redirect(301, norm === 'all' ? '/' : `/category/${encodeURIComponent(norm)}`);
+    // 1. 301 Permanent Redirects for legacy directory routes to canonical /archives
+    app.get(
+      ['/directory', '/directory/', '/stories-directory', '/stories-directory/', '/sitemap.html', '/sitemap-index', '/sitemap-index/'],
+      (_req: Request, res: Response) => {
+        return res.redirect(301, '/archives');
       }
-      let template = getHtmlTemplate();
-      template = await vite.transformIndexHtml(req.originalUrl, template);
-      const rendered = await injectHomeSeo(template, req);
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
-      return res.status(200).send(rendered);
+    );
+
+    // 2. 301 Permanent Redirect for bare story post routes to episodes hub
+    app.get(['/posts/:story', '/posts/:story/'], (req: Request, res: Response) => {
+      return res.redirect(301, `/posts/${encodeURIComponent(req.params.story)}/episodes`);
     });
 
-    app.get('/search', async (req: Request, res: Response) => {
-      let template = getHtmlTemplate();
-      template = await vite.transformIndexHtml(req.originalUrl, template);
-      const rendered = await injectHomeSeo(template, req);
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.setHeader('X-Robots-Tag', 'noindex, follow');
-      return res.status(200).send(rendered);
-    });
-
-    app.get('/latest', async (req: Request, res: Response) => {
-      let template = getHtmlTemplate();
-      template = await vite.transformIndexHtml(req.originalUrl, template);
-      const rendered = await injectLatestSeo(template, req);
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
-      return res.status(200).send(rendered);
-    });
-
-    app.get('/popular', async (req: Request, res: Response) => {
-      let template = getHtmlTemplate();
-      template = await vite.transformIndexHtml(req.originalUrl, template);
-      const rendered = await injectPopularSeo(template, req);
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
-      return res.status(200).send(rendered);
-    });
-
-    app.get('/archives', async (req: Request, res: Response) => {
-      let template = getHtmlTemplate();
-      template = await vite.transformIndexHtml(req.originalUrl, template);
-      const rendered = await injectArchivesSeo(template, req);
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
-      return res.status(200).send(rendered);
-    });
-
-    app.get('/category/:slug', async (req: Request, res: Response) => {
-      const rawSlug = req.params.slug;
-      const redirectSlug = getCategoryCanonicalRedirectSlug(rawSlug);
-      if (redirectSlug) {
-        return res.redirect(301, `/category/${redirectSlug}`);
-      }
-      const categorySlug = normalizeCategorySlug(rawSlug);
-      let template = getHtmlTemplate();
-      template = await vite.transformIndexHtml(req.originalUrl, template);
-
-      if (!isValidCategorySlug(categorySlug)) {
-        const notFoundHtml = render404Html(template, req, `"${categorySlug}" වර්ගීකරණය සොයාගත නොහැක.`);
+    // 3. 301 Permanent Redirect for legacy /story/:slug to canonical /posts/:series/episodes/:episode
+    app.get('/story/:slug', async (req: Request, res: Response) => {
+      const slug = req.params.slug;
+      const story = await findPublishedStory(slug);
+      if (!story || !story.published) {
+        const template = getHtmlTemplate();
+        const notFoundHtml = render404Html(template, req, 'ඔබ සොයන කතාව සොයා ගැනීමට නොහැකි විය.');
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
         return res.status(404).send(notFoundHtml);
       }
 
-      const rendered = await injectCategorySeo(template, categorySlug, req);
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
-      return res.status(200).send(rendered);
+      const info = detectSeriesInfo(story);
+      const targetUrl = `/posts/${encodeURIComponent(info.seriesSlug)}/episodes/${info.episodeNumber}`;
+      return res.redirect(301, targetUrl);
     });
 
-    // Series Hub Page: /posts/:story/episodes
-    app.get('/posts/:story/episodes', async (req: Request, res: Response) => {
-      const storyParam = req.params.story;
-      const publishedStories = await getSitemapStoriesList();
-      const seriesList = groupStoriesIntoSeries(publishedStories);
-      const series = findSeriesBySlug(seriesList, storyParam);
+    const isServerless = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+    const isDev = process.env.NODE_ENV !== 'production' && !isServerless;
 
-      let template = getHtmlTemplate();
-      template = await vite.transformIndexHtml(req.originalUrl, template);
+    if (isDev) {
+      const { createServer: createViteServer } = await import('vite');
+      const isHmrDisabled = process.env.DISABLE_HMR === 'true';
+      const vite = await createViteServer({
+        server: {
+          middlewareMode: true,
+          hmr: isHmrDisabled ? false : { server: httpServer },
+        },
+        appType: 'spa',
+      });
 
-      if (!series) {
-        const notFoundHtml = render404Html(template, req, 'ඔබ සොයන කතා මාලාව සොයා ගැනීමට නොහැකි විය.');
+      // Development SSR Routes
+      app.get('/', async (req: Request, res: Response) => {
+        if (req.query.category && typeof req.query.category === 'string') {
+          const cat = req.query.category;
+          const norm = normalizeCategorySlug(cat);
+          return res.redirect(301, norm === 'all' ? '/' : `/category/${encodeURIComponent(norm)}`);
+        }
+        let template = getHtmlTemplate();
+        template = await vite.transformIndexHtml(req.originalUrl, template);
+        const rendered = await injectHomeSeo(template, req);
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
-        return res.status(404).send(notFoundHtml);
-      }
+        res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
+        return res.status(200).send(rendered);
+      });
 
-      const rendered = await injectSeriesSeo(template, series, req);
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
-      return res.status(200).send(rendered);
-    });
-
-    // Individual Episode Page: /posts/:story/episodes/:episode
-    app.get('/posts/:story/episodes/:episode', async (req: Request, res: Response) => {
-      const storyParam = req.params.story;
-      const epNum = parseInt(req.params.episode, 10);
-      const publishedStories = await getSitemapStoriesList();
-      const seriesList = groupStoriesIntoSeries(publishedStories);
-      const series = findSeriesBySlug(seriesList, storyParam);
-      const episode = series ? findEpisodeInSeries(series, epNum) : null;
-
-      let template = getHtmlTemplate();
-      template = await vite.transformIndexHtml(req.originalUrl, template);
-
-      if (!series || !episode) {
-        const notFoundHtml = render404Html(template, req, 'ඔබ සොයන කතාංගය සොයා ගැනීමට නොහැකි විය.');
+      app.get('/search', async (req: Request, res: Response) => {
+        let template = getHtmlTemplate();
+        template = await vite.transformIndexHtml(req.originalUrl, template);
+        const rendered = await injectHomeSeo(template, req);
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
-        return res.status(404).send(notFoundHtml);
+        res.setHeader('X-Robots-Tag', 'noindex, follow');
+        return res.status(200).send(rendered);
+      });
+
+      app.get('/latest', async (req: Request, res: Response) => {
+        let template = getHtmlTemplate();
+        template = await vite.transformIndexHtml(req.originalUrl, template);
+        const rendered = await injectLatestSeo(template, req);
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
+        return res.status(200).send(rendered);
+      });
+
+      app.get('/popular', async (req: Request, res: Response) => {
+        let template = getHtmlTemplate();
+        template = await vite.transformIndexHtml(req.originalUrl, template);
+        const rendered = await injectPopularSeo(template, req);
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
+        return res.status(200).send(rendered);
+      });
+
+      app.get('/archives', async (req: Request, res: Response) => {
+        let template = getHtmlTemplate();
+        template = await vite.transformIndexHtml(req.originalUrl, template);
+        const rendered = await injectArchivesSeo(template, req);
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
+        return res.status(200).send(rendered);
+      });
+
+      app.get('/category/:slug', async (req: Request, res: Response) => {
+        const rawSlug = req.params.slug;
+        const redirectSlug = getCategoryCanonicalRedirectSlug(rawSlug);
+        if (redirectSlug) {
+          return res.redirect(301, `/category/${redirectSlug}`);
+        }
+        const categorySlug = normalizeCategorySlug(rawSlug);
+        let template = getHtmlTemplate();
+        template = await vite.transformIndexHtml(req.originalUrl, template);
+
+        if (!isValidCategorySlug(categorySlug)) {
+          const notFoundHtml = render404Html(template, req, `"${categorySlug}" වර්ගීකරණය සොයාගත නොහැක.`);
+          res.setHeader('Content-Type', 'text/html; charset=utf-8');
+          res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+          return res.status(404).send(notFoundHtml);
+        }
+
+        const rendered = await injectCategorySeo(template, categorySlug, req);
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
+        return res.status(200).send(rendered);
+      });
+
+      // Series Hub Page: /posts/:story/episodes
+      app.get('/posts/:story/episodes', async (req: Request, res: Response) => {
+        const storyParam = req.params.story;
+        const publishedStories = await getSitemapStoriesList();
+        const seriesList = groupStoriesIntoSeries(publishedStories);
+        const series = findSeriesBySlug(seriesList, storyParam);
+
+        let template = getHtmlTemplate();
+        template = await vite.transformIndexHtml(req.originalUrl, template);
+
+        if (!series) {
+          const notFoundHtml = render404Html(template, req, 'ඔබ සොයන කතා මාලාව සොයා ගැනීමට නොහැකි විය.');
+          res.setHeader('Content-Type', 'text/html; charset=utf-8');
+          res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+          return res.status(404).send(notFoundHtml);
+        }
+
+        const rendered = await injectSeriesSeo(template, series, req);
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
+        return res.status(200).send(rendered);
+      });
+
+      // Individual Episode Page: /posts/:story/episodes/:episode
+      app.get('/posts/:story/episodes/:episode', async (req: Request, res: Response) => {
+        const storyParam = req.params.story;
+        const epNum = parseInt(req.params.episode, 10);
+        const publishedStories = await getSitemapStoriesList();
+        const seriesList = groupStoriesIntoSeries(publishedStories);
+        const series = findSeriesBySlug(seriesList, storyParam);
+        const episode = series ? findEpisodeInSeries(series, epNum) : null;
+
+        let template = getHtmlTemplate();
+        template = await vite.transformIndexHtml(req.originalUrl, template);
+
+        if (!series || !episode) {
+          const notFoundHtml = render404Html(template, req, 'ඔබ සොයන කතාංගය සොයා ගැනීමට නොහැකි විය.');
+          res.setHeader('Content-Type', 'text/html; charset=utf-8');
+          res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+          return res.status(404).send(notFoundHtml);
+        }
+
+        const rendered = injectEpisodeSeo(template, episode.story, series, episode.episodeNumber, req);
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
+        return res.status(200).send(rendered);
+      });
+
+      app.use(vite.middlewares);
+    } else {
+      const distPath = path.join(process.cwd(), 'dist');
+
+      if (fs.existsSync(path.join(distPath, 'assets'))) {
+        app.use('/assets', express.static(path.join(distPath, 'assets'), {
+          maxAge: '1y',
+          immutable: true,
+        }));
+      }
+      if (fs.existsSync(distPath)) {
+        app.use(express.static(distPath, {
+          maxAge: '1h',
+        }));
       }
 
-      const rendered = injectEpisodeSeo(template, episode.story, series, episode.episodeNumber, req);
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
-      return res.status(200).send(rendered);
-    });
+      // Production Server-Side SEO Render for Homepage
+      app.get('/', async (req: Request, res: Response) => {
+        if (req.query.category && typeof req.query.category === 'string') {
+          const cat = req.query.category;
+          const norm = normalizeCategorySlug(cat);
+          return res.redirect(301, norm === 'all' ? '/' : `/category/${encodeURIComponent(norm)}`);
+        }
 
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    const indexPath = path.join(distPath, 'index.html');
-
-    app.use('/assets', express.static(path.join(distPath, 'assets'), {
-      maxAge: '1y',
-      immutable: true,
-    }));
-    app.use(express.static(distPath, {
-      maxAge: '1h',
-    }));
-
-    // Production Server-Side SEO Render for Homepage
-    app.get('/', async (req: Request, res: Response) => {
-      if (req.query.category && typeof req.query.category === 'string') {
-        const cat = req.query.category;
-        const norm = normalizeCategorySlug(cat);
-        return res.redirect(301, norm === 'all' ? '/' : `/category/${encodeURIComponent(norm)}`);
-      }
-
-      if (fs.existsSync(indexPath)) {
-        const raw = fs.readFileSync(indexPath, 'utf-8');
+        const raw = getHtmlTemplate();
         const rendered = await injectHomeSeo(raw, req);
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=3600');
         res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
         return res.status(200).send(rendered);
-      }
-      res.setHeader('Cache-Control', 'no-cache');
-      res.sendFile(indexPath);
-    });
+      });
 
-    app.get('/search', async (req: Request, res: Response) => {
-      if (fs.existsSync(indexPath)) {
-        const raw = fs.readFileSync(indexPath, 'utf-8');
+      app.get('/search', async (req: Request, res: Response) => {
+        const raw = getHtmlTemplate();
         const rendered = await injectHomeSeo(raw, req);
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=3600');
         res.setHeader('X-Robots-Tag', 'noindex, follow');
         return res.status(200).send(rendered);
-      }
-      res.setHeader('Cache-Control', 'no-cache');
-      res.sendFile(indexPath);
-    });
+      });
 
-    app.get('/latest', async (req: Request, res: Response) => {
-      if (fs.existsSync(indexPath)) {
-        const raw = fs.readFileSync(indexPath, 'utf-8');
+      app.get('/latest', async (req: Request, res: Response) => {
+        const raw = getHtmlTemplate();
         const rendered = await injectLatestSeo(raw, req);
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=3600');
         res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
         return res.status(200).send(rendered);
-      }
-      res.setHeader('Cache-Control', 'no-cache');
-      res.sendFile(indexPath);
-    });
+      });
 
-    app.get('/popular', async (req: Request, res: Response) => {
-      if (fs.existsSync(indexPath)) {
-        const raw = fs.readFileSync(indexPath, 'utf-8');
+      app.get('/popular', async (req: Request, res: Response) => {
+        const raw = getHtmlTemplate();
         const rendered = await injectPopularSeo(raw, req);
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=3600');
         res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
         return res.status(200).send(rendered);
-      }
-      res.setHeader('Cache-Control', 'no-cache');
-      res.sendFile(indexPath);
-    });
+      });
 
-    app.get('/archives', async (req: Request, res: Response) => {
-      if (fs.existsSync(indexPath)) {
-        const raw = fs.readFileSync(indexPath, 'utf-8');
+      app.get('/archives', async (req: Request, res: Response) => {
+        const raw = getHtmlTemplate();
         const rendered = await injectArchivesSeo(raw, req);
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=3600');
         res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
         return res.status(200).send(rendered);
-      }
-      res.setHeader('Cache-Control', 'no-cache');
-      res.sendFile(indexPath);
-    });
+      });
 
-    app.get('/category/:slug', async (req: Request, res: Response) => {
-      const rawSlug = req.params.slug;
-      const redirectSlug = getCategoryCanonicalRedirectSlug(rawSlug);
-      if (redirectSlug) {
-        return res.redirect(301, `/category/${redirectSlug}`);
-      }
-      const categorySlug = normalizeCategorySlug(rawSlug);
-      if (fs.existsSync(indexPath)) {
-        const raw = fs.readFileSync(indexPath, 'utf-8');
+      app.get('/category/:slug', async (req: Request, res: Response) => {
+        const rawSlug = req.params.slug;
+        const redirectSlug = getCategoryCanonicalRedirectSlug(rawSlug);
+        if (redirectSlug) {
+          return res.redirect(301, `/category/${redirectSlug}`);
+        }
+        const categorySlug = normalizeCategorySlug(rawSlug);
+        const raw = getHtmlTemplate();
         if (!isValidCategorySlug(categorySlug)) {
           const notFoundHtml = render404Html(raw, req, `"${categorySlug}" වර්ගීකරණය සොයාගත නොහැක.`);
           res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -2879,20 +2907,16 @@ async function startServer() {
         res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=3600');
         res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
         return res.status(200).send(rendered);
-      }
-      res.setHeader('Cache-Control', 'no-cache');
-      res.sendFile(indexPath);
-    });
+      });
 
-    // Production Series Hub Page
-    app.get('/posts/:story/episodes', async (req: Request, res: Response) => {
-      const storyParam = req.params.story;
-      const publishedStories = await getSitemapStoriesList();
-      const seriesList = groupStoriesIntoSeries(publishedStories);
-      const series = findSeriesBySlug(seriesList, storyParam);
+      // Production Series Hub Page
+      app.get('/posts/:story/episodes', async (req: Request, res: Response) => {
+        const storyParam = req.params.story;
+        const publishedStories = await getSitemapStoriesList();
+        const seriesList = groupStoriesIntoSeries(publishedStories);
+        const series = findSeriesBySlug(seriesList, storyParam);
 
-      if (fs.existsSync(indexPath)) {
-        const raw = fs.readFileSync(indexPath, 'utf-8');
+        const raw = getHtmlTemplate();
         if (!series) {
           const notFoundHtml = render404Html(raw, req, 'ඔබ සොයන කතා මාලාව සොයා ගැනීමට නොහැකි විය.');
           res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -2904,22 +2928,18 @@ async function startServer() {
         res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=3600');
         res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
         return res.status(200).send(rendered);
-      }
-      res.setHeader('Cache-Control', 'no-cache');
-      res.sendFile(indexPath);
-    });
+      });
 
-    // Production Individual Episode Page
-    app.get('/posts/:story/episodes/:episode', async (req: Request, res: Response) => {
-      const storyParam = req.params.story;
-      const epNum = parseInt(req.params.episode, 10);
-      const publishedStories = await getSitemapStoriesList();
-      const seriesList = groupStoriesIntoSeries(publishedStories);
-      const series = findSeriesBySlug(seriesList, storyParam);
-      const episode = series ? findEpisodeInSeries(series, epNum) : null;
+      // Production Individual Episode Page
+      app.get('/posts/:story/episodes/:episode', async (req: Request, res: Response) => {
+        const storyParam = req.params.story;
+        const epNum = parseInt(req.params.episode, 10);
+        const publishedStories = await getSitemapStoriesList();
+        const seriesList = groupStoriesIntoSeries(publishedStories);
+        const series = findSeriesBySlug(seriesList, storyParam);
+        const episode = series ? findEpisodeInSeries(series, epNum) : null;
 
-      if (fs.existsSync(indexPath)) {
-        const raw = fs.readFileSync(indexPath, 'utf-8');
+        const raw = getHtmlTemplate();
         if (!series || !episode) {
           const notFoundHtml = render404Html(raw, req, 'ඔබ සොයන කතාංගය සොයා ගැනීමට නොහැකි විය.');
           res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -2931,42 +2951,50 @@ async function startServer() {
         res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=3600');
         res.setHeader('X-Robots-Tag', getRobotsTagForRequest(req));
         return res.status(200).send(rendered);
-      }
-      res.setHeader('Cache-Control', 'no-cache');
-      res.sendFile(indexPath);
-    });
+      });
 
-    // Production Admin Panel SPA route
-    app.get(['/admin', '/admin/*'], (_req: Request, res: Response) => {
-      if (fs.existsSync(indexPath)) {
+      // Production Admin Panel SPA route
+      app.get(['/admin', '/admin/*'], (_req: Request, res: Response) => {
+        const template = getHtmlTemplate();
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
         res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
-        return res.sendFile(indexPath);
-      }
-      res.setHeader('Cache-Control', 'no-cache');
-      res.status(200).send('Admin Panel Loading...');
-    });
+        return res.status(200).send(template);
+      });
 
-    app.get('*', (req: Request, res: Response) => {
-      if (fs.existsSync(indexPath)) {
-        const raw = fs.readFileSync(indexPath, 'utf-8');
+      app.get('*', (req: Request, res: Response) => {
+        const raw = getHtmlTemplate();
         const notFoundHtml = render404Html(raw, req);
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
         return res.status(404).send(notFoundHtml);
-      }
-      res.setHeader('Cache-Control', 'no-cache');
-      res.status(404).send('Not Found');
-    });
-  }
+      });
+    }
 
-  httpServer.listen(PORT, '0.0.0.0', () => {
-    console.log(`[StoryHub Server] Running on http://0.0.0.0:${PORT}`);
+    if (!isServerless) {
+      httpServer.on('error', (err: any) => {
+        if (err.code === 'EADDRINUSE') {
+          console.warn(`[StoryHub Server] Port ${PORT} already in use, skipping listen`);
+        } else {
+          console.error('[StoryHub Server] Server error:', err);
+        }
+      });
+
+      httpServer.listen(PORT, '0.0.0.0', () => {
+        console.log(`[StoryHub Server] Running on http://0.0.0.0:${PORT}`);
+      });
+    }
+  })();
+
+  return serverInitPromise;
+}
+
+// Auto-start server in standalone mode
+if (!process.env.VERCEL && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
+  startServer().catch((err) => {
+    console.error('[StoryHub Server] Failed to start server:', err);
   });
 }
 
-startServer();
-
-export { app };
+export { app, startServer };
 export default app;

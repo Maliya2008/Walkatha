@@ -15,10 +15,22 @@ import {
   getCategoryDisplayName,
   isValidCategorySlug,
 } from './utils/categoryTaxonomy';
+import {
+  groupStoriesIntoSeries,
+  findSeriesBySlug,
+  findEpisodeInSeries,
+  getAdjacentEpisodesInSeries,
+  detectSeriesInfo,
+  Series,
+  SeriesEpisode,
+} from './utils/seriesTaxonomy';
 
-// Lazy-load heavy components to reduce initial JavaScript execution & bundle size
+// Lazy-load heavy views to keep bundle fast
 const StoryReader = lazy(() =>
   import('./components/stories/StoryReader').then((m) => ({ default: m.StoryReader }))
+);
+const SeriesHub = lazy(() =>
+  import('./components/stories/SeriesHub').then((m) => ({ default: m.SeriesHub }))
 );
 const AdminRoot = lazy(() =>
   import('./components/admin/AdminRoot').then((m) => ({ default: m.AdminRoot }))
@@ -40,38 +52,70 @@ export default function App() {
     setSearch,
     setPage,
     setSortBy,
-    refreshStories,
   } = useStories();
 
   const [isAdminView, setIsAdminView] = useState<boolean>(false);
-  const [isSitemapView, setIsSitemapView] = useState<boolean>(false);
-  const [currentSlug, setCurrentSlug] = useState<string | null>(null);
+  const [isArchivesView, setIsArchivesView] = useState<boolean>(false);
+  const [viewMode, setViewMode] = useState<'home' | 'latest' | 'popular' | 'category' | 'archives'>('home');
+  const [currentSeriesSlug, setCurrentSeriesSlug] = useState<string | null>(null);
+  const [currentEpisodeNum, setCurrentEpisodeNum] = useState<number | null>(null);
+  const [currentStorySlug, setCurrentStorySlug] = useState<string | null>(null);
+
+  // Group all stories into Series hierarchy
+  const allSeries = useMemo(() => {
+    return groupStoriesIntoSeries(stories);
+  }, [stories]);
+
+  // Look up active series if in series hub or episode view
+  const activeSeries: Series | null = useMemo(() => {
+    if (!currentSeriesSlug) return null;
+    return findSeriesBySlug(currentSeriesSlug, stories);
+  }, [currentSeriesSlug, stories]);
+
+  // Look up active episode in series
+  const activeSeriesEpisode: SeriesEpisode | null = useMemo(() => {
+    if (!activeSeries || currentEpisodeNum === null) return null;
+    return findEpisodeInSeries(activeSeries, currentEpisodeNum);
+  }, [activeSeries, currentEpisodeNum]);
+
+  // Compute adjacent episodes within the series
+  const { prevEpisode, nextEpisode } = useMemo(() => {
+    if (!activeSeries || currentEpisodeNum === null) {
+      return { prev: null, next: null };
+    }
+    return getAdjacentEpisodesInSeries(activeSeries, currentEpisodeNum);
+  }, [activeSeries, currentEpisodeNum]);
+
+  // Active story slug for useStory hook
+  const activeStorySlug = useMemo(() => {
+    if (activeSeriesEpisode) {
+      return activeSeriesEpisode.story.slug;
+    }
+    return currentStorySlug;
+  }, [activeSeriesEpisode, currentStorySlug]);
 
   const {
-    story: activeStory,
+    story: fetchedStory,
     relatedStories,
     isLoading: isStoryLoading,
     error: storyError,
-  } = useStory(currentSlug);
+  } = useStory(activeStorySlug);
 
-  const { prevStory, nextStory } = useMemo(() => {
-    if (!activeStory || !stories || stories.length === 0) {
-      return { prevStory: null, nextStory: null };
+  // The resolved story to display in reader
+  const activeStory = useMemo(() => {
+    if (activeSeriesEpisode) {
+      return {
+        ...activeSeriesEpisode.story,
+        ...(fetchedStory || {}),
+      };
     }
-    const idx = stories.findIndex((s) => s.slug === activeStory.slug || s.id === activeStory.id);
-    if (idx === -1) {
-      return { prevStory: null, nextStory: null };
-    }
-    return {
-      prevStory: idx > 0 ? stories[idx - 1] : null,
-      nextStory: idx < stories.length - 1 ? stories[idx + 1] : null,
-    };
-  }, [activeStory, stories]);
+    return fetchedStory;
+  }, [activeSeriesEpisode, fetchedStory]);
 
   const [siteSettings, setSiteSettings] = useState<any>(null);
 
   // Helper to change URL and trigger route sync
-  const navigateTo = useCallback((urlPath: string, searchParams?: Record<string, string>) => {
+  const navigateTo = useCallback((urlPath: string, searchParams?: Record<string, string>, replace = false) => {
     let finalUrl = urlPath;
     if (searchParams) {
       const queryStr = new URLSearchParams(searchParams).toString();
@@ -80,15 +124,18 @@ export default function App() {
       }
     }
     try {
-      window.history.pushState({}, '', finalUrl);
+      if (replace) {
+        window.history.replaceState({}, '', finalUrl);
+      } else {
+        window.history.pushState({}, '', finalUrl);
+      }
     } catch {
       window.location.hash = finalUrl;
     }
-    // Dispatch popstate to notify our route listener
     window.dispatchEvent(new Event('popstate'));
   }, []);
 
-  // Unified routing parser
+  // Unified routing parser matching walakatha.com architecture
   const syncRoute = useCallback(() => {
     const path = window.location.pathname;
     const hash = window.location.hash;
@@ -101,62 +148,114 @@ export default function App() {
     if (isAdmin) {
       adminAdBlocker.enableAdminShield();
       adService.setAdminMode(true);
-      setIsSitemapView(false);
-      setCurrentSlug(null);
+      setIsArchivesView(false);
+      setCurrentSeriesSlug(null);
+      setCurrentEpisodeNum(null);
+      setCurrentStorySlug(null);
       return;
     } else {
       adminAdBlocker.disableAdminShield();
       adService.setAdminMode(false);
     }
 
-    // Normalize legacy paths to canonical URLs
-    if (path === '/stories-directory' || path === '/sitemap-index' || path === '/sitemap.html') {
-      window.history.replaceState(null, '', '/directory');
-    }
-
-    // 2. Sitemap / Directory Check
-    const isSitemap =
+    // 2. Legacy /directory & alias redirect -> 301 to /archives
+    if (
       path === '/directory' ||
       path === '/stories-directory' ||
       path === '/sitemap-index' ||
       path === '/sitemap.html' ||
-      hash === '#sitemap' ||
       hash === '#directory' ||
-      hash.startsWith('#/sitemap') ||
-      hash === '#/sitemap';
-    setIsSitemapView(isSitemap);
-
-    if (isSitemap) {
-      if (hash) window.history.replaceState(null, '', '/directory');
-      setCurrentSlug(null);
+      hash === '#sitemap' ||
+      hash === '#/directory'
+    ) {
+      window.history.replaceState(null, '', '/archives');
+      setIsArchivesView(true);
+      setViewMode('archives');
+      setCurrentSeriesSlug(null);
+      setCurrentEpisodeNum(null);
+      setCurrentStorySlug(null);
       return;
     }
 
-    // 3. Story Reader Check
-    let storySlug: string | null = null;
-    const storyMatch = path.match(/^\/story\/([^/]+)/);
-    if (storyMatch) {
-      try {
-        storySlug = decodeURIComponent(storyMatch[1]);
-      } catch {
-        storySlug = storyMatch[1];
-      }
-    } else {
-      const hashStoryMatch = hash.match(/^#\/story\/([^/]+)/);
-      if (hashStoryMatch) {
-        try {
-          storySlug = decodeURIComponent(hashStoryMatch[1]);
-        } catch {
-          storySlug = hashStoryMatch[1];
-        }
-        if (storySlug) {
-          window.history.replaceState(null, '', `/story/${encodeURIComponent(storySlug)}`);
-        }
-      }
+    if (path === '/archives' || hash === '#archives') {
+      setIsArchivesView(true);
+      setViewMode('archives');
+      setCurrentSeriesSlug(null);
+      setCurrentEpisodeNum(null);
+      setCurrentStorySlug(null);
+      return;
     }
-    setCurrentSlug(storySlug);
+    setIsArchivesView(false);
 
-    // 3. Category Page Check
+    // 3. Series Hub & Episode Routing:
+    // Route 3A: /posts/:story/episodes/:episode (Episode Reader)
+    const episodeMatch = path.match(/^\/posts\/([^/]+)\/episodes\/(\d+)/);
+    if (episodeMatch) {
+      const sSlug = decodeURIComponent(episodeMatch[1]);
+      const epNum = parseInt(episodeMatch[2], 10);
+      setCurrentSeriesSlug(sSlug);
+      setCurrentEpisodeNum(epNum);
+      setCurrentStorySlug(null);
+      return;
+    }
+
+    // Route 3B: /posts/:story/episodes (Series Hub)
+    const seriesHubMatch = path.match(/^\/posts\/([^/]+)\/episodes\/?$/);
+    if (seriesHubMatch) {
+      const sSlug = decodeURIComponent(seriesHubMatch[1]);
+      setCurrentSeriesSlug(sSlug);
+      setCurrentEpisodeNum(null);
+      setCurrentStorySlug(null);
+      return;
+    }
+
+    // Route 3C: /posts/:story (Redirect to /posts/:story/episodes)
+    const bareSeriesMatch = path.match(/^\/posts\/([^/]+)\/?$/);
+    if (bareSeriesMatch) {
+      const sSlug = decodeURIComponent(bareSeriesMatch[1]);
+      window.history.replaceState(null, '', `/posts/${encodeURIComponent(sSlug)}/episodes`);
+      setCurrentSeriesSlug(sSlug);
+      setCurrentEpisodeNum(null);
+      setCurrentStorySlug(null);
+      return;
+    }
+
+    // 4. Legacy /story/:slug URL -> 301 direct redirect to /posts/:series/episodes/:episode
+    const legacyStoryMatch = path.match(/^\/story\/([^/]+)/);
+    if (legacyStoryMatch) {
+      const rawSlug = decodeURIComponent(legacyStoryMatch[1]);
+      const info = detectSeriesInfo({ slug: rawSlug, title: rawSlug });
+      const targetUrl = `/posts/${info.seriesSlug}/episodes/${info.episodeNumber}`;
+      window.history.replaceState(null, '', targetUrl);
+      setCurrentSeriesSlug(info.seriesSlug);
+      setCurrentEpisodeNum(info.episodeNumber);
+      setCurrentStorySlug(rawSlug);
+      return;
+    }
+
+    // Reset series & episode states if on regular views
+    setCurrentSeriesSlug(null);
+    setCurrentEpisodeNum(null);
+    setCurrentStorySlug(null);
+
+    // 5. Discovery Pathways: /latest and /popular
+    if (path === '/latest' || hash === '#latest') {
+      setViewMode('latest');
+      setSortBy('latest');
+      setCategory('all');
+      setSearch('');
+      return;
+    }
+
+    if (path === '/popular' || hash === '#popular') {
+      setViewMode('popular');
+      setSortBy('popular');
+      setCategory('all');
+      setSearch('');
+      return;
+    }
+
+    // 6. Category Page Check
     let categorySlug = 'all';
     const categoryMatch = path.match(/^\/category\/([^/]+)/);
     if (categoryMatch) {
@@ -170,50 +269,26 @@ export default function App() {
         window.history.replaceState(null, '', `/category/${canonical}`);
       }
       categorySlug = canonical;
+      setViewMode('category');
     } else {
-      const hashCategoryMatch = hash.match(/^#\/category\/([^/]+)/);
-      if (hashCategoryMatch) {
-        try {
-          categorySlug = decodeURIComponent(hashCategoryMatch[1]);
-        } catch {
-          categorySlug = hashCategoryMatch[1];
-        }
-        const canonical = normalizeCategorySlug(categorySlug);
-        window.history.replaceState(null, '', `/category/${canonical}`);
-        categorySlug = canonical;
-      } else if (searchParams.get('category')) {
-        const queryCat = searchParams.get('category') || '';
-        if (queryCat && queryCat !== 'all') {
-          const canonical = normalizeCategorySlug(queryCat);
-          window.history.replaceState(null, '', `/category/${canonical}`);
-          categorySlug = canonical;
-        }
-      }
+      setViewMode('home');
     }
 
-    // 4. Search Query Check
-    let searchVal = '';
-    const isSearchRoute = path.startsWith('/search') || hash.startsWith('#/search') || hash === '#search';
-    if (isSearchRoute) {
-      searchVal = searchParams.get('q') || '';
-    } else {
-      searchVal = searchParams.get('q') || '';
-    }
+    // 7. Search Query Check
+    const searchVal = searchParams.get('q') || '';
 
-    // 5. Page Number Check
+    // 8. Page Number Check
     let pageNum = 1;
     const pageParam = searchParams.get('page');
     if (pageParam) {
       pageNum = parseInt(pageParam, 10) || 1;
     }
 
-    // Synchronize useStories parameters
+    // Synchronize useStories state
     setCategory(categorySlug);
     setSearch(searchVal);
     setPage(pageNum);
-  }, [setCategory, setSearch, setPage]);
-
-  const previousSlugRef = React.useRef<string | null>(null);
+  }, [setCategory, setSearch, setPage, setSortBy]);
 
   // Sync on mount and popstate
   useEffect(() => {
@@ -223,10 +298,6 @@ export default function App() {
   }, [syncRoute]);
 
   useEffect(() => {
-    previousSlugRef.current = currentSlug;
-  }, [currentSlug]);
-
-  useEffect(() => {
     import('./services/adminService').then(({ adminService }) => {
       adminService.getSiteSettings().then((data) => {
         if (data) setSiteSettings(data);
@@ -234,18 +305,47 @@ export default function App() {
     });
   }, []);
 
+  // Synchronize SEO & Open Graph Tags
   useEffect(() => {
     if (isAdminView) {
       document.title = 'Admin Portal - Walkathawa (වල් කතාව)';
       return;
     }
-    if (isSitemapView) {
-      SEOService.updateHead(SEOService.generateDirectorySEO(), siteSettings);
+
+    if (isArchivesView) {
+      SEOService.updateHead(SEOService.generateArchivesSEO(), siteSettings);
       return;
     }
-    if (currentSlug && activeStory) {
-      SEOService.updateHead(SEOService.generateStorySEO(activeStory), siteSettings);
-    } else if (!currentSlug) {
+
+    if (currentSeriesSlug && currentEpisodeNum !== null && activeStory) {
+      // Episode View SEO
+      SEOService.updateHead(
+        SEOService.generateEpisodeSEO(activeStory, activeSeries, currentEpisodeNum),
+        siteSettings
+      );
+      return;
+    }
+
+    if (currentSeriesSlug && currentEpisodeNum === null && activeSeries) {
+      // Series Hub SEO
+      SEOService.updateHead(
+        SEOService.generateSeriesSEO(activeSeries),
+        siteSettings
+      );
+      return;
+    }
+
+    if (viewMode === 'latest') {
+      SEOService.updateHead(SEOService.generateLatestSEO(), siteSettings);
+      return;
+    }
+
+    if (viewMode === 'popular') {
+      SEOService.updateHead(SEOService.generatePopularSEO(), siteSettings);
+      return;
+    }
+
+    if (params.category && params.category !== 'all') {
       const catObj = categories.find((c) => c.slug === params.category);
       const catName = catObj ? catObj.name : undefined;
       const seoPayload = SEOService.generateHomeSEO(params.category, catName, params.search);
@@ -253,23 +353,67 @@ export default function App() {
         seoPayload.noIndex = true;
       }
       SEOService.updateHead(seoPayload, siteSettings);
+      return;
     }
-  }, [isAdminView, isSitemapView, currentSlug, activeStory, params.category, params.search, params.page, categories, siteSettings]);
 
-  const handleReadStory = useCallback((slug: string) => {
-    setIsSitemapView(false);
-    navigateTo(`/story/${encodeURI(decodeURI(slug))}`);
+    // Default Homepage SEO
+    const homeSEO = SEOService.generateHomeSEO(undefined, undefined, params.search);
+    if (params.page && params.page > 1) {
+      homeSEO.noIndex = true;
+    }
+    SEOService.updateHead(homeSEO, siteSettings);
+  }, [
+    isAdminView,
+    isArchivesView,
+    currentSeriesSlug,
+    currentEpisodeNum,
+    activeStory,
+    activeSeries,
+    viewMode,
+    params.category,
+    params.search,
+    params.page,
+    categories,
+    siteSettings,
+  ]);
+
+  // Handlers for navigation across the site hierarchy
+  const handleReadEpisode = useCallback((sSlug: string, epNum: number) => {
+    setIsArchivesView(false);
+    navigateTo(`/posts/${encodeURIComponent(sSlug)}/episodes/${epNum}`);
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, [navigateTo]);
 
-  const handleBackToGallery = useCallback(() => {
-    setIsSitemapView(false);
+  const handleSelectSeries = useCallback((sSlug: string) => {
+    setIsArchivesView(false);
+    navigateTo(`/posts/${encodeURIComponent(sSlug)}/episodes`);
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }, [navigateTo]);
+
+  const handleReadStory = useCallback((slug: string, sSlug?: string, epNum?: number) => {
+    setIsArchivesView(false);
+    if (sSlug && epNum) {
+      handleReadEpisode(sSlug, epNum);
+    } else {
+      const info = detectSeriesInfo({ slug, title: slug });
+      handleReadEpisode(info.seriesSlug, info.episodeNumber);
+    }
+  }, [handleReadEpisode]);
+
+  const handleBackToHome = useCallback(() => {
+    setIsArchivesView(false);
+    setCurrentSeriesSlug(null);
+    setCurrentEpisodeNum(null);
+    setCurrentStorySlug(null);
     navigateTo('/');
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, [navigateTo]);
 
   const handleSelectCategory = useCallback((catSlug: string) => {
-    setIsSitemapView(false);
+    setIsArchivesView(false);
+    setCurrentSeriesSlug(null);
+    setCurrentEpisodeNum(null);
+    setCurrentStorySlug(null);
     const targetCat = catSlug === 'all' ? 'all' : normalizeCategorySlug(catSlug);
     const targetPath = targetCat === 'all' ? '/' : `/category/${targetCat}`;
     navigateTo(targetPath);
@@ -316,21 +460,41 @@ export default function App() {
         : 'bg-slate-50 text-slate-900'
     }`}>
       <Header
-        onHomeClick={handleBackToGallery}
+        onHomeClick={handleBackToHome}
         theme={theme}
         onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
       />
 
       <main className="flex-grow">
-        {isSitemapView ? (
+        {isArchivesView ? (
           <SitemapPage
             stories={stories}
             categories={categories}
             onSelectStory={handleReadStory}
-            onNavigateHome={handleBackToGallery}
+            onNavigateHome={handleBackToHome}
             onSelectCategory={handleSelectCategory}
+            onSelectSeries={handleSelectSeries}
           />
-        ) : currentSlug ? (
+        ) : currentSeriesSlug && currentEpisodeNum === null && activeSeries ? (
+          /* Series Hub View: /posts/:story/episodes */
+          <Suspense
+            fallback={
+              <div className="flex items-center justify-center min-h-[50vh]">
+                <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+              </div>
+            }
+          >
+            <SeriesHub
+              series={activeSeries}
+              relatedStories={stories.filter((s) => s.category === activeSeries.category).slice(0, 4)}
+              theme={theme}
+              onReadEpisode={handleReadEpisode}
+              onSelectCategory={handleSelectCategory}
+              onNavigateHome={handleBackToHome}
+            />
+          </Suspense>
+        ) : currentSeriesSlug && currentEpisodeNum !== null ? (
+          /* Episode Reader View: /posts/:story/episodes/:episode */
           activeStory ? (
             <Suspense
               fallback={
@@ -341,11 +505,15 @@ export default function App() {
             >
               <StoryReader
                 story={activeStory}
+                series={activeSeries}
+                episodeNumber={currentEpisodeNum}
+                prevEpisode={prevEpisode}
+                nextEpisode={nextEpisode}
                 relatedStories={relatedStories}
-                prevStory={prevStory}
-                nextStory={nextStory}
-                onBack={handleBackToGallery}
+                onBack={handleBackToHome}
                 onSelectStory={handleReadStory}
+                onSelectEpisode={handleReadEpisode}
+                onNavigateSeries={handleSelectSeries}
                 theme={theme}
                 onThemeChange={setTheme}
                 fontSize={fontSize}
@@ -361,20 +529,36 @@ export default function App() {
           ) : (
             <div className="text-center py-20 px-4">
               <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-200 mb-2">
-                {storyError || 'Story not found'}
+                {storyError || 'Episode not found'}
               </h2>
-              <button
-                type="button"
-                onClick={handleBackToGallery}
-                className="mt-6 px-6 py-2.5 bg-indigo-600 text-white font-medium rounded-xl hover:bg-indigo-700 transition-colors"
-              >
-                Return to Home
-              </button>
+              <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+                මෙම කතාංගය සොයාගත නොහැකි විය. කරුණාකර කතා මාලාවේ අනෙකුත් කොටස් පරීක්ෂා කරන්න.
+              </p>
+              <div className="mt-6 flex items-center justify-center gap-3">
+                {activeSeries && (
+                  <button
+                    type="button"
+                    onClick={() => handleSelectSeries(activeSeries.slug)}
+                    className="px-5 py-2.5 bg-indigo-600 text-white font-medium rounded-xl hover:bg-indigo-700 transition-colors text-xs"
+                  >
+                    කතා මාලාවට යන්න (Series Hub)
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleBackToHome}
+                  className="px-5 py-2.5 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 font-medium rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-xs"
+                >
+                  Return to Home
+                </button>
+              </div>
             </div>
           )
         ) : (
+          /* Homepage, Category, Latest, or Popular Gallery View */
           <StoryGallery
             stories={stories}
+            allStories={stories}
             categories={categories}
             featuredStories={featuredStories}
             selectedCategory={params.category || 'all'}
@@ -388,7 +572,9 @@ export default function App() {
             total={total}
             onPageChange={handlePageChange}
             onReadStory={handleReadStory}
+            onSelectSeries={handleSelectSeries}
             isLoading={isStoriesLoading}
+            viewMode={viewMode}
           />
         )}
       </main>
@@ -399,16 +585,16 @@ export default function App() {
         categories={categories}
         onSelectCategory={handleSelectCategory}
         onOpenSitemap={() => {
-          setIsSitemapView(true);
-          navigateTo('/directory');
+          setIsArchivesView(true);
+          navigateTo('/archives');
           window.scrollTo({ top: 0, behavior: 'instant' });
         }}
         onSearchKeyword={(kw) => {
-          setIsSitemapView(false);
+          setIsArchivesView(false);
           handleSelectCategory('all');
           handleSearchChange(kw);
-          if (currentSlug) {
-            handleBackToGallery();
+          if (currentSeriesSlug || currentEpisodeNum) {
+            handleBackToHome();
           }
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}

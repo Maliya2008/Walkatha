@@ -120,7 +120,7 @@ export const Footer: React.FC<FooterProps> = ({
           </div>
           <div className="flex items-center gap-4">
             <a
-              href="/directory"
+              href="/archives"
               onClick={(e) => {
                 if (onOpenSitemap) {
                   e.preventDefault();
@@ -129,7 +129,7 @@ export const Footer: React.FC<FooterProps> = ({
               }}
               className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
             >
-              සයිට්මැප් (Directory)
+              කතා සූචිය (Archives)
             </a>
             <span>•</span>
             <a

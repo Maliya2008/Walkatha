@@ -1,10 +1,12 @@
-# Robots.txt for Walkathawa (වල් කතාව)
+# Robots.txt for Walkathawa (වල් කතාව) - Following walakatha.com Architecture
 User-agent: *
 Allow: /
 
 Disallow: /admin
+Disallow: /admin/*
 Disallow: /api/admin
 Disallow: /api/auth
+Disallow: /search
 
 # Official Canonical Sitemap
 Sitemap: https://www.walkathawa.site/sitemap.xml

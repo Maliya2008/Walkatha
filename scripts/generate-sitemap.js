@@ -90,14 +90,150 @@ function normalizeCategory(raw) {
   return 'wife';
 }
 
-function formatCanonicalStoryUrl(slug) {
-  let cleanSlug = slug;
-  try {
-    cleanSlug = decodeURI(slug);
-  } catch {
-    cleanSlug = slug;
+function normalizeSeriesSlug(str) {
+  return str
+    .toLowerCase()
+    .trim()
+    .replace(/[\s_]+/g, '-')
+    .replace(/[^\w\u0D80-\u0DFF-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'story';
+}
+
+function detectSeriesInfo(story) {
+  const rawTitle = story.title || '';
+  const rawSlug = story.slug || '';
+  const title = rawTitle.replace(/\u200B/g, '').replace(/\uFEFF/g, '').replace(/[–—―]/g, '-').trim();
+  const slug = rawSlug.replace(/\u200B/g, '').replace(/\uFEFF/g, '').replace(/[–—―]/g, '-').trim();
+
+  // 1. Dinithige Chat Eka (දිනිතිගෙ චැට් එක)
+  if (
+    title.includes('දිනිතිගෙ චැට්') ||
+    slug.includes('දිනිතිගෙ-චැට්') ||
+    slug.includes('dinithi') ||
+    title.toLowerCase().includes('dinithi')
+  ) {
+    const epMatch =
+      title.match(/(?:–|-|\b)(\d+)(?:–|-|\b)/) ||
+      slug.match(/(?:-)(\d+)(?:-|$)/) ||
+      title.match(/(\d+)/);
+    const ep = epMatch ? parseInt(epMatch[1], 10) : 1;
+    return {
+      isSeries: true,
+      seriesSlug: 'dinithige-chat-eka',
+      seriesTitle: 'දිනිතිගෙ චැට් එක (Dinithige Chat Eka)',
+      episodeNumber: ep,
+    };
   }
-  return `${baseUrl}/story/${encodeURI(cleanSlug)}`;
+
+  // 2. School Amuthu Padama (ස්කෝලෙ අමුතු පාඩම)
+  if (
+    title.includes('ස්කෝලෙ අමුතු පාඩම') ||
+    slug.includes('ස්කෝලෙ-අමුතු-පාඩම') ||
+    slug.includes('school-wal-katha') ||
+    title.toLowerCase().includes('school wal katha')
+  ) {
+    const epMatch =
+      title.match(/(?:–|-|\b)(\d+)(?:–|-|\b)/) ||
+      slug.match(/(?:-)(\d+)(?:-|$)/) ||
+      title.match(/(\d+)/);
+    const ep = epMatch ? parseInt(epMatch[1], 10) : 1;
+    return {
+      isSeries: true,
+      seriesSlug: 'school-amuthu-padama',
+      seriesTitle: 'ස්කෝලෙ අමුතු පාඩම (School Wal Katha)',
+      episodeNumber: ep,
+    };
+  }
+
+  // 3. Mama Tharuka (මම තරුකා)
+  if (
+    title.includes('මම තරුකා') ||
+    title.includes('මම තාරුකා') ||
+    slug.includes('mama-tharuka') ||
+    title.toLowerCase().includes('mama tharuka')
+  ) {
+    const ep = title.includes('මම තාරුකා-sinhala walkatha') ? 2 : 1;
+    return {
+      isSeries: true,
+      seriesSlug: 'mama-tharuka',
+      seriesTitle: 'මම තරුකා (Mama Tharuka)',
+      episodeNumber: ep,
+    };
+  }
+
+  // 4. Hithin Kala Adare (හිතින් කළ ආදරේ)
+  if (title.includes('හිතින් කළ ආදරේ') || slug.includes('hithin-kala-adare')) {
+    const epMatch = title.match(/(?:–|-|\b)(\d+)(?:–|-|\b)/) || title.match(/(\d+)/);
+    const ep = epMatch ? parseInt(epMatch[1], 10) : 1;
+    return {
+      isSeries: true,
+      seriesSlug: 'hithin-kala-adare',
+      seriesTitle: 'හිතින් කළ ආදරේ (Hithin Kala Adare)',
+      episodeNumber: ep,
+    };
+  }
+
+  // 5. Girls Trip (කෙල්ලො ගත්ත ෆන් එක)
+  if (
+    title.includes('කෙල්ලො ගත්ත ෆන්') ||
+    slug.includes('girls-trip') ||
+    title.toLowerCase().includes('girls trip')
+  ) {
+    const epMatch = title.match(/(?:–|-|\b)(\d+)(?:–|-|\b)/) || title.match(/(\d+)/);
+    const ep = epMatch ? parseInt(epMatch[1], 10) : 1;
+    return {
+      isSeries: true,
+      seriesSlug: 'girls-trip',
+      seriesTitle: 'කෙල්ලො ගත්ත ෆන් එක (Girls Trip)',
+      episodeNumber: ep,
+    };
+  }
+
+  const patterns = [
+    /^(.*?)(?:\s*[-–—:]\s*|\s+)(?:කොටස|episode|ep|part)\s*(\d+)/i,
+    /^(.*?)(?:\s*[-–—:]\s*|\s+)(\d+)$/,
+    /^(.*?)(?:_|-)(\d+)$/,
+  ];
+
+  for (const regex of patterns) {
+    const match = title.match(regex);
+    if (match) {
+      const seriesTitle = match[1].trim();
+      const episodeNumber = parseInt(match[2], 10);
+      let seriesSlug = normalizeSeriesSlug(seriesTitle);
+      if (/^\d+$/.test(seriesSlug) || seriesSlug.length < 2) {
+        seriesSlug = slug.replace(/-\d+$/, '');
+      }
+      return {
+        isSeries: true,
+        seriesSlug,
+        seriesTitle,
+        episodeNumber,
+      };
+    }
+  }
+
+  const slugMatch = slug.match(/^(.*?)[-_](\d+)$/);
+  if (slugMatch) {
+    const seriesSlug = slugMatch[1];
+    const episodeNumber = parseInt(slugMatch[2], 10);
+    const seriesTitle = title.replace(/\s*[-–—]\s*\d+$/, '').trim();
+    return {
+      isSeries: true,
+      seriesSlug,
+      seriesTitle: seriesTitle || title,
+      episodeNumber,
+    };
+  }
+
+  const fallbackSlug = normalizeSeriesSlug(title) || slug;
+  return {
+    isSeries: false,
+    seriesSlug: fallbackSlug,
+    seriesTitle: title,
+    episodeNumber: 1,
+  };
 }
 
 async function loadAllPublishedStories() {
@@ -211,8 +347,32 @@ async function generate() {
     }
   }
 
-  // Fallback to a stable release date if no story dates exist
   const defaultStableDate = latestStoryDate || '2026-09-08T12:00:00.000Z';
+
+  // Group stories into Series Hubs
+  const seriesMap = new Map();
+  for (const story of stories) {
+    const info = detectSeriesInfo(story);
+    if (!seriesMap.has(info.seriesSlug)) {
+      seriesMap.set(info.seriesSlug, {
+        slug: info.seriesSlug,
+        title: info.seriesTitle,
+        category: story.category,
+        coverImage: story.coverImage,
+        latestDate: story.updatedDate || defaultStableDate,
+        episodes: [],
+      });
+    }
+
+    const s = seriesMap.get(info.seriesSlug);
+    s.episodes.push({
+      episodeNumber: info.episodeNumber,
+      story,
+    });
+    if (story.updatedDate && new Date(story.updatedDate) > new Date(s.latestDate)) {
+      s.latestDate = story.updatedDate;
+    }
+  }
 
   let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
   xml += `<?xml-stylesheet type="text/xsl" href="/sitemap.xsl"?>\n`;
@@ -226,15 +386,31 @@ async function generate() {
   xml += `    <priority>1.0</priority>\n`;
   xml += `  </url>\n`;
 
-  // 2. Story Directory (Single indexable directory URL)
+  // 2. Latest Stories Hub
   xml += `  <url>\n`;
-  xml += `    <loc>${baseUrl}/directory</loc>\n`;
+  xml += `    <loc>${baseUrl}/latest</loc>\n`;
   xml += `    <lastmod>${defaultStableDate}</lastmod>\n`;
   xml += `    <changefreq>daily</changefreq>\n`;
-  xml += `    <priority>0.8</priority>\n`;
+  xml += `    <priority>0.9</priority>\n`;
   xml += `  </url>\n`;
 
-  // 3. Category Pages (Path-based canonical URLs ONLY: /category/{slug})
+  // 3. Popular Stories Hub
+  xml += `  <url>\n`;
+  xml += `    <loc>${baseUrl}/popular</loc>\n`;
+  xml += `    <lastmod>${defaultStableDate}</lastmod>\n`;
+  xml += `    <changefreq>daily</changefreq>\n`;
+  xml += `    <priority>0.9</priority>\n`;
+  xml += `  </url>\n`;
+
+  // 4. Archives (Complete Content Directory)
+  xml += `  <url>\n`;
+  xml += `    <loc>${baseUrl}/archives</loc>\n`;
+  xml += `    <lastmod>${defaultStableDate}</lastmod>\n`;
+  xml += `    <changefreq>daily</changefreq>\n`;
+  xml += `    <priority>0.85</priority>\n`;
+  xml += `  </url>\n`;
+
+  // 5. Category Pages (Path-based canonical URLs: /category/{slug})
   for (const cat of categories) {
     let catLatestDate = null;
     for (const s of stories) {
@@ -250,44 +426,64 @@ async function generate() {
     xml += `    <loc>${baseUrl}/category/${cat.slug}</loc>\n`;
     xml += `    <lastmod>${catLastMod}</lastmod>\n`;
     xml += `    <changefreq>weekly</changefreq>\n`;
-    xml += `    <priority>0.8</priority>\n`;
+    xml += `    <priority>0.85</priority>\n`;
     xml += `  </url>\n`;
   }
 
-  // 4. Published Story Pages (Canonical /story/{slug} URLs with RFC 3986 encoding)
-  for (const story of stories) {
-    const storyUrl = formatCanonicalStoryUrl(story.slug);
-    const storyDate = story.updatedDate || defaultStableDate;
-
+  // 6. Story / Series Hubs (Canonical: /posts/{series}/episodes)
+  for (const s of seriesMap.values()) {
+    const seriesUrl = `${baseUrl}/posts/${encodeURI(s.slug)}/episodes`;
     xml += `  <url>\n`;
-    xml += `    <loc>${storyUrl}</loc>\n`;
-    xml += `    <lastmod>${storyDate}</lastmod>\n`;
+    xml += `    <loc>${seriesUrl}</loc>\n`;
+    xml += `    <lastmod>${s.latestDate}</lastmod>\n`;
     xml += `    <changefreq>weekly</changefreq>\n`;
     xml += `    <priority>0.9</priority>\n`;
-
-    if (story.coverImage) {
+    if (s.coverImage) {
       xml += `    <image:image>\n`;
-      xml += `      <image:loc>${escapeXml(story.coverImage)}</image:loc>\n`;
-      xml += `      <image:title>${escapeXml(story.title || 'Sinhala Wal Katha')}</image:title>\n`;
+      xml += `      <image:loc>${escapeXml(s.coverImage)}</image:loc>\n`;
+      xml += `      <image:title>${escapeXml(s.title || 'Sinhala Series Hub')}</image:title>\n`;
       xml += `    </image:image>\n`;
     }
     xml += `  </url>\n`;
+  }
+
+  // 7. Individual Episode Pages (Canonical: /posts/{series}/episodes/{episode})
+  for (const s of seriesMap.values()) {
+    for (const ep of s.episodes) {
+      const epUrl = `${baseUrl}/posts/${encodeURI(s.slug)}/episodes/${ep.episodeNumber}`;
+      const epDate = ep.story.updatedDate || defaultStableDate;
+
+      xml += `  <url>\n`;
+      xml += `    <loc>${epUrl}</loc>\n`;
+      xml += `    <lastmod>${epDate}</lastmod>\n`;
+      xml += `    <changefreq>weekly</changefreq>\n`;
+      xml += `    <priority>0.8</priority>\n`;
+      if (ep.story.coverImage) {
+        xml += `    <image:image>\n`;
+        xml += `      <image:loc>${escapeXml(ep.story.coverImage)}</image:loc>\n`;
+        xml += `      <image:title>${escapeXml(ep.story.title || 'Sinhala Wal Katha Episode')}</image:title>\n`;
+        xml += `    </image:image>\n`;
+      }
+      xml += `  </url>\n`;
+    }
   }
 
   xml += `</urlset>`;
 
   // Write canonical sitemap.xml
   fs.writeFileSync(path.join(publicDir, 'sitemap.xml'), xml, 'utf-8');
-  console.log(`[Sitemap Generator] Generated public/sitemap.xml with ${stories.length} stories.`);
+  console.log(`[Sitemap Generator] Generated public/sitemap.xml with ${seriesMap.size} series and ${stories.length} episodes.`);
 
   // Generate canonical robots.txt
-  const robotsTxt = `# Robots.txt for Walkathawa (වල් කතාව)
+  const robotsTxt = `# Robots.txt for Walkathawa (වල් කතාව) - Following walakatha.com Architecture
 User-agent: *
 Allow: /
 
 Disallow: /admin
+Disallow: /admin/*
 Disallow: /api/admin
 Disallow: /api/auth
+Disallow: /search
 
 # Official Canonical Sitemap
 Sitemap: ${baseUrl}/sitemap.xml

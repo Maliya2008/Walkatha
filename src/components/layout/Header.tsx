@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookOpen, Moon, Sun } from 'lucide-react';
+import { BookOpen, Moon, Sun, Clock, Flame } from 'lucide-react';
 import { ReadingTheme } from '../../types/story';
 
 interface HeaderProps {
@@ -37,7 +37,6 @@ export const Header: React.FC<HeaderProps> = ({
               alt="Walkathawa Logo"
               className="w-full h-full object-cover"
               onError={(e) => {
-                // Fallback to PNG if SVG fails
                 (e.currentTarget as HTMLImageElement).src = '/icon.png';
               }}
             />
@@ -52,16 +51,34 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </a>
 
-        {/* Action Controls */}
+        {/* Navigation & Action Controls */}
         <div className="flex items-center gap-2">
-          {/* Directory Link for SEO & Navigation */}
+          {/* Quick Pathways: Latest & Popular */}
+          <nav className="hidden md:flex items-center gap-1.5 mr-1" aria-label="Quick links">
+            <a
+              href="/latest"
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-medium transition-colors"
+            >
+              <Clock className="w-3.5 h-3.5 text-indigo-500" />
+              <span>නවතම</span>
+            </a>
+            <a
+              href="/popular"
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-medium transition-colors"
+            >
+              <Flame className="w-3.5 h-3.5 text-amber-500" />
+              <span>ජනප්‍රිය</span>
+            </a>
+          </nav>
+
+          {/* Archives Link for SEO & Exploration */}
           <a
-            href="/directory"
+            href="/archives"
             id="header-directory-link"
             className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-medium transition-colors"
           >
             <BookOpen className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Directory</span>
+            <span className="hidden sm:inline">Archives</span>
           </a>
 
           {/* Theme Toggle Button */}
@@ -89,4 +106,3 @@ export const Header: React.FC<HeaderProps> = ({
     </header>
   );
 };
-

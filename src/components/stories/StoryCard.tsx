@@ -1,12 +1,13 @@
 import React from 'react';
-import { Eye, Calendar, ArrowRight } from 'lucide-react';
+import { Eye, Calendar, ArrowRight, Layers } from 'lucide-react';
 import { Story } from '../../types/story';
 import { Badge } from '../common/Badge';
 import { getCategoryDisplayName } from '../../utils/categoryTaxonomy';
+import { detectSeriesInfo, getEpisodeCanonicalUrl } from '../../utils/seriesTaxonomy';
 
 interface StoryCardProps {
   story: Story;
-  onRead: (slug: string) => void;
+  onRead: (slug: string, seriesSlug?: string, episodeNumber?: number) => void;
   priority?: boolean;
 }
 
@@ -17,7 +18,8 @@ export const StoryCard: React.FC<StoryCardProps> = ({ story, onRead, priority = 
     year: 'numeric',
   });
 
-  const encodedSlug = encodeURI(decodeURI(story.slug));
+  const seriesInfo = detectSeriesInfo(story);
+  const canonicalUrl = getEpisodeCanonicalUrl(story);
 
   return (
     <article
@@ -26,11 +28,11 @@ export const StoryCard: React.FC<StoryCardProps> = ({ story, onRead, priority = 
     >
       {/* Cover Image */}
       <a
-        href={`/story/${encodedSlug}`}
+        href={canonicalUrl}
         onClick={(e) => {
           if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
             e.preventDefault();
-            onRead(story.slug);
+            onRead(story.slug, seriesInfo.seriesSlug, seriesInfo.episodeNumber);
           }
         }}
         aria-label={`Read ${story.title}`}
@@ -50,6 +52,11 @@ export const StoryCard: React.FC<StoryCardProps> = ({ story, onRead, priority = 
           <Badge variant="accent" size="sm">
             {getCategoryDisplayName(story.category)}
           </Badge>
+          {seriesInfo.isSeries && (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-600/90 backdrop-blur-xs text-white shadow-xs">
+              Ep {seriesInfo.episodeNumber}
+            </span>
+          )}
           {story.featured && (
             <Badge variant="primary" size="sm">
               Featured
@@ -60,17 +67,24 @@ export const StoryCard: React.FC<StoryCardProps> = ({ story, onRead, priority = 
 
       {/* Story Details Body */}
       <div className="flex flex-col flex-1 p-4">
+        {seriesInfo.isSeries && (
+          <div className="flex items-center gap-1 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 mb-1">
+            <Layers className="w-3 h-3" />
+            <span className="truncate">{seriesInfo.seriesTitle}</span>
+          </div>
+        )}
+
         {/* Title */}
         <h3
           id={`story-title-${story.id}`}
           className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer transition-colors line-clamp-2 mb-1.5 font-serif leading-snug"
         >
           <a
-            href={`/story/${encodedSlug}`}
+            href={canonicalUrl}
             onClick={(e) => {
               if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
                 e.preventDefault();
-                onRead(story.slug);
+                onRead(story.slug, seriesInfo.seriesSlug, seriesInfo.episodeNumber);
               }
             }}
           >
@@ -97,17 +111,17 @@ export const StoryCard: React.FC<StoryCardProps> = ({ story, onRead, priority = 
           </div>
 
           <a
-            href={`/story/${story.slug}`}
-            id={`read-btn-${story.id}`}
+            href={canonicalUrl}
             onClick={(e) => {
               if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
                 e.preventDefault();
-                onRead(story.slug);
+                onRead(story.slug, seriesInfo.seriesSlug, seriesInfo.episodeNumber);
               }
             }}
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 hover:bg-indigo-600 dark:hover:bg-slate-200 text-xs font-medium transition-colors cursor-pointer"
+            aria-label={`Read ${story.title}`}
+            className="flex items-center gap-1 font-semibold text-indigo-600 dark:text-indigo-400 hover:underline group-hover:translate-x-0.5 transition-transform"
           >
-            <span>Read</span>
+            <span>කියවන්න</span>
             <ArrowRight className="w-3 h-3" />
           </a>
         </div>

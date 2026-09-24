@@ -1,9 +1,6 @@
 import React, { useMemo } from 'react';
 import {
   Sparkles,
-  Flame,
-  Clock,
-  Archive,
   Layers,
   ChevronRight,
   BookOpen,
@@ -115,63 +112,6 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
           >
             <BookOpen className="w-3.5 h-3.5" />
             <span>මුල් පිටුව (Home)</span>
-          </a>
-
-          <a
-            href="/latest"
-            onClick={(e) => {
-              if (!e.ctrlKey && !e.metaKey) {
-                e.preventDefault();
-                window.history.pushState({}, '', '/latest');
-                window.dispatchEvent(new Event('popstate'));
-              }
-            }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
-              viewMode === 'latest' || (sortBy === 'latest' && selectedCategory === 'all' && viewMode !== 'home')
-                ? 'bg-indigo-600 text-white shadow-xs dark:bg-indigo-500'
-                : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800'
-            }`}
-          >
-            <Clock className="w-3.5 h-3.5 text-indigo-400" />
-            <span>නවතම කතා (Latest)</span>
-          </a>
-
-          <a
-            href="/popular"
-            onClick={(e) => {
-              if (!e.ctrlKey && !e.metaKey) {
-                e.preventDefault();
-                window.history.pushState({}, '', '/popular');
-                window.dispatchEvent(new Event('popstate'));
-              }
-            }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
-              viewMode === 'popular' || sortBy === 'popular'
-                ? 'bg-amber-600 text-white shadow-xs dark:bg-amber-500'
-                : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800'
-            }`}
-          >
-            <Flame className="w-3.5 h-3.5 text-amber-500" />
-            <span>ජනප්‍රිය කතා (Popular)</span>
-          </a>
-
-          <a
-            href="/archives"
-            onClick={(e) => {
-              if (!e.ctrlKey && !e.metaKey) {
-                e.preventDefault();
-                window.history.pushState({}, '', '/archives');
-                window.dispatchEvent(new Event('popstate'));
-              }
-            }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
-              viewMode === 'archives'
-                ? 'bg-emerald-600 text-white shadow-xs dark:bg-emerald-500'
-                : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800'
-            }`}
-          >
-            <Archive className="w-3.5 h-3.5 text-emerald-500" />
-            <span>කතා සූචිය (Archives)</span>
           </a>
         </div>
       </nav>

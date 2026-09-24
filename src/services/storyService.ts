@@ -605,14 +605,17 @@ class StoryService {
             where('published', '==', true),
             limit(1)
           );
-          const snapshot = await getDocs(q);
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Firestore timeout')), 3500)
+          );
+          const snapshot = (await Promise.race([getDocs(q), timeoutPromise])) as any;
 
           if (!snapshot.empty) {
             story = normalizeStoryDoc(snapshot.docs[0].id, snapshot.docs[0].data());
           } else {
             // Direct ID lookup fallback
             const docRef = doc(db, 'stories', slug);
-            const docSnap = await getDoc(docRef);
+            const docSnap = (await Promise.race([getDoc(docRef), timeoutPromise])) as any;
             if (docSnap.exists() && docSnap.data().published) {
               story = normalizeStoryDoc(docSnap.id, docSnap.data());
             }
@@ -741,9 +744,12 @@ class StoryService {
             where('featured', '==', true),
             limit(limitVal)
           );
-          const snapshot = await getDocs(q);
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Firestore timeout')), 3500)
+          );
+          const snapshot = (await Promise.race([getDocs(q), timeoutPromise])) as any;
           const featured: Story[] = [];
-          snapshot.forEach((docSnap) => {
+          snapshot.forEach((docSnap: any) => {
             const story = normalizeStoryDoc(docSnap.id, docSnap.data());
             featured.push(story);
             storyEntityCache.set(story.id, { story, timestamp: Date.now() });
@@ -811,7 +817,10 @@ class StoryService {
         try {
           const categoriesRef = collection(db, 'categories');
           const q = query(categoriesRef, limit(50));
-          const snapshot = await getDocs(q);
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Firestore timeout')), 3500)
+          );
+          const snapshot = (await Promise.race([getDocs(q), timeoutPromise])) as any;
           const categories: Category[] = [];
 
           snapshot.forEach((docSnap) => {

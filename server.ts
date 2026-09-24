@@ -78,15 +78,15 @@ app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
 // --- DATABASE PERSISTENCE LAYER ---
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const currentFilename = typeof __filename !== 'undefined' ? __filename : (typeof import.meta !== 'undefined' && import.meta.url ? fileURLToPath(import.meta.url) : process.cwd());
+const currentDirname = typeof __dirname !== 'undefined' ? __dirname : path.dirname(currentFilename);
 
 function getDatabaseFilePath(): string {
   const possiblePaths = [
     path.join('/tmp', 'database.json'),
     path.join(process.cwd(), 'data', 'database.json'),
-    path.join(__dirname, 'data', 'database.json'),
-    path.join(__dirname, '..', 'data', 'database.json'),
+    path.join(currentDirname, 'data', 'database.json'),
+    path.join(currentDirname, '..', 'data', 'database.json'),
   ];
   for (const p of possiblePaths) {
     if (fs.existsSync(p)) {
@@ -1617,11 +1617,8 @@ function render404Html(rawHtml: string, req: Request, message?: string): string 
     </div>
   </div>`;
 
-  if (html.includes('<div id="root"></div>')) {
-    html = html.replace('<div id="root"></div>', `<div id="root">${notFoundContent}</div>`);
-  } else {
-    html = html.replace('</body>', `${notFoundContent}\n</body>`);
-  }
+  // Keep <div id="root"></div> clean for React client, provide noscript fallback
+  html = html.replace('</body>', `<noscript>${notFoundContent}</noscript>\n</body>`);
 
   return html;
 }
@@ -1733,17 +1730,11 @@ function applyPageSeo(rawHtml: string, options: InjectSeoOptions): string {
     html = html.replace('</head>', `  ${options.initialDataScript}\n</head>`);
   }
 
-  // 10. SSR Content Injection into <div id="root">
-  if (options.ssrContent) {
-    if (html.includes('<div id="root"></div>')) {
-      html = html.replace('<div id="root"></div>', `<div id="root">${options.ssrContent}</div>`);
-    }
-  }
-
-  // 11. Remove any old injected non-font noscripts and inject noscript fallback
-  html = html.replace(/<noscript>(?![\s\S]*?fonts\.googleapis\.com)[\s\S]*?<\/noscript>/gi, '');
-
+  // Keep <div id="root"></div> clean for React client mounting without hydration mismatch.
+  // Fallback noscript content is injected for SEO crawlers and non-JS clients.
   if (options.noscriptContent) {
+    // Remove any old injected non-font noscripts and inject fresh noscript fallback
+    html = html.replace(/<noscript>(?![\s\S]*?fonts\.googleapis\.com)[\s\S]*?<\/noscript>/gi, '');
     html = html.replace('</body>', `${options.noscriptContent}\n</body>`);
   }
 
@@ -2622,14 +2613,24 @@ async function injectPopularSeo(rawHtml: string, req?: Request): Promise<string>
 
 // Helper to get index.html template (works in dev, prod, and serverless)
 function getHtmlTemplate(): string {
-  const possiblePaths = [
-    path.join(process.cwd(), 'dist', 'index.html'),
-    path.join(__dirname, 'dist', 'index.html'),
-    path.join(__dirname, '..', 'dist', 'index.html'),
-    path.join(process.cwd(), 'index.html'),
-    path.join(__dirname, 'index.html'),
-    path.join(__dirname, '..', 'index.html'),
-  ];
+  const isServerless = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+  const isDev = process.env.NODE_ENV !== 'production' && !isServerless;
+
+  // In development mode, always load root source index.html so Vite handles on-the-fly HMR and module resolution
+  const possiblePaths = isDev
+    ? [
+        path.join(process.cwd(), 'index.html'),
+        path.join(currentDirname, 'index.html'),
+        path.join(currentDirname, '..', 'index.html'),
+      ]
+    : [
+        path.join(process.cwd(), 'dist', 'index.html'),
+        path.join(currentDirname, 'dist', 'index.html'),
+        path.join(currentDirname, '..', 'dist', 'index.html'),
+        path.join(process.cwd(), 'index.html'),
+        path.join(currentDirname, 'index.html'),
+        path.join(currentDirname, '..', 'index.html'),
+      ];
 
   for (const p of possiblePaths) {
     if (fs.existsSync(p)) {

@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+  "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "headers": [
     {
@@ -74,12 +74,24 @@
       "destination": "/assets/$1"
     },
     {
-      "source": "/favicon.(?:svg|ico)",
+      "source": "/favicon.svg",
       "destination": "/favicon.svg"
     },
     {
-      "source": "/icon.(?:png|svg|jpg)",
+      "source": "/favicon.ico",
+      "destination": "/favicon.svg"
+    },
+    {
+      "source": "/icon.png",
       "destination": "/icon.png"
+    },
+    {
+      "source": "/icon.jpg",
+      "destination": "/icon.jpg"
+    },
+    {
+      "source": "/icon.svg",
+      "destination": "/icon.svg"
     },
     {
       "source": "/apple-touch-icon.png",

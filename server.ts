@@ -34,6 +34,9 @@ import {
 const app = express();
 const PORT = 3000;
 
+// Enable trust proxy for serverless environments (Vercel, AWS Lambda, Cloud Run)
+app.set('trust proxy', true);
+
 // Security & Best Practice Headers Middleware
 app.use((_req: Request, res: Response, next: NextFunction) => {
   res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
@@ -46,9 +49,27 @@ app.use((_req: Request, res: Response, next: NextFunction) => {
 // Canonical Host Enforcement & Anti-Indexing for Staging/Preview Domains
 app.use((req: Request, res: Response, next: NextFunction) => {
   const forwardedHost = (req.headers['x-forwarded-host'] as string) || '';
-  const hostHeader = req.get('host') || '';
+  const hostHeader = (typeof req.get === 'function' ? req.get('host') : (req.headers['host'] as string)) || '';
   const host = (forwardedHost || hostHeader).split(':')[0].toLowerCase();
-  const proto = ((req.headers['x-forwarded-proto'] as string) || req.protocol || 'https').toLowerCase();
+
+  // Safely extract protocol without accessing req.connection.encrypted which throws in serverless
+  let proto = 'https';
+  const forwardedProto = req.headers['x-forwarded-proto'];
+  if (typeof forwardedProto === 'string') {
+    proto = forwardedProto.split(',')[0].trim().toLowerCase();
+  } else if (Array.isArray(forwardedProto) && forwardedProto.length > 0) {
+    proto = forwardedProto[0].trim().toLowerCase();
+  } else {
+    try {
+      if ((req as any).secure) {
+        proto = 'https';
+      } else if (req.protocol) {
+        proto = req.protocol.toLowerCase();
+      }
+    } catch {
+      proto = 'https';
+    }
+  }
 
   const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0';
   const isCanonicalProd = host === 'www.walkathawa.site';
@@ -56,12 +77,12 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
   // 1. If apex domain 'walkathawa.site', permanently (301) redirect to 'https://www.walkathawa.site'
   if (isApexProd) {
-    return res.redirect(301, `https://www.walkathawa.site${req.originalUrl}`);
+    return res.redirect(301, `https://www.walkathawa.site${req.originalUrl || req.url || ''}`);
   }
 
   // 2. If HTTP on canonical domain, redirect to HTTPS
   if (isCanonicalProd && proto === 'http') {
-    return res.redirect(301, `https://www.walkathawa.site${req.originalUrl}`);
+    return res.redirect(301, `https://www.walkathawa.site${req.originalUrl || req.url || ''}`);
   }
 
   // 3. If accessed via Cloud Run domain (*.run.app) or any preview/staging host (not local dev):
@@ -2971,6 +2992,16 @@ async function startServer(): Promise<void> {
         return res.status(404).send(notFoundHtml);
       });
     }
+
+    // Global error handler to catch all unhandled errors cleanly in Express
+    app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+      console.error('[StoryHub Express Error]:', err);
+      if (!res.headersSent) {
+        res.status(500);
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.send('<!DOCTYPE html><html lang="si"><head><meta charset="UTF-8"><title>Error</title></head><body><h1>Service Temporarily Unavailable</h1><p>කරුණාකර මොහොතකින් නැවත උත්සාහ කරන්න.</p></body></html>');
+      }
+    });
 
     if (!isServerless) {
       httpServer.on('error', (err: any) => {

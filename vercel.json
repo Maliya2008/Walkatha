@@ -120,6 +120,14 @@
       "destination": "/sw.js"
     },
     {
+      "source": "/admin",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/admin/(.*)",
+      "destination": "/index.html"
+    },
+    {
       "source": "/sitemap",
       "destination": "/api/index"
     },

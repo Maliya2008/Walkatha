@@ -105,40 +105,6 @@
         } catch (e) {}
       })();
     </script>
-    <!-- Public Reader Ad Scripts (Strictly suppressed and prevented on Admin Panel) -->
-    <script>
-      (function() {
-        var path = window.location.pathname || '';
-        var hash = window.location.hash || '';
-        var isAdmin = path.indexOf('/admin') === 0 || hash === '#admin' || hash.indexOf('#/admin') === 0 || hash.indexOf('#admin') === 0;
-        if (!isAdmin) {
-          var s1 = document.createElement('script');
-          s1.src = 'https://pl31237534.profitableratecpmnetwork.com/92/75/b7/9275b71384eefb562fbf9d9fd275cc5e.js';
-          s1.async = true;
-          s1.setAttribute('data-walkathawa-ad', 'cpm-head');
-          document.head.appendChild(s1);
-
-          var loadBodyScript = function() {
-            var currPath = window.location.pathname || '';
-            var currHash = window.location.hash || '';
-            var currIsAdmin = currPath.indexOf('/admin') === 0 || currHash === '#admin' || currHash.indexOf('#/admin') === 0 || currHash.indexOf('#admin') === 0;
-            if (!currIsAdmin) {
-              var s2 = document.createElement('script');
-              s2.src = 'https://pl31237536.profitableratecpmnetwork.com/c0/5a/c7/c05ac7bd55736617f6c7021ffa7f49da.js';
-              s2.async = true;
-              s2.setAttribute('data-walkathawa-ad', 'cpm-body');
-              document.body.appendChild(s2);
-            }
-          };
-
-          if (document.readyState === 'loading') {
-            window.addEventListener('DOMContentLoaded', loadBodyScript);
-          } else {
-            loadBodyScript();
-          }
-        }
-      })();
-    </script>
   </head>
   <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased font-sans transition-colors duration-200">
     <div id="root"></div>

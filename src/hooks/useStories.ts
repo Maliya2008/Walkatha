@@ -1,109 +1,67 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Category, PaginatedResponse, Story, StoryFilterParams } from '../types/story';
-import { storyService } from '../services/storyService';
+import { StoryService } from '../services/storyService';
+import { INITIAL_CATEGORIES, INITIAL_STORIES } from '../data/seedStories';
 
 export function useStories(initialParams: StoryFilterParams = {}) {
   const mergedInitialParams: StoryFilterParams = {
     category: 'all',
     page: 1,
-    limit: 20,
+    limit: 20, // Default 20 posts per view
     sortBy: 'latest',
     ...initialParams,
   };
 
   const [params, setParams] = useState<StoryFilterParams>(mergedInitialParams);
-
-  // Synchronously initialize with cached/seed stories on frame 0
-  const [response, setResponse] = useState<PaginatedResponse<Story>>(() => {
-    return storyService.getInitialPaginatedStories(mergedInitialParams);
+  const [response, setResponse] = useState<PaginatedResponse<Story>>({
+    data: INITIAL_STORIES.slice(0, 20),
+    total: INITIAL_STORIES.length,
+    page: 1,
+    totalPages: Math.ceil(INITIAL_STORIES.length / 20),
+    hasMore: INITIAL_STORIES.length > 20,
+    limit: 20,
   });
-
-  const [categories, setCategories] = useState<Category[]>(() => {
-    return storyService.getInitialCategories();
-  });
-
-  const [featuredStories, setFeaturedStories] = useState<Story[]>(() => {
-    return storyService.getInitialFeaturedStories(3);
-  });
-
-  // Zero-delay loading if cached data exists
-  const [isLoading, setIsLoading] = useState<boolean>(() => {
-    const initial = storyService.getInitialPaginatedStories(mergedInitialParams);
-    return initial.data.length === 0;
-  });
-
-  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [categories, setCategories] = useState<Category[]>(INITIAL_CATEGORIES);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchStories = useCallback(async (forceLoading = false) => {
-    if (forceLoading) {
-      setIsLoading(true);
-    } else {
-      setIsRefreshing(true);
-    }
+  const fetchStories = useCallback(async () => {
+    setIsLoading(true);
     setError(null);
     try {
-      const result = await storyService.getStories(params);
+      const result = await StoryService.getStories(params);
       setResponse(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load stories');
+      setError(err instanceof Error ? err.message : 'කතා ලබාගැනීම අසාර්ථක විය');
     } finally {
       setIsLoading(false);
-      setIsRefreshing(false);
     }
   }, [params]);
 
-  // Instantly apply local filtering on parameter changes, then fetch with cache guard
   useEffect(() => {
-    const instantFiltered = storyService.filterAndPaginateStories(
-      storyService.getStoredStoriesSync(),
-      params
-    );
-    if (instantFiltered.data.length > 0) {
-      setResponse(instantFiltered);
-    }
+    fetchStories();
+  }, [fetchStories]);
 
-    // Shared cached fetch
-    fetchStories(false);
-  }, [fetchStories, params]);
-
-  // Background metadata synchronization (cached with 1 hour / 15 min TTL)
   useEffect(() => {
-    let isMounted = true;
-    const loadMeta = async () => {
-      try {
-        const [cats, featured] = await Promise.all([
-          storyService.getCategories(),
-          storyService.getFeaturedStories(3),
-        ]);
-        if (isMounted) {
-          if (cats && cats.length > 0) setCategories(cats);
-          if (featured && featured.length > 0) setFeaturedStories(featured);
-        }
-      } catch (err) {
-        console.warn('Metadata sync fallback:', err);
-      }
-    };
-    loadMeta();
-    return () => {
-      isMounted = false;
-    };
+    StoryService.getCategories().then((cats) => {
+      if (cats && cats.length > 0) setCategories(cats);
+    });
   }, []);
 
   const setCategory = useCallback((category: string) => {
-    setParams((prev) => (prev.category === category ? prev : { ...prev, category, page: 1 }));
+    setParams((prev) => ({ ...prev, category, page: 1 }));
   }, []);
 
   const setSearch = useCallback((search: string) => {
-    setParams((prev) => (prev.search === search ? prev : { ...prev, search, page: 1 }));
+    setParams((prev) => ({ ...prev, search, page: 1 }));
   }, []);
 
   const setPage = useCallback((page: number) => {
-    setParams((prev) => (prev.page === page ? prev : { ...prev, page }));
+    setParams((prev) => ({ ...prev, page }));
   }, []);
 
-  const setSortBy = useCallback((sortBy: 'latest' | 'popular' | 'readingTime') => {
-    setParams((prev) => (prev.sortBy === sortBy ? prev : { ...prev, sortBy, page: 1 }));
+  const setSortBy = useCallback((sortBy: 'latest' | 'popular' | 'oldest') => {
+    setParams((prev) => ({ ...prev, sortBy, page: 1 }));
   }, []);
 
   return {
@@ -112,17 +70,15 @@ export function useStories(initialParams: StoryFilterParams = {}) {
     page: response.page,
     totalPages: response.totalPages,
     hasMore: response.hasMore,
+    limit: response.limit,
     categories,
-    featuredStories,
     isLoading,
-    isRefreshing,
     error,
     params,
     setCategory,
     setSearch,
     setPage,
     setSortBy,
-    refresh: () => fetchStories(true),
-    refreshStories: () => fetchStories(true),
+    refetch: fetchStories,
   };
 }

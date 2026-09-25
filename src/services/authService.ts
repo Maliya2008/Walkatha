@@ -8,7 +8,6 @@ import {
   User as FirebaseUser,
 } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { isQuotaError } from './storyService';
 
 type AuthListener = (user: User | null) => void;
 

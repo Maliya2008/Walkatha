@@ -5,27 +5,6 @@ export interface User {
   createdAt: string;
 }
 
-export interface AdvertisementSettings {
-  id?: string;
-  enabled: boolean;
-  globalAdCode: string;
-  redirectAmount: 1 | 2 | 3;
-  updatedAt?: string;
-  globalDirectLink?: string;
-  maxTriggers?: 1 | 2 | 3;
-}
-
-// Backward-compatible alias
-export type DirectAdSettings = {
-  enabled: boolean;
-  globalAdCode?: string;
-  redirectAmount?: 1 | 2 | 3;
-  globalDirectLink?: string;
-  maxTriggers?: 1 | 2 | 3;
-  id?: string;
-  updatedAt?: string;
-};
-
 export interface SiteSettings {
   siteName: string;
   alternateName?: string;
@@ -49,24 +28,12 @@ export interface DashboardStats {
   totalViews: number;
   publishedStories: number;
   draftStories: number;
-  adsEnabled: boolean;
-  redirectAmount: number;
-  hasGlobalAdCode: boolean;
-  maxTriggers?: number;
-  hasGlobalDirectLink?: boolean;
   recentUploads: Array<{
     id: string;
     title: string;
     slug: string;
-    category: string;
-    uploadedDate: string;
     views: number;
-    published: boolean;
+    uploadDate: string;
+    category: string;
   }>;
-}
-
-export interface AuthSession {
-  token: string;
-  user: User;
-  expiresAt: number;
 }

@@ -32,10 +32,8 @@ export interface Story {
   published: boolean;
   metaTitle?: string;
   metaDescription?: string;
-  // Optional backwards-compatible fields for external seed data
   author?: any;
   readingTime?: number;
-  directAdLink?: string;
 }
 
 export interface StoryFilterParams {
@@ -45,7 +43,7 @@ export interface StoryFilterParams {
   featuredOnly?: boolean;
   page?: number;
   limit?: number;
-  sortBy?: 'latest' | 'popular';
+  sortBy?: 'latest' | 'popular' | 'oldest';
 }
 
 export interface PaginatedResponse<T> {
@@ -54,6 +52,7 @@ export interface PaginatedResponse<T> {
   page: number;
   totalPages: number;
   hasMore: boolean;
+  limit: number;
 }
 
 export type ReadingTheme = 'light' | 'sepia' | 'dark';

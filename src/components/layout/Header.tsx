@@ -53,6 +53,14 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Navigation & Action Controls */}
         <div className="flex items-center gap-2">
+          {/* Admin Link */}
+          <a
+            href="/admin"
+            className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
+          >
+            Admin
+          </a>
+
           {/* Theme Toggle Button */}
           <button
             type="button"

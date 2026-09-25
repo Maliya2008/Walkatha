@@ -189,7 +189,6 @@ export const AdminStoriesList: React.FC<AdminStoriesListProps> = ({
                 <tr className="border-b border-slate-800 bg-slate-950/50 text-slate-400 uppercase text-[10px] tracking-wider">
                   <th className="py-3.5 px-4">Story & Cover</th>
                   <th className="py-3.5 px-4">Category</th>
-                  <th className="py-3.5 px-4">Views</th>
                   <th className="py-3.5 px-4">Status</th>
                   <th className="py-3.5 px-4">Uploaded</th>
                   <th className="py-3.5 px-4 text-right">Actions</th>
@@ -218,11 +217,6 @@ export const AdminStoriesList: React.FC<AdminStoriesListProps> = ({
                       <span className="px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 capitalize text-[11px]">
                         {story.categoryName || story.category}
                       </span>
-                    </td>
-
-                    {/* Views */}
-                    <td className="py-3 px-4 font-mono text-slate-300">
-                      {story.views.toLocaleString()}
                     </td>
 
                     {/* Status Toggle */}

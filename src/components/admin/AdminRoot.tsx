@@ -10,8 +10,6 @@ import { AdminStoryForm } from './AdminStoryForm';
 import { AdminCategories } from './AdminCategories';
 import { AdminSettings } from './AdminSettings';
 import { adminService } from '../../services/adminService';
-import { adminAdBlocker } from '../../services/adminAdBlocker';
-import { adService } from '../../services/adService';
 
 interface AdminRootProps {
   onBackToPublic: () => void;
@@ -27,17 +25,6 @@ export const AdminRoot: React.FC<AdminRootProps> = ({
   const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
   const [storyToEdit, setStoryToEdit] = useState<Story | null>(null);
 
-  // Strictly block and neutralize all advertisements inside the Admin Panel
-  useEffect(() => {
-    adminAdBlocker.enableAdminShield();
-    adService.setAdminMode(true);
-
-    return () => {
-      adminAdBlocker.disableAdminShield();
-      adService.setAdminMode(false);
-    };
-  }, []);
-
   // Subscribe to authentication changes & verify session on mount
   useEffect(() => {
     const unsubscribe = authService.subscribe((u) => {
@@ -48,20 +35,6 @@ export const AdminRoot: React.FC<AdminRootProps> = ({
       .verifySession()
       .then((u) => {
         setUser(u);
-        if (u) {
-          // Safe auto-heal: execute migrations only when logged in as verified admin
-          adminService.migrateStorySlugs().then((count) => {
-            if (count > 0) {
-              console.log(`Auto-healed ${count} stories lacking slug fields.`);
-            }
-          }).catch(() => {});
-
-          adminService.migrateStoryCategories().then((count) => {
-            if (count > 0) {
-              console.log(`Auto-healed ${count} story category relationships.`);
-            }
-          }).catch(() => {});
-        }
       })
       .finally(() => {
         setIsCheckingAuth(false);
@@ -82,11 +55,11 @@ export const AdminRoot: React.FC<AdminRootProps> = ({
 
   const handleEditStory = async (storyId: string) => {
     try {
-      const stories = await adminService.getStories();
+      const stories = await adminService.getAllStories();
       const found = stories.find((s) => s.id === storyId);
       if (found) {
         setStoryToEdit(found);
-        setActiveTab('new-story'); // Uses the editor form
+        setActiveTab('new-story');
       }
     } catch {
       // ignore

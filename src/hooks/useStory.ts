@@ -1,149 +1,48 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { Story } from '../types/story';
-import { storyService } from '../services/storyService';
-import { authService } from '../services/authService';
-import { SEOService } from '../services/seoService';
-
-// Module-level variables to track the last incremented story and prevent duplicate increments from React StrictMode/re-renders
-let lastIncrementedStoryId: string | null = null;
-let lastIncrementTime: number = 0;
-
-function getInitialStory(slug: string | null): Story | null {
-  if (typeof window === 'undefined' || !slug) return null;
-  // 1. Check server-injected initial story data
-  try {
-    const el = document.getElementById('__INITIAL_STORY_DATA__');
-    if (el && el.textContent) {
-      const parsed = JSON.parse(el.textContent);
-      if (
-        parsed &&
-        (parsed.slug === slug ||
-          parsed.id === slug ||
-          decodeURIComponent(parsed.slug || '') === decodeURIComponent(slug))
-      ) {
-        return parsed;
-      }
-    }
-  } catch {}
-
-  // 2. Check synchronous memory cache
-  const cachedAll = storyService.getStoredStoriesSync();
-  const normalized = slug.trim().toLowerCase();
-  return (
-    cachedAll.find(
-      (s) =>
-        s.slug.trim().toLowerCase() === normalized ||
-        s.id.trim().toLowerCase() === normalized ||
-        decodeURIComponent(s.slug || '').trim().toLowerCase() === normalized
-    ) || null
-  );
-}
+import { StoryService } from '../services/storyService';
+import { INITIAL_STORIES } from '../data/seedStories';
 
 export function useStory(slug: string | null) {
-  const [story, setStory] = useState<Story | null>(() => getInitialStory(slug));
-  const [relatedStories, setRelatedStories] = useState<Story[]>(() => {
-    const init = getInitialStory(slug);
-    if (!init) return [];
-    const cachedAll = storyService.getStoredStoriesSync();
-    const cat = (init.category || '').toLowerCase().trim();
-    return cachedAll
-      .filter((s) => s.id !== init.id && (s.category || '').toLowerCase().trim() === cat)
-      .slice(0, 3);
+  const [story, setStory] = useState<Story | null>(() => {
+    if (!slug) return null;
+    const clean = decodeURIComponent(slug).toLowerCase().trim();
+    return INITIAL_STORIES.find((s) => s.slug === clean || s.id === clean) || null;
   });
-  const [isLoading, setIsLoading] = useState<boolean>(() => !getInitialStory(slug) && Boolean(slug));
+  const [relatedStories, setRelatedStories] = useState<Story[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const activeSlugRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!slug) {
-      activeSlugRef.current = null;
       setStory(null);
       setRelatedStories([]);
-      setIsLoading(false);
       return;
     }
 
-    activeSlugRef.current = slug;
     let isMounted = true;
-
-    // Check if story is already in memory cache for 0ms transition
-    const cachedAll = storyService.getStoredStoriesSync();
-    const immediateStory = cachedAll.find((s) => s.slug === slug || s.id === slug) || null;
-    if (immediateStory) {
-      setStory(immediateStory);
-      const cat = (immediateStory.category || '').toLowerCase().trim();
-      const related = cachedAll
-        .filter((s) => s.id !== immediateStory.id && (s.category || '').toLowerCase().trim() === cat)
-        .slice(0, 3);
-      setRelatedStories(related.length > 0 ? related : cachedAll.filter((s) => s.id !== immediateStory.id).slice(0, 3));
-      setIsLoading(false);
-    } else {
-      setIsLoading(true);
-    }
-
+    setIsLoading(true);
     setError(null);
 
-    const loadStory = async () => {
-      try {
-        const result = await storyService.getStoryBySlug(slug);
-        if (!isMounted || activeSlugRef.current !== slug) return;
-
-        if (!result.story) {
-          setError('Story not found');
-          setStory(null);
-          setRelatedStories([]);
+    StoryService.getStoryBySlug(slug)
+      .then((data) => {
+        if (!isMounted) return;
+        if (data) {
+          setStory(data);
+          StoryService.getRelatedStories(data, 4).then((rel) => {
+            if (isMounted) setRelatedStories(rel);
+          });
         } else {
-          const loadedStory: Story = {
-            ...result.story,
-            views: typeof result.story.views === 'number' && !isNaN(result.story.views) ? result.story.views : 0,
-          };
-
-          const realDocId = loadedStory.id;
-          const isAdmin = authService.isAuthenticated();
-          const isPublished = Boolean(loadedStory.published);
-
-          // Atomic public view increment: Only for public visitors on published stories
-          // Protected against duplicate React renders / StrictMode via realDocId tracking
-          if (!isAdmin && isPublished && realDocId) {
-            const now = Date.now();
-            // Count as a duplicate render if it's the exact same story incremented within the last 500ms
-            const isDuplicateRender = lastIncrementedStoryId === realDocId && (now - lastIncrementTime < 500);
-
-            if (!isDuplicateRender) {
-              lastIncrementedStoryId = realDocId;
-              lastIncrementTime = now;
-
-              // Atomically increment the Firestore counter in the background
-              storyService.incrementStoryViews(realDocId).catch((err) => {
-                console.warn('[StoryView] Background view increment error:', err);
-              });
-            }
-
-            // Always apply the optimistic +1 for recent increments to prevent UI flickering back to 0
-            // during React StrictMode double-renders or fast unmount/remounts.
-            if (lastIncrementedStoryId === realDocId && (now - lastIncrementTime < 500)) {
-              loadedStory.views = (loadedStory.views || 0) + 1;
-            }
-          }
-
-          setStory(loadedStory);
-          setRelatedStories(result.relatedStories || []);
-
-          // Update SEO head metadata
-          SEOService.updateHead(SEOService.generateStorySEO(loadedStory));
+          setError('කතාව සොයාගත නොහැකි විය');
         }
-      } catch (err) {
-        if (isMounted) {
-          setError(err instanceof Error ? err.message : 'Error fetching story');
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    loadStory();
+      })
+      .catch((err) => {
+        if (!isMounted) return;
+        setError(err instanceof Error ? err.message : 'කතාව පූරණය වීම අසාර්ථක විය');
+      })
+      .finally(() => {
+        if (isMounted) setIsLoading(false);
+      });
 
     return () => {
       isMounted = false;
@@ -157,4 +56,3 @@ export function useStory(slug: string | null) {
     error,
   };
 }
-

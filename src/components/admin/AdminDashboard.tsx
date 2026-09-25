@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { BookOpen, Eye, CheckCircle, FileText, Megaphone, Plus, ArrowUpRight, TrendingUp, Sparkles, Layers } from 'lucide-react';
+import { BookOpen, CheckCircle, FileText, Megaphone, Plus, ArrowUpRight, Sparkles, Layers } from 'lucide-react';
 import { adminService } from '../../services/adminService';
 import { DashboardStats } from '../../types/admin';
 
@@ -87,8 +87,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       </div>
 
-      {/* 5 Core Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+      {/* 4 Core Metric Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Stories */}
         <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800/80 shadow-lg relative overflow-hidden group">
           <div className="flex items-center justify-between">
@@ -117,23 +117,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <span className="text-[10px] text-slate-400">genres</span>
           </div>
           <div className="mt-2 text-[11px] text-slate-500">Active story categories</div>
-        </div>
-
-        {/* Total Views */}
-        <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800/80 shadow-lg relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Views</span>
-            <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400">
-              <Eye className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-white font-mono">
-              {stats.totalViews.toLocaleString()}
-            </span>
-            <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
-          </div>
-          <div className="mt-2 text-[11px] text-emerald-400/90 font-medium">Public readership traffic</div>
         </div>
 
         {/* Published Stories */}
@@ -189,7 +172,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <tr className="border-b border-slate-800/80 text-slate-400 uppercase text-[10px] tracking-wider">
                 <th className="py-3 px-4">Title</th>
                 <th className="py-3 px-4">Category</th>
-                <th className="py-3 px-4">Views</th>
                 <th className="py-3 px-4">Status</th>
                 <th className="py-3 px-4">Uploaded</th>
                 <th className="py-3 px-4 text-right">Actions</th>
@@ -206,9 +188,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <span className="px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 capitalize text-[11px]">
                       {story.category}
                     </span>
-                  </td>
-                  <td className="py-3 px-4 font-mono text-slate-300">
-                    {story.views.toLocaleString()}
                   </td>
                   <td className="py-3 px-4">
                     {story.published ? (

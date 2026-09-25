@@ -1,938 +1,172 @@
 import { Category, PaginatedResponse, Story, StoryFilterParams } from '../types/story';
 import { INITIAL_STORIES, INITIAL_CATEGORIES } from '../data/seedStories';
-import { db } from '../lib/firebase';
 import {
-  CANONICAL_CATEGORIES,
   normalizeCategorySlug,
   storyMatchesCategory,
   getStoryCanonicalCategory,
-  getCategoryDisplayName,
 } from '../utils/categoryTaxonomy';
-import {
-  collection,
-  getDocs,
-  query,
-  where,
-  getDoc,
-  doc,
-  limit,
-  updateDoc,
-  increment,
-  orderBy,
-} from 'firebase/firestore';
 
-// --- STORAGE & CACHE CONFIGURATION ---
-const STORAGE_STORIES_CACHE_KEY = 'walkathawa_cached_stories_v3';
-const STORAGE_CATEGORIES_CACHE_KEY = 'walkathawa_cached_categories_v3';
-const STORAGE_STORY_MAP_KEY = 'walkathawa_cached_story_items_v3';
-
-// Cache TTLs
-const STORIES_CACHE_TTL_MS = 10 * 60 * 1000;       // 10 minutes
-const CATEGORIES_CACHE_TTL_MS = 60 * 60 * 1000;    // 1 hour
-const FEATURED_CACHE_TTL_MS = 15 * 60 * 1000;      // 15 minutes
-const SINGLE_STORY_CACHE_TTL_MS = 30 * 60 * 1000;  // 30 minutes
-
-export const DEFAULT_FALLBACK_CATEGORIES: Category[] = [
-  ...INITIAL_CATEGORIES,
-];
-
-const SYNONYMS: Record<string, string[]> = {
-  amma: ['අම්මා', 'මව'],
-  putha: ['පුතා'],
-  akka: ['අක්කා'],
-  malli: ['මල්ලි'],
-  ayya: ['අයියා'],
-  nangi: ['නංගි'],
-  wife: ['වයිෆ්', 'බිරිඳ', 'birinda'],
-  birinda: ['බිරිඳ', 'වයිෆ්', 'wife'],
-  nanda: ['නැන්දා', 'aunty', 'ඇන්ටි'],
-  aunty: ['ඇන්ටි', 'නැන්දා'],
-  teacher: ['ටීචර්', 'ගුරුතුමී', 'teacher'],
-  bus: ['බස්', 'bus'],
-  family: ['පවුලේ', 'pawule'],
-  pawule: ['පවුලේ', 'family'],
-  aluth: ['අලුත්', 'new', 'නවතම', 'aluthma'],
-  aluthma: ['අලුත්', 'new', 'නවතම', 'aluth'],
-  new: ['අලුත්', 'aluth', 'නවතම'],
-  wal: ['වල්', 'වැල', 'wela', 'wala', 'walkatha'],
-  wela: ['වැල', 'වල්', 'wal', 'wala'],
-  wala: ['වලා', 'වල්', 'වැල', 'wal'],
-  walakatha: ['walkatha', 'වල් කතා', 'වැල කතා'],
-  walkatha: ['wal katha', 'වල් කතා', 'වැල කතා'],
-  katha: ['කතා', 'කතාව', 'story', 'stories'],
-  chithra: ['චිත්‍ර', 'chithra'],
-  pdf: ['pdf', 'පොත්'],
-  full: ['සම්පූර්ණ', 'full'],
-};
+const STORAGE_CACHE_KEY = 'walkathawa_cached_stories_v4';
 
 function matchesSearchQuery(s: Story, queryText: string): boolean {
   if (!queryText) return true;
-  const rawQuery = queryText.toLowerCase().trim();
+  const q = queryText.toLowerCase().trim();
   const title = (s.title || '').toLowerCase();
   const desc = (s.shortDescription || s.description || '').toLowerCase();
-  const category = (s.categoryName || s.category || '').toLowerCase();
+  const cat = (s.categoryName || s.category || '').toLowerCase();
   const tags = (s.tags || []).map((t) => t.toLowerCase());
 
-  if (
-    title.includes(rawQuery) ||
-    desc.includes(rawQuery) ||
-    category.includes(rawQuery) ||
-    tags.some((t) => t.includes(rawQuery))
-  ) {
+  if (title.includes(q) || desc.includes(q) || cat.includes(q) || tags.some((t) => t.includes(q))) {
     return true;
   }
 
-  const tokens = rawQuery.split(/\s+/).filter(Boolean);
-  if (tokens.length === 0) return true;
-
+  const tokens = q.split(/\s+/).filter(Boolean);
   return tokens.every((token) => {
-    if (token === '2025' || token === '2026' || token === 'free') return true;
-    const equivalents = [token, ...(SYNONYMS[token] || [])];
-    return equivalents.some(
-      (eq) =>
-        title.includes(eq) ||
-        desc.includes(eq) ||
-        category.includes(eq) ||
-        tags.some((t) => t.includes(eq))
-    );
+    return title.includes(token) || desc.includes(token) || cat.includes(token) || tags.some((t) => t.includes(token));
   });
 }
 
-const BANNED_MOCK_PATTERNS = [
-  'rahas-hamuwima',
-  'nil-diyawara',
-  'madhyama-rathriye',
-  'tharu-piri',
-  'nodutu-sihinaya',
-  'wasi-bindu',
-  'the-secret-in-moonlight',
-  'story-the-secret-in-moonlight',
-  'සඳ එළියේ රහස',
-  'රහස් හමුවීම',
-  'නිල් දියවර',
-  'මධ්‍යම රාත්‍රියේ',
-  'තරු පිරි අහස',
-  'නොදුටු සිහිනය',
-  'වැසි බිඳු අතරින්',
-  'නිස්කලංක රාත්‍රියක හමුවූ අමුතු ආගන්තුකයා',
-];
+export class StoryService {
+  private static memoryStories: Story[] = [...INITIAL_STORIES];
 
-export function isMockStory(s: any): boolean {
-  if (!s) return false;
-  const id = String(s.id || '').toLowerCase();
-  const slug = String(s.slug || '').toLowerCase();
-  const title = String(s.title || '').toLowerCase();
-  return BANNED_MOCK_PATTERNS.some(
-    (p) => id.includes(p) || slug.includes(p) || title.includes(p)
-  );
-}
+  public static async getStories(params: StoryFilterParams = {}): Promise<PaginatedResponse<Story>> {
+    const page = Math.max(1, params.page || 1);
+    const limit = params.limit || 20; // Default 20 posts per view
+    const category = params.category || 'all';
+    const search = params.search || '';
+    const sortBy = params.sortBy || 'latest';
 
-function normalizeStoryDoc(id: string, data: any): Story {
-  return {
-    id,
-    title: data.title || '',
-    slug: data.slug || id,
-    coverImage: data.coverImage || '',
-    shortDescription: data.shortDescription || data.description || '',
-    fullContent: data.fullContent || data.content || '',
-    categoryId: data.categoryId || data.category || '',
-    category: data.category || '',
-    categoryName: data.categoryName || data.category || '',
-    tags: Array.isArray(data.tags) ? data.tags : [],
-    author: data.author || { name: 'Editorial Staff' },
-    uploadDate: data.uploadDate || data.uploadedDate || data.createdAt || new Date().toISOString(),
-    uploadedDate: data.uploadedDate || data.uploadDate || data.createdAt || new Date().toISOString(),
-    updatedDate: data.updatedDate || data.updatedAt || new Date().toISOString(),
-    readingTime: Number(data.readingTime || 5),
-    views: Number(data.views || 0),
-    published: Boolean(data.published),
-    featured: Boolean(data.featured),
-    directAdLink: data.directAdLink || '',
-  };
-}
-
-export function isQuotaError(err: any): boolean {
-  if (!err) return false;
-  const msg = (err.message || '').toLowerCase();
-  const code = (err.code || '').toLowerCase();
-  return (
-    code.includes('resource-exhausted') ||
-    code.includes('quota') ||
-    msg.includes('quota') ||
-    msg.includes('resource exhausted') ||
-    msg.includes('limit exceeded') ||
-    msg.includes('free daily read units')
-  );
-}
-
-// In-flight request deduplication map
-const pendingRequests = new Map<string, Promise<any>>();
-
-// Normalized Story entity cache: storyId/slug -> { story: Story, timestamp: number }
-const storyEntityCache = new Map<string, { story: Story; timestamp: number }>();
-
-// List cache: cacheKey -> { data: Story[], total: number, timestamp: number }
-const storyListCache = new Map<string, { data: Story[]; total: number; timestamp: number }>();
-
-// Category cache
-let categoryCache: { categories: Category[]; timestamp: number } | null = null;
-
-// Featured stories cache
-let featuredCache: { stories: Story[]; timestamp: number } | null = null;
-
-// Circuit breaker for Firestore quota
-let firestoreQuotaExceededUntil = 0;
-
-class StoryService {
-  constructor() {
-    this.hydrateFromLocalStorage();
-  }
-
-  /**
-   * Hydrates memory caches from DOM SSR initial script tags and localStorage
-   */
-  private hydrateFromLocalStorage(): void {
-    if (typeof window === 'undefined') return;
-
-    // 0. Check server SSR injected initial data (Zero hydration mismatch / Zero delay)
+    // Attempt to fetch from backend API
     try {
-      const storyDataEl = document.getElementById('__INITIAL_STORY_DATA__');
-      if (storyDataEl && storyDataEl.textContent) {
-        const initialStory = JSON.parse(storyDataEl.textContent);
-        if (initialStory && !isMockStory(initialStory)) {
-          const norm = normalizeStoryDoc(initialStory.id, initialStory);
-          storyEntityCache.set(norm.id, { story: norm, timestamp: Date.now() });
-          if (norm.slug) storyEntityCache.set(norm.slug, { story: norm, timestamp: Date.now() });
-        }
-      }
+      const urlParams = new URLSearchParams();
+      urlParams.set('page', String(page));
+      urlParams.set('limit', String(limit));
+      if (category && category !== 'all') urlParams.set('category', category);
+      if (search) urlParams.set('search', search);
+      if (sortBy) urlParams.set('sortBy', sortBy);
 
-      const storiesDataEl = document.getElementById('__INITIAL_STORIES_DATA__');
-      if (storiesDataEl && storiesDataEl.textContent) {
-        const parsed = JSON.parse(storiesDataEl.textContent);
-        if (parsed && Array.isArray(parsed.stories)) {
-          const cleanStories: Story[] = parsed.stories.filter((s: any) => !isMockStory(s));
-          cleanStories.forEach((s) => {
-            const norm = normalizeStoryDoc(s.id, s);
-            storyEntityCache.set(norm.id, { story: norm, timestamp: Date.now() });
-            if (norm.slug) storyEntityCache.set(norm.slug, { story: norm, timestamp: Date.now() });
-          });
-          storyListCache.set(`ssr_${parsed.category || 'all'}_${parsed.page || 1}`, {
-            data: cleanStories,
-            total: parsed.total || cleanStories.length,
-            timestamp: Date.now(),
-          });
+      const res = await fetch(`/api/stories?${urlParams.toString()}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json && Array.isArray(json.data) && json.data.length > 0) {
+          // Cache in memory
+          return {
+            data: json.data,
+            total: json.total,
+            page: json.page,
+            totalPages: json.totalPages,
+            hasMore: json.page < json.totalPages,
+            limit: json.limit || limit,
+          };
         }
       }
     } catch {
-      // Ignore SSR parsing errors
+      // Fallback to local memory / seed data
     }
 
-    if (!window.localStorage) return;
-    try {
-      // 1. Stories entity cache
-      const storedMap = localStorage.getItem(STORAGE_STORY_MAP_KEY);
-      if (storedMap) {
-        const parsed: Record<string, Story> = JSON.parse(storedMap);
-        let changed = false;
-        Object.entries(parsed).forEach(([key, story]) => {
-          if (isMockStory(story) || isMockStory({ id: key, slug: key })) {
-            delete parsed[key];
-            changed = true;
-            return;
-          }
-          storyEntityCache.set(key, { story, timestamp: Date.now() });
-          if (story.slug) storyEntityCache.set(story.slug, { story, timestamp: Date.now() });
-          if (story.id) storyEntityCache.set(story.id, { story, timestamp: Date.now() });
-        });
-        if (changed) {
-          localStorage.setItem(STORAGE_STORY_MAP_KEY, JSON.stringify(parsed));
-        }
-      }
+    // Fallback: local filtering
+    let all = [...this.memoryStories].filter((s) => s.published !== false);
 
-      // 2. Categories
-      const storedCats = localStorage.getItem(STORAGE_CATEGORIES_CACHE_KEY);
-      if (storedCats) {
-        const parsed = JSON.parse(storedCats);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          categoryCache = { categories: parsed, timestamp: Date.now() };
-        }
-      }
-
-      // 3. Fallback stories array
-      const storedStories = localStorage.getItem(STORAGE_STORIES_CACHE_KEY);
-      if (storedStories) {
-        const parsed: Story[] = JSON.parse(storedStories);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const cleanParsed = parsed.filter((s) => !isMockStory(s));
-          storyListCache.set('all_default', {
-            data: cleanParsed,
-            total: cleanParsed.length,
-            timestamp: Date.now(),
-          });
-          cleanParsed.forEach((s) => {
-            if (s.id) storyEntityCache.set(s.id, { story: s, timestamp: Date.now() });
-            if (s.slug) storyEntityCache.set(s.slug, { story: s, timestamp: Date.now() });
-          });
-          if (cleanParsed.length !== parsed.length) {
-            localStorage.setItem(STORAGE_STORIES_CACHE_KEY, JSON.stringify(cleanParsed));
-          }
-        }
-      }
-    } catch {
-      // Ignore storage hydration errors
+    if (category && category !== 'all') {
+      all = all.filter((s) => storyMatchesCategory(s, category));
     }
 
-    // Seed defaults if entity cache is still empty
-    if (storyEntityCache.size === 0) {
-      INITIAL_STORIES.filter((s) => !isMockStory(s)).forEach((s) => {
-        const normalized = normalizeStoryDoc(s.id, s);
-        storyEntityCache.set(s.id, { story: normalized, timestamp: Date.now() });
-        if (s.slug) storyEntityCache.set(s.slug, { story: normalized, timestamp: Date.now() });
-      });
-    }
-  }
-
-  private persistStoryToStorage(story: Story): void {
-    if (typeof window === 'undefined' || !window.localStorage || isMockStory(story)) return;
-    try {
-      const storedMap = localStorage.getItem(STORAGE_STORY_MAP_KEY);
-      const parsed: Record<string, Story> = storedMap ? JSON.parse(storedMap) : {};
-      parsed[story.id] = story;
-      if (story.slug) parsed[story.slug] = story;
-      // Keep storage bounded to recent 200 items to avoid quota
-      const keys = Object.keys(parsed);
-      if (keys.length > 200) {
-        keys.slice(0, keys.length - 200).forEach((k) => delete parsed[k]);
-      }
-      localStorage.setItem(STORAGE_STORY_MAP_KEY, JSON.stringify(parsed));
-    } catch {
-      // Ignore
-    }
-  }
-
-  /**
-   * Helper to load cached stories synchronously from memory or localStorage
-   */
-  public getStoredStoriesSync(): Story[] {
-    const list = storyListCache.get('all_default');
-    if (list && list.data.length > 0) {
-      return list.data;
+    if (search.trim()) {
+      all = all.filter((s) => matchesSearchQuery(s, search));
     }
 
-    const uniqueStories = new Map<string, Story>();
-    storyEntityCache.forEach((item) => {
-      uniqueStories.set(item.story.id, item.story);
-    });
-
-    if (uniqueStories.size > 0) {
-      const arr = Array.from(uniqueStories.values());
-      storyListCache.set('all_default', { data: arr, total: arr.length, timestamp: Date.now() });
-      return arr;
-    }
-
-    return [...INITIAL_STORIES];
-  }
-
-  /**
-   * Helper to load cached categories synchronously with accurate story counts
-   */
-  public getInitialCategories(): Category[] {
-    const stories = this.getStoredStoriesSync();
-    const allCount = stories.length;
-    return [
-      {
-        id: 'all',
-        name: 'සියලුම කතා (All Stories)',
-        slug: 'all',
-        description: 'සියලුම අලුත් සිංහල කතා සහ රසවත් කතා එකතුව',
-        storyCount: allCount,
-      },
-      ...CANONICAL_CATEGORIES.map((cat) => ({
-        id: cat.slug,
-        name: cat.name,
-        slug: cat.slug,
-        description: cat.description,
-        storyCount: stories.filter((s) => storyMatchesCategory(s, cat.slug)).length,
-      })),
-    ];
-  }
-
-  /**
-   * Helper to load cached featured stories synchronously
-   */
-  public getInitialFeaturedStories(count = 3): Story[] {
-    if (featuredCache && featuredCache.stories.length > 0) {
-      return featuredCache.stories.slice(0, count);
-    }
-    const all = this.getStoredStoriesSync();
-    const featured = all.filter((s) => s.featured);
-    if (featured.length > 0) {
-      return featured.slice(0, count);
-    }
-    return all.slice(0, count);
-  }
-
-  /**
-   * Synchronous filter, sort, and pagination of an array of stories
-   */
-  public filterAndPaginateStories(
-    allStories: Story[],
-    params: StoryFilterParams = {}
-  ): PaginatedResponse<Story> {
-    let filtered = [...allStories];
-
-    if (params.category && params.category !== 'all') {
-      const targetCategory = params.category;
-      filtered = filtered.filter((s) => storyMatchesCategory(s, targetCategory));
-    }
-
-    if (params.search && params.search.trim()) {
-      const queryText = params.search.trim();
-      filtered = filtered.filter((s) => matchesSearchQuery(s, queryText));
-    }
-
-    if (params.sortBy === 'popular') {
-      filtered.sort((a, b) => (b.views || 0) - (a.views || 0));
+    if (sortBy === 'oldest') {
+      all.sort((a, b) => new Date(a.uploadDate || 0).getTime() - new Date(b.uploadDate || 0).getTime());
     } else {
-      filtered.sort(
-        (a, b) =>
-          new Date(b.uploadDate || 0).getTime() - new Date(a.uploadDate || 0).getTime()
-      );
+      // latest (default)
+      all.sort((a, b) => new Date(b.uploadDate || 0).getTime() - new Date(a.uploadDate || 0).getTime());
     }
 
-    const page = params.page || 1;
-    const limitVal = params.limit || 20;
-    const total = filtered.length;
+    const total = all.length;
+    const totalPages = Math.ceil(total / limit) || 1;
+    const startIndex = (page - 1) * limit;
+    const paged = all.slice(startIndex, startIndex + limit);
 
     return {
-      data: filtered.slice((page - 1) * limitVal, page * limitVal),
+      data: paged,
       total,
       page,
-      totalPages: Math.ceil(total / limitVal) || 1,
-      hasMore: page < Math.ceil(total / limitVal),
+      totalPages,
+      hasMore: page < totalPages,
+      limit,
     };
   }
 
-  /**
-   * Provides immediate paginated stories synchronously on frame 0
-   */
-  public getInitialPaginatedStories(params: StoryFilterParams = {}): PaginatedResponse<Story> {
-    const stories = this.getStoredStoriesSync();
-    return this.filterAndPaginateStories(stories, params);
-  }
+  public static async getStoryBySlug(slug: string): Promise<Story | null> {
+    if (!slug) return null;
+    const cleanSlug = decodeURIComponent(slug).toLowerCase().trim();
 
-  /**
-   * Invalidate caches (e.g. after admin updates)
-   */
-  public invalidateCache(): void {
-    storyListCache.clear();
-    categoryCache = null;
-    featuredCache = null;
-    pendingRequests.clear();
-  }
-
-  /**
-   * Fetch paginated stories with multi-tiered caching & minimum Firestore queries
-   */
-  public async getStories(params: StoryFilterParams = {}): Promise<PaginatedResponse<Story>> {
-    const cacheKey = `stories_${params.category || 'all'}_${params.page || 1}_${params.limit || 20}_${params.sortBy || 'latest'}_${params.search || ''}`;
-
-    // 1. Check in-memory list cache
-    const cached = storyListCache.get(cacheKey);
-    const now = Date.now();
-    if (cached && now - cached.timestamp < STORIES_CACHE_TTL_MS) {
-      return this.filterAndPaginateStories(cached.data, params);
-    }
-
-    // 2. Request deduplication for concurrent identical queries
-    if (pendingRequests.has(cacheKey)) {
-      return pendingRequests.get(cacheKey)!;
-    }
-
-    const fetchPromise = (async (): Promise<PaginatedResponse<Story>> => {
-      // Step A: Fetch via fast Node Server Public API (consumes 0 Firestore reads)
-      try {
-        const queryParams = new URLSearchParams();
-        if (params.category && params.category !== 'all') queryParams.set('category', params.category);
-        if (params.search) queryParams.set('search', params.search);
-        if (params.page) queryParams.set('page', String(params.page));
-        if (params.limit) queryParams.set('limit', String(params.limit));
-        if (params.sortBy) queryParams.set('sortBy', params.sortBy);
-
-        const res = await fetch(`/api/public/stories?${queryParams.toString()}`);
-        if (res.ok) {
-          const json = await res.json();
-          if (json && Array.isArray(json.data)) {
-            const fetchedStories: Story[] = json.data;
-            fetchedStories.forEach((s) => {
-              storyEntityCache.set(s.id, { story: s, timestamp: Date.now() });
-              if (s.slug) storyEntityCache.set(s.slug, { story: s, timestamp: Date.now() });
-            });
-            storyListCache.set(cacheKey, {
-              data: fetchedStories,
-              total: json.total || fetchedStories.length,
-              timestamp: Date.now(),
-            });
-            return {
-              data: fetchedStories,
-              total: json.total || fetchedStories.length,
-              page: json.page || params.page || 1,
-              totalPages: json.totalPages || Math.ceil((json.total || fetchedStories.length) / (params.limit || 20)) || 1,
-              hasMore: Boolean(json.hasMore),
-            };
-          }
-        }
-      } catch {
-        // Fall through to Firestore
-      }
-
-      // Step B: Target Firestore query with strict LIMIT (NOT full collection download)
-      if (Date.now() > firestoreQuotaExceededUntil) {
-        try {
-          const storiesRef = collection(db, 'stories');
-          const limitCount = params.limit || 20;
-
-          // Build minimal, indexed query with strict limit
-          let q;
-          if (params.category && params.category !== 'all') {
-            q = query(
-              storiesRef,
-              where('published', '==', true),
-              where('category', '==', params.category),
-              limit(limitCount)
-            );
-          } else {
-            q = query(
-              storiesRef,
-              where('published', '==', true),
-              limit(limitCount)
-            );
-          }
-
-          const timeoutPromise = new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('Firestore timeout')), 3500)
-          );
-
-          const snapshot = (await Promise.race([getDocs(q), timeoutPromise])) as any;
-          const fetchedDocs: Story[] = [];
-          snapshot.forEach((docSnap: any) => {
-            const story = normalizeStoryDoc(docSnap.id, docSnap.data());
-            fetchedDocs.push(story);
-            storyEntityCache.set(story.id, { story, timestamp: Date.now() });
-            if (story.slug) storyEntityCache.set(story.slug, { story, timestamp: Date.now() });
-            this.persistStoryToStorage(story);
-          });
-
-          if (fetchedDocs.length > 0) {
-            storyListCache.set(cacheKey, {
-              data: fetchedDocs,
-              total: fetchedDocs.length,
-              timestamp: Date.now(),
-            });
-            return this.filterAndPaginateStories(fetchedDocs, params);
-          }
-        } catch (err: any) {
-          if (isQuotaError(err)) {
-            firestoreQuotaExceededUntil = Date.now() + 60 * 60 * 1000;
-          }
-        }
-      }
-
-      // Step C: Fallback to cached sync data
-      const fallback = this.getStoredStoriesSync();
-      return this.filterAndPaginateStories(fallback, params);
-    })().finally(() => {
-      pendingRequests.delete(cacheKey);
-    });
-
-    pendingRequests.set(cacheKey, fetchPromise);
-    return fetchPromise;
-  }
-
-  /**
-   * Fetch single story with maximum cache reuse & zero duplicate reads
-   */
-  public async getStoryBySlug(
-    slug: string
-  ): Promise<{ story: Story | null; relatedStories: Story[] }> {
-    if (!slug) return { story: null, relatedStories: [] };
-
-    const now = Date.now();
-
-    // 1. Check normalized memory cache first (0 network calls, 0 Firestore reads)
-    const memCached = storyEntityCache.get(slug);
-    if (memCached && now - memCached.timestamp < SINGLE_STORY_CACHE_TTL_MS) {
-      const related = this.getRelatedStoriesSync(memCached.story);
-      return { story: memCached.story, relatedStories: related };
-    }
-
-    // 2. Check in-flight promise for this exact slug (Deduplicates concurrent requests)
-    const requestKey = `story_${slug}`;
-    if (pendingRequests.has(requestKey)) {
-      return pendingRequests.get(requestKey)!;
-    }
-
-    const fetchPromise = (async () => {
-      let story: Story | null = null;
-
-      // Step A: Try fast Server Public API (0 Firestore reads)
-      try {
-        const res = await fetch(`/api/public/stories/${encodeURIComponent(slug)}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data?.story) {
-            story = data.story;
-            storyEntityCache.set(story.id, { story, timestamp: Date.now() });
-            if (story.slug) storyEntityCache.set(story.slug, { story, timestamp: Date.now() });
-            this.persistStoryToStorage(story);
-            const related = Array.isArray(data.relatedStories) && data.relatedStories.length > 0
-              ? data.relatedStories
-              : this.getRelatedStoriesSync(story);
-            return { story, relatedStories: related };
-          }
-        }
-      } catch {
-        // Fall through
-      }
-
-      // Step B: Target Firestore with single document query: limit(1)
-      if (Date.now() > firestoreQuotaExceededUntil) {
-        try {
-          const storiesRef = collection(db, 'stories');
-          const q = query(
-            storiesRef,
-            where('slug', '==', slug),
-            where('published', '==', true),
-            limit(1)
-          );
-          const timeoutPromise = new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('Firestore timeout')), 3500)
-          );
-          const snapshot = (await Promise.race([getDocs(q), timeoutPromise])) as any;
-
-          if (!snapshot.empty) {
-            story = normalizeStoryDoc(snapshot.docs[0].id, snapshot.docs[0].data());
-          } else {
-            // Direct ID lookup fallback
-            const docRef = doc(db, 'stories', slug);
-            const docSnap = (await Promise.race([getDoc(docRef), timeoutPromise])) as any;
-            if (docSnap.exists() && docSnap.data().published) {
-              story = normalizeStoryDoc(docSnap.id, docSnap.data());
-            }
-          }
-
-          if (story) {
-            storyEntityCache.set(story.id, { story, timestamp: Date.now() });
-            if (story.slug) storyEntityCache.set(story.slug, { story, timestamp: Date.now() });
-            this.persistStoryToStorage(story);
-          }
-        } catch (err: any) {
-          if (isQuotaError(err)) {
-            firestoreQuotaExceededUntil = Date.now() + 60 * 60 * 1000;
-          }
-        }
-      }
-
-      // Step C: Fallback to sync memory/seed data
-      if (!story) {
-        const fallback = this.getStoredStoriesSync();
-        story = fallback.find((s) => s.slug === slug || s.id === slug) || null;
-      }
-
-      const related = story ? this.getRelatedStoriesSync(story) : [];
-      return { story, relatedStories: related };
-    })().finally(() => {
-      pendingRequests.delete(requestKey);
-    });
-
-    pendingRequests.set(requestKey, fetchPromise);
-    return fetchPromise;
-  }
-
-  private getRelatedStoriesSync(story: Story): Story[] {
-    const all = this.getStoredStoriesSync();
-    if (story.category) {
-      const cat = story.category.toLowerCase().trim();
-      const match = all
-        .filter((s) => s.id !== story.id && (s.category || '').toLowerCase().trim() === cat)
-        .slice(0, 3);
-      if (match.length > 0) return match;
-    }
-    return all.filter((s) => s.id !== story.id).slice(0, 3);
-  }
-
-  /**
-   * Atomic story view increment with session deduplication
-   */
-  public async incrementStoryViews(storyId: string): Promise<boolean> {
-    if (!storyId) return false;
-
-    // Session-based deduplication: do not increment multiple times in same browser session
     try {
-      if (typeof window !== 'undefined' && window.sessionStorage) {
-        const sessionKey = `viewed_${storyId}`;
-        if (sessionStorage.getItem(sessionKey)) {
-          return true; // Already recorded in this user session
-        }
-        sessionStorage.setItem(sessionKey, '1');
-      }
-    } catch {
-      // Ignore
-    }
-
-    // 1. Try server backend endpoint first (0 Firestore reads/writes)
-    try {
-      const res = await fetch(`/api/public/stories/${encodeURIComponent(storyId)}/view`, {
-        method: 'POST',
-      });
+      const res = await fetch(`/api/stories/${encodeURIComponent(cleanSlug)}`);
       if (res.ok) {
-        const item = storyEntityCache.get(storyId);
-        if (item) item.story.views = (item.story.views || 0) + 1;
-        return true;
+        const story = await res.json();
+        if (story && story.id) {
+          return story;
+        }
       }
     } catch {
-      // Fall through
+      // Fallback
     }
 
-    // 2. Direct Firestore update if within quota
-    if (Date.now() > firestoreQuotaExceededUntil) {
-      try {
-        const storyRef = doc(db, 'stories', storyId);
-        await updateDoc(storyRef, { views: increment(1) });
-        return true;
-      } catch (err: any) {
-        if (isQuotaError(err)) {
-          firestoreQuotaExceededUntil = Date.now() + 60 * 60 * 1000;
-        }
-        return false;
-      }
+    // Local fallback
+    const found = this.memoryStories.find(
+      (s) => (s.slug || '').toLowerCase() === cleanSlug || s.id === cleanSlug
+    );
+    if (found) {
+      found.views = (found.views || 0) + 1;
+      return found;
     }
 
-    return false;
+    return null;
   }
 
-  /**
-   * Fetch featured stories with 15-minute caching & deduplication
-   */
-  public async getFeaturedStories(limitVal = 3): Promise<Story[]> {
-    const now = Date.now();
-    if (featuredCache && now - featuredCache.timestamp < FEATURED_CACHE_TTL_MS) {
-      return featuredCache.stories.slice(0, limitVal);
-    }
-
-    const requestKey = `featured_${limitVal}`;
-    if (pendingRequests.has(requestKey)) {
-      return pendingRequests.get(requestKey)!;
-    }
-
-    const fetchPromise = (async (): Promise<Story[]> => {
-      // 1. Extract from already cached stories if available
-      const cachedAll = this.getStoredStoriesSync();
-      const cachedFeatured = cachedAll.filter((s) => s.featured);
-      if (cachedFeatured.length >= limitVal) {
-        featuredCache = { stories: cachedFeatured, timestamp: Date.now() };
-        return cachedFeatured.slice(0, limitVal);
-      }
-
-      // 2. Firestore query with strict limit(limitVal)
-      if (Date.now() > firestoreQuotaExceededUntil) {
-        try {
-          const storiesRef = collection(db, 'stories');
-          const q = query(
-            storiesRef,
-            where('published', '==', true),
-            where('featured', '==', true),
-            limit(limitVal)
-          );
-          const timeoutPromise = new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('Firestore timeout')), 3500)
-          );
-          const snapshot = (await Promise.race([getDocs(q), timeoutPromise])) as any;
-          const featured: Story[] = [];
-          snapshot.forEach((docSnap: any) => {
-            const story = normalizeStoryDoc(docSnap.id, docSnap.data());
-            featured.push(story);
-            storyEntityCache.set(story.id, { story, timestamp: Date.now() });
-            if (story.slug) storyEntityCache.set(story.slug, { story, timestamp: Date.now() });
-          });
-
-          if (featured.length > 0) {
-            featuredCache = { stories: featured, timestamp: Date.now() };
-            return featured.slice(0, limitVal);
-          }
-        } catch (err: any) {
-          if (isQuotaError(err)) {
-            firestoreQuotaExceededUntil = Date.now() + 60 * 60 * 1000;
-          }
-        }
-      }
-
-      return this.getInitialFeaturedStories(limitVal);
-    })().finally(() => {
-      pendingRequests.delete(requestKey);
-    });
-
-    pendingRequests.set(requestKey, fetchPromise);
-    return fetchPromise;
-  }
-
-  /**
-   * Fetch categories with 1-hour aggressive caching
-   */
-  public async getCategories(): Promise<Category[]> {
-    const now = Date.now();
-    if (categoryCache && now - categoryCache.timestamp < CATEGORIES_CACHE_TTL_MS) {
-      return categoryCache.categories;
-    }
-
-    const requestKey = 'categories_all';
-    if (pendingRequests.has(requestKey)) {
-      return pendingRequests.get(requestKey)!;
-    }
-
-    const fetchPromise = (async (): Promise<Category[]> => {
-      // 1. Try server public API (0 Firestore reads)
-      try {
-        const res = await fetch('/api/public/categories');
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data) && data.length > 0) {
-            categoryCache = { categories: data, timestamp: Date.now() };
-            try {
-              if (typeof window !== 'undefined' && window.localStorage) {
-                localStorage.setItem(STORAGE_CATEGORIES_CACHE_KEY, JSON.stringify(data));
-              }
-            } catch {
-              // Ignore
-            }
-            return data;
-          }
-        }
-      } catch {
-        // Fall through
-      }
-
-      // 2. Query Firestore categories with limit(50)
-      if (Date.now() > firestoreQuotaExceededUntil) {
-        try {
-          const categoriesRef = collection(db, 'categories');
-          const q = query(categoriesRef, limit(50));
-          const timeoutPromise = new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('Firestore timeout')), 3500)
-          );
-          const snapshot = (await Promise.race([getDocs(q), timeoutPromise])) as any;
-          const categories: Category[] = [];
-
-          snapshot.forEach((docSnap) => {
-            const data = docSnap.data();
-            let rawSlug = (data.slug || '').toString().trim();
-            if (!rawSlug || rawSlug === 'all') {
-              rawSlug = docSnap.id;
-            }
-            const normSlug = normalizeCategorySlug(rawSlug);
-            const def = CANONICAL_CATEGORIES.find((c) => c.slug === normSlug);
-            categories.push({
-              id: normSlug,
-              name: def ? def.name : (data.name || 'Category').toString().trim(),
-              slug: normSlug,
-              description: def ? def.description : (data.description || ''),
-              storyCount: Number(data.storyCount || 0),
-            });
-          });
-
-          if (categories.length > 0) {
-            // Deduplicate canonical categories and compute live story counts
-            const stories = this.getStoredStoriesSync();
-            const deduplicated: Category[] = [
-              {
-                id: 'all',
-                name: 'සියලුම කතා (All Stories)',
-                slug: 'all',
-                description: 'සියලුම අලුත් සිංහල කතා සහ රසවත් කතා එකතුව',
-                storyCount: stories.length,
-              },
-              ...CANONICAL_CATEGORIES.map((cat) => ({
-                id: cat.slug,
-                name: cat.name,
-                slug: cat.slug,
-                description: cat.description,
-                storyCount: stories.filter((s) => storyMatchesCategory(s, cat.slug)).length,
-              })),
-            ];
-
-            categoryCache = { categories: deduplicated, timestamp: Date.now() };
-            try {
-              if (typeof window !== 'undefined' && window.localStorage) {
-                localStorage.setItem(STORAGE_CATEGORIES_CACHE_KEY, JSON.stringify(deduplicated));
-              }
-            } catch {
-              // Ignore
-            }
-            return deduplicated;
-          }
-        } catch (err: any) {
-          if (isQuotaError(err)) {
-            firestoreQuotaExceededUntil = Date.now() + 60 * 60 * 1000;
-          }
-        }
-      }
-
-      return this.getInitialCategories();
-    })().finally(() => {
-      pendingRequests.delete(requestKey);
-    });
-
-    pendingRequests.set(requestKey, fetchPromise);
-    return fetchPromise;
-  }
-
-  public upsertLocalStory(story: Story): void {
-    if (!story || isMockStory(story)) return;
-    const normalized = normalizeStoryDoc(story.id, story);
-    storyEntityCache.set(normalized.id, { story: normalized, timestamp: Date.now() });
-    if (normalized.slug) {
-      storyEntityCache.set(normalized.slug, { story: normalized, timestamp: Date.now() });
-    }
-    this.persistStoryToStorage(normalized);
-
-    const cachedList = storyListCache.get('all_default');
-    if (cachedList) {
-      const idx = cachedList.data.findIndex(
-        (s) => s.id === normalized.id || (normalized.slug && s.slug === normalized.slug)
-      );
-      if (idx !== -1) {
-        cachedList.data[idx] = normalized;
-      } else {
-        cachedList.data.unshift(normalized);
-        cachedList.total += 1;
-      }
-    }
-    this.invalidateCache();
-  }
-
-  public deleteLocalStory(id: string): void {
-    if (!id) return;
-    const item = storyEntityCache.get(id);
-    const slug = item?.story.slug;
-    storyEntityCache.delete(id);
-    if (slug) {
-      storyEntityCache.delete(slug);
-    }
+  public static async getRelatedStories(currentStory: Story, limit = 4): Promise<Story[]> {
+    if (!currentStory) return [];
     try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        const storedMap = localStorage.getItem(STORAGE_STORY_MAP_KEY);
-        if (storedMap) {
-          const parsed = JSON.parse(storedMap);
-          delete parsed[id];
-          if (slug) delete parsed[slug];
-          localStorage.setItem(STORAGE_STORY_MAP_KEY, JSON.stringify(parsed));
+      const res = await fetch(`/api/stories/${encodeURIComponent(currentStory.slug)}/related?limit=${limit}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (Array.isArray(json) && json.length > 0) {
+          return json;
         }
       }
     } catch {
-      // Ignore
+      // Fallback
     }
-    this.invalidateCache();
+
+    const currentCat = getStoryCanonicalCategory(currentStory);
+    const related = this.memoryStories.filter(
+      (s) => s.id !== currentStory.id && storyMatchesCategory(s, currentCat)
+    );
+
+    if (related.length >= limit) {
+      return related.slice(0, limit);
+    }
+
+    // Fill with other stories
+    const others = this.memoryStories.filter(
+      (s) => s.id !== currentStory.id && !related.some((r) => r.id === s.id)
+    );
+    return [...related, ...others].slice(0, limit);
+  }
+
+  public static async getCategories(): Promise<Category[]> {
+    try {
+      const res = await fetch('/api/categories');
+      if (res.ok) {
+        const cats = await res.json();
+        if (Array.isArray(cats) && cats.length > 0) {
+          return cats;
+        }
+      }
+    } catch {
+      // Fallback
+    }
+    return INITIAL_CATEGORIES;
   }
 }
-
-export const storyService = new StoryService();

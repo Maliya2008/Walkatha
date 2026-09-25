@@ -6,6 +6,9 @@ import { Story, Category } from './src/types/story';
 import { SiteSettings } from './src/types/admin';
 import { INITIAL_STORIES, INITIAL_CATEGORIES } from './src/data/seedStories';
 import { normalizeCategorySlug, getCategoryDisplayName } from './src/utils/categoryTaxonomy';
+import { db } from './src/lib/firebase';
+import { collection, getDocs, doc, getDoc, query, where, limit } from 'firebase/firestore';
+import { normalizeFirestoreStory } from './src/services/storyService';
 
 const app = express();
 const PORT = 3000;
@@ -35,7 +38,6 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     proto = forwardedProto[0].trim().toLowerCase();
   }
 
-  const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0';
   const isCanonicalProd = host === 'www.walkathawa.site';
   const isApexProd = host === 'walkathawa.site';
 
@@ -49,9 +51,11 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     return res.redirect(301, `https://www.walkathawa.site${req.originalUrl || req.url || ''}`);
   }
 
-  // 3. Staging/preview domains: noindex
-  if (!isCanonicalProd && !isLocal) {
+  // 3. Search Engine Indexing: Disallow /admin and /api paths, index all public content
+  if (req.path.startsWith('/admin') || req.path.startsWith('/api')) {
     res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+  } else {
+    res.setHeader('X-Robots-Tag', 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1');
   }
 
   next();
@@ -147,6 +151,104 @@ function saveDatabase(): void {
 
 // Initial DB load
 loadDatabase();
+
+// --- FIRESTORE CONTINUOUS SYNC & DISCOVERY LAYER ---
+let lastFirestoreSync = 0;
+const SYNC_COOLDOWN_MS = 45 * 1000; // 45s cache window for fresh indexing
+
+async function syncStoriesFromFirestore(force = false): Promise<Story[]> {
+  const now = Date.now();
+  if (!force && now - lastFirestoreSync < SYNC_COOLDOWN_MS && memoryDatabase.stories.length > 0) {
+    return memoryDatabase.stories;
+  }
+
+  try {
+    let snapshot = await getDocs(collection(db, 'stories'));
+    if (snapshot.empty) {
+      snapshot = await getDocs(collection(db, 'posts'));
+    }
+
+    if (!snapshot.empty) {
+      const liveStories: Story[] = [];
+      snapshot.forEach((docSnap) => {
+        liveStories.push(normalizeFirestoreStory(docSnap.id, docSnap.data()));
+      });
+
+      if (liveStories.length > 0) {
+        liveStories.sort((a, b) => new Date(b.uploadDate || 0).getTime() - new Date(a.uploadDate || 0).getTime());
+        memoryDatabase.stories = liveStories;
+        lastFirestoreSync = now;
+        saveDatabase();
+        console.log(`[Firestore Sync] Synced ${liveStories.length} live stories from Firestore.`);
+      }
+    }
+  } catch (err) {
+    console.warn('[Firestore Sync] Non-fatal background sync notice:', err);
+  }
+
+  return memoryDatabase.stories;
+}
+
+// Background sync job every 2 minutes
+setInterval(() => {
+  syncStoriesFromFirestore(true).catch(() => {});
+}, 120 * 1000);
+
+// Kick off initial sync asynchronously
+syncStoriesFromFirestore(true).catch(() => {});
+
+async function findStoryBySlugOrId(slugParam: string): Promise<Story | null> {
+  if (!slugParam) return null;
+  const cleanParam = decodeURIComponent(slugParam).toLowerCase().trim();
+  const rawParam = slugParam.trim();
+
+  const matches = (s: Story) => {
+    const sSlug = (s.slug || '').toLowerCase().trim();
+    const sId = (s.id || '').trim();
+    const decodedSlug = decodeURIComponent(s.slug || '').toLowerCase().trim();
+    return (
+      sSlug === cleanParam ||
+      sId.toLowerCase() === cleanParam.toLowerCase() ||
+      decodedSlug === cleanParam ||
+      sSlug === rawParam.toLowerCase() ||
+      sId === rawParam
+    );
+  };
+
+  let found = memoryDatabase.stories.find(matches);
+  if (found) return found;
+
+  // Cache miss: sync immediately with Firestore
+  await syncStoriesFromFirestore(true);
+  found = memoryDatabase.stories.find(matches);
+  if (found) return found;
+
+  // Direct Firestore document check by ID
+  try {
+    const docRef = doc(db, 'stories', rawParam);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      const story = normalizeFirestoreStory(docSnap.id, docSnap.data());
+      memoryDatabase.stories.unshift(story);
+      saveDatabase();
+      return story;
+    }
+
+    // Direct Firestore query by slug field
+    const q = query(collection(db, 'stories'), where('slug', '==', cleanParam), limit(1));
+    const querySnap = await getDocs(q);
+    if (!querySnap.empty) {
+      const story = normalizeFirestoreStory(querySnap.docs[0].id, querySnap.docs[0].data());
+      memoryDatabase.stories.unshift(story);
+      saveDatabase();
+      return story;
+    }
+  } catch (err) {
+    console.warn('[FindStory] Direct query fallback error:', err);
+  }
+
+  return null;
+}
 
 // --- HTML TEMPLATE LOADER ---
 function getHtmlTemplate(): string {
@@ -329,29 +431,74 @@ function renderStorySeo(template: string, story: Story): string {
   const description = story.shortDescription || story.description || story.title;
   const publishedDate = story.uploadDate || story.createdAt || new Date().toISOString();
   const modifiedDate = story.updatedDate || story.updatedAt || publishedDate;
+  const catName = getCategoryDisplayName(story.category);
+  const catUrl = `https://www.walkathawa.site/category/${encodeURIComponent(story.category || 'all')}`;
 
   const schemaJson = {
     '@context': 'https://schema.org',
-    '@type': 'BlogPosting',
-    mainEntityOfPage: {
-      '@type': 'WebPage',
-      '@id': storyUrl,
-    },
-    headline: story.title,
-    description,
-    image: story.coverImage || 'https://www.walkathawa.site/icon.png',
-    datePublished: publishedDate,
-    dateModified: modifiedDate,
-    inLanguage: 'si',
-    publisher: {
-      '@type': 'Organization',
-      name: 'Walkathawa (වල් කතාව)',
-      logo: {
-        '@type': 'ImageObject',
-        url: 'https://www.walkathawa.site/icon.png',
+    '@graph': [
+      {
+        '@type': 'Article',
+        '@id': `${storyUrl}#article`,
+        isPartOf: {
+          '@type': 'WebSite',
+          '@id': 'https://www.walkathawa.site/#website',
+          name: 'Walkathawa',
+          alternateName: 'වල් කතාව',
+          url: 'https://www.walkathawa.site/',
+        },
+        headline: story.title,
+        description,
+        image: story.coverImage && story.coverImage.startsWith('http') ? story.coverImage : 'https://www.walkathawa.site/icon.png',
+        datePublished: publishedDate,
+        dateModified: modifiedDate,
+        inLanguage: 'si',
+        mainEntityOfPage: {
+          '@type': 'WebPage',
+          '@id': storyUrl,
+        },
+        author: {
+          '@type': 'Organization',
+          name: 'Walkathawa (වල් කතාව)',
+          url: 'https://www.walkathawa.site/',
+        },
+        publisher: {
+          '@type': 'Organization',
+          name: 'Walkathawa (වල් කතාව)',
+          url: 'https://www.walkathawa.site/',
+          logo: {
+            '@type': 'ImageObject',
+            url: 'https://www.walkathawa.site/icon.png',
+          },
+        },
+        articleSection: catName,
+        articleBody: (story.fullContent || story.content || '').slice(0, 5000),
       },
-    },
-    articleBody: (story.fullContent || story.content || '').slice(0, 5000),
+      {
+        '@type': 'BreadcrumbList',
+        '@id': `${storyUrl}#breadcrumb`,
+        itemListElement: [
+          {
+            '@type': 'ListItem',
+            position: 1,
+            name: 'මුල් පිටුව (Home)',
+            item: 'https://www.walkathawa.site/',
+          },
+          {
+            '@type': 'ListItem',
+            position: 2,
+            name: catName,
+            item: catUrl,
+          },
+          {
+            '@type': 'ListItem',
+            position: 3,
+            name: story.title,
+            item: storyUrl,
+          },
+        ],
+      },
+    ],
   };
 
   const paragraphs = (story.fullContent || story.content || '')
@@ -359,20 +506,46 @@ function renderStorySeo(template: string, story: Story): string {
     .map((p) => `<p style="margin-bottom: 16px; line-height: 1.8;">${escapeHtml(p.trim())}</p>`)
     .join('\n');
 
+  // Internal link graph: top 6 other stories for search crawler link discovery
+  const relatedStories = memoryDatabase.stories
+    .filter((s) => s.published !== false && s.id !== story.id)
+    .slice(0, 6);
+
+  const relatedHtml = relatedStories
+    .map(
+      (r) =>
+        `<li style="margin-bottom: 12px;"><a href="/story/${encodeURIComponent(r.slug)}" style="color: #2563eb; text-decoration: none; font-weight: 500;">${escapeHtml(r.title)}</a> <span style="color: #64748b; font-size: 13px;">(${escapeHtml(getCategoryDisplayName(r.category))})</span></li>`
+    )
+    .join('\n');
+
   const bodyContent = `
     <main style="max-width: 800px; margin: 0 auto; padding: 20px;">
-      <nav><a href="/">← නැවත මුල් පිටුවට</a></nav>
+      <nav style="margin-bottom: 20px; font-size: 14px; color: #64748b;">
+        <a href="/" style="color: #2563eb; text-decoration: none;">මුල් පිටුව</a> &gt; 
+        <a href="/category/${encodeURIComponent(story.category || 'all')}" style="color: #2563eb; text-decoration: none;">${escapeHtml(catName)}</a> &gt; 
+        <span>${escapeHtml(story.title)}</span>
+      </nav>
       <article>
         <header style="margin: 20px 0;">
-          <span style="font-weight: bold; color: #4f46e5;">${escapeHtml(getCategoryDisplayName(story.category))}</span>
+          <span style="font-weight: bold; color: #4f46e5;">${escapeHtml(catName)}</span>
           <h1 style="font-size: 28px; margin: 10px 0;">${escapeHtml(story.title)}</h1>
-          <time datetime="${escapeHtml(publishedDate)}">${escapeHtml(new Date(publishedDate).toLocaleDateString('si-LK'))}</time>
+          <time datetime="${escapeHtml(publishedDate)}" style="color: #64748b; font-size: 14px;">${escapeHtml(new Date(publishedDate).toLocaleDateString('si-LK'))}</time>
         </header>
         ${story.coverImage ? `<img src="${escapeHtml(story.coverImage)}" alt="${escapeHtml(story.title)}" style="max-width: 100%; border-radius: 12px; margin-bottom: 20px;" />` : ''}
         <div style="font-size: 18px;">
           ${paragraphs}
         </div>
       </article>
+
+      <section style="margin-top: 48px; padding-top: 24px; border-top: 1px solid #e2e8f0;">
+        <h3 style="font-size: 20px; margin-bottom: 16px;">තවත් රසවත් සිංහල කතා (More Sinhala Stories)</h3>
+        <ul style="list-style: none; padding: 0;">
+          ${relatedHtml}
+        </ul>
+        <div style="margin-top: 20px;">
+          <a href="/sitemap" style="color: #4f46e5; text-decoration: underline; font-size: 14px;">සියලු කතා සූචිය බලන්න (All Stories Directory) →</a>
+        </div>
+      </section>
     </main>`;
 
   return injectSeoIntoHtml(template, {
@@ -425,10 +598,13 @@ function renderCategorySeo(template: string, categorySlug: string): string {
   });
 }
 
-// --- DYNAMIC SITEMAP, ROBOTS, AND RSS FEED ---
-app.get('/sitemap.xml', (_req: Request, res: Response) => {
+// --- DYNAMIC SITEMAP, ROBOTS, AND RSS/ATOM FEEDS ---
+
+// 1. Master Sitemap XML
+app.get('/sitemap.xml', async (_req: Request, res: Response) => {
   const baseUrl = 'https://www.walkathawa.site';
-  const stories = memoryDatabase.stories.filter((s) => s.published !== false);
+  const stories = await syncStoriesFromFirestore(false);
+  const publishedStories = stories.filter((s) => s.published !== false);
   const categories = memoryDatabase.categories.filter((c) => c.slug !== 'all');
   const nowIso = new Date().toISOString();
 
@@ -436,18 +612,18 @@ app.get('/sitemap.xml', (_req: Request, res: Response) => {
   xml += `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n`;
 
   // 1. Homepage
-  xml += `  <url>\n    <loc>${baseUrl}/</loc>\n    <lastmod>${nowIso}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>\n`;
+  xml += `  <url>\n    <loc>${baseUrl}/</loc>\n    <lastmod>${nowIso}</lastmod>\n    <changefreq>hourly</changefreq>\n    <priority>1.0</priority>\n  </url>\n`;
 
-  // 2. Sitemap / Archives
-  xml += `  <url>\n    <loc>${baseUrl}/sitemap</loc>\n    <lastmod>${nowIso}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>0.8</priority>\n  </url>\n`;
+  // 2. Sitemap / Archives Page
+  xml += `  <url>\n    <loc>${baseUrl}/sitemap</loc>\n    <lastmod>${nowIso}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>0.85</priority>\n  </url>\n`;
 
-  // 3. Categories
+  // 3. Category Pages
   for (const cat of categories) {
     xml += `  <url>\n    <loc>${baseUrl}/category/${encodeURIComponent(cat.slug)}</loc>\n    <lastmod>${nowIso}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>0.85</priority>\n  </url>\n`;
   }
 
-  // 4. All Stories
-  for (const story of stories) {
+  // 4. All Individual Stories
+  for (const story of publishedStories) {
     const storyUrl = `${baseUrl}/story/${encodeURIComponent(story.slug)}`;
     const lastMod = story.updatedDate || story.uploadDate || nowIso;
     xml += `  <url>\n    <loc>${storyUrl}</loc>\n    <lastmod>${lastMod}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>0.9</priority>\n`;
@@ -460,10 +636,38 @@ app.get('/sitemap.xml', (_req: Request, res: Response) => {
   xml += `</urlset>`;
 
   res.setHeader('Content-Type', 'application/xml; charset=utf-8');
-  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.setHeader('Cache-Control', 'public, max-age=600, s-maxage=1800');
   res.status(200).send(xml);
 });
 
+// 2. Dedicated Stories Sitemap XML
+app.get('/sitemap-stories.xml', async (_req: Request, res: Response) => {
+  const baseUrl = 'https://www.walkathawa.site';
+  const stories = await syncStoriesFromFirestore(false);
+  const publishedStories = stories.filter((s) => s.published !== false);
+  const nowIso = new Date().toISOString();
+
+  let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+  xml += `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n`;
+
+  for (const story of publishedStories) {
+    const storyUrl = `${baseUrl}/story/${encodeURIComponent(story.slug)}`;
+    const lastMod = story.updatedDate || story.uploadDate || nowIso;
+    xml += `  <url>\n    <loc>${storyUrl}</loc>\n    <lastmod>${lastMod}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>0.9</priority>\n`;
+    if (story.coverImage && story.coverImage.startsWith('http')) {
+      xml += `    <image:image>\n      <image:loc>${escapeHtml(story.coverImage)}</image:loc>\n      <image:title>${escapeHtml(story.title)}</image:title>\n    </image:image>\n`;
+    }
+    xml += `  </url>\n`;
+  }
+
+  xml += `</urlset>`;
+
+  res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=600, s-maxage=1800');
+  res.status(200).send(xml);
+});
+
+// 3. Robots.txt
 app.get('/robots.txt', (_req: Request, res: Response) => {
   const robots = `User-agent: *
 Allow: /
@@ -471,19 +675,22 @@ Disallow: /admin
 Disallow: /api/
 
 Sitemap: https://www.walkathawa.site/sitemap.xml
+Sitemap: https://www.walkathawa.site/sitemap-stories.xml
 `;
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
   res.status(200).send(robots);
 });
 
-app.get(['/feed.xml', '/rss.xml'], (_req: Request, res: Response) => {
+// 4. RSS 2.0 Feed
+app.get(['/feed.xml', '/rss.xml'], async (_req: Request, res: Response) => {
   const baseUrl = 'https://www.walkathawa.site';
-  const stories = memoryDatabase.stories.filter((s) => s.published !== false).slice(0, 25);
+  const stories = await syncStoriesFromFirestore(false);
+  const publishedStories = stories.filter((s) => s.published !== false).slice(0, 30);
   const now = new Date().toUTCString();
 
   let rss = `<?xml version="1.0" encoding="UTF-8"?>\n`;
-  rss += `<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">\n`;
+  rss += `<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:dc="http://purl.org/dc/elements/1.1/">\n`;
   rss += `  <channel>\n`;
   rss += `    <title>Walkathawa (වල් කතාව)</title>\n`;
   rss += `    <link>${baseUrl}/</link>\n`;
@@ -492,7 +699,7 @@ app.get(['/feed.xml', '/rss.xml'], (_req: Request, res: Response) => {
   rss += `    <lastBuildDate>${now}</lastBuildDate>\n`;
   rss += `    <atom:link href="${baseUrl}/feed.xml" rel="self" type="application/rss+xml"/>\n`;
 
-  for (const s of stories) {
+  for (const s of publishedStories) {
     const itemUrl = `${baseUrl}/story/${encodeURIComponent(s.slug)}`;
     const pubDate = new Date(s.uploadDate || 0).toUTCString();
     rss += `    <item>\n`;
@@ -500,6 +707,8 @@ app.get(['/feed.xml', '/rss.xml'], (_req: Request, res: Response) => {
     rss += `      <link>${itemUrl}</link>\n`;
     rss += `      <guid isPermaLink="true">${itemUrl}</guid>\n`;
     rss += `      <pubDate>${pubDate}</pubDate>\n`;
+    rss += `      <category>${escapeHtml(getCategoryDisplayName(s.category))}</category>\n`;
+    rss += `      <dc:creator>Walkathawa</dc:creator>\n`;
     rss += `      <description>${escapeHtml(s.shortDescription || s.description || '')}</description>\n`;
     rss += `    </item>\n`;
   }
@@ -507,13 +716,62 @@ app.get(['/feed.xml', '/rss.xml'], (_req: Request, res: Response) => {
   rss += `  </channel>\n`;
   rss += `</rss>`;
 
-  res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+  res.setHeader('Content-Type', 'application/rss+xml; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=600, s-maxage=1800');
   res.status(200).send(rss);
 });
 
-// Google verification file
-app.get('/google0a8bbd03676eca90.html', (_req: Request, res: Response) => {
-  res.send('google-site-verification: google0a8bbd03676eca90.html');
+// 5. Atom 1.0 Feed
+app.get('/atom.xml', async (_req: Request, res: Response) => {
+  const baseUrl = 'https://www.walkathawa.site';
+  const stories = await syncStoriesFromFirestore(false);
+  const publishedStories = stories.filter((s) => s.published !== false).slice(0, 30);
+  const nowIso = new Date().toISOString();
+
+  let atom = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+  atom += `<feed xmlns="http://www.w3.org/2005/Atom">\n`;
+  atom += `  <title>Walkathawa (වල් කතාව)</title>\n`;
+  atom += `  <subtitle>Sinhala Stories Online | රසවත් සිංහල කතා එකතුව</subtitle>\n`;
+  atom += `  <link href="${baseUrl}/" />\n`;
+  atom += `  <link href="${baseUrl}/atom.xml" rel="self" type="application/atom+xml" />\n`;
+  atom += `  <id>${baseUrl}/</id>\n`;
+  atom += `  <updated>${nowIso}</updated>\n`;
+
+  for (const s of publishedStories) {
+    const itemUrl = `${baseUrl}/story/${encodeURIComponent(s.slug)}`;
+    const updatedIso = s.updatedDate || s.uploadDate || nowIso;
+    atom += `  <entry>\n`;
+    atom += `    <title>${escapeHtml(s.title)}</title>\n`;
+    atom += `    <link href="${itemUrl}" />\n`;
+    atom += `    <id>${itemUrl}</id>\n`;
+    atom += `    <updated>${updatedIso}</updated>\n`;
+    atom += `    <summary>${escapeHtml(s.shortDescription || s.description || '')}</summary>\n`;
+    atom += `    <category term="${escapeHtml(s.category)}" label="${escapeHtml(getCategoryDisplayName(s.category))}" />\n`;
+    atom += `  </entry>\n`;
+  }
+
+  atom += `</feed>`;
+
+  res.setHeader('Content-Type', 'application/atom+xml; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=600, s-maxage=1800');
+  res.status(200).send(atom);
+});
+
+// Google Search Console verification files
+app.get('/google:id.html', (req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(`google-site-verification: google${req.params.id}.html`);
+});
+
+// Search Console Ping
+app.all('/api/ping-indexing', async (_req: Request, res: Response) => {
+  try {
+    const sitemapUrl = encodeURIComponent('https://www.walkathawa.site/sitemap.xml');
+    await fetch(`https://www.google.com/ping?sitemap=${sitemapUrl}`).catch(() => {});
+    res.json({ success: true, message: 'Google sitemap ping dispatched successfully', timestamp: new Date().toISOString() });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Ping failed', details: err?.message });
+  }
 });
 
 // --- REST API ENDPOINTS ---
@@ -565,26 +823,19 @@ app.get('/api/stories', (req: Request, res: Response) => {
 });
 
 // GET /api/stories/:slug
-app.get('/api/stories/:slug', (req: Request, res: Response) => {
-  const cleanSlug = decodeURIComponent(req.params.slug).toLowerCase().trim();
-  const found = memoryDatabase.stories.find(
-    (s) => (s.slug || '').toLowerCase() === cleanSlug || s.id === cleanSlug
-  );
+app.get('/api/stories/:slug', async (req: Request, res: Response) => {
+  const story = await findStoryBySlugOrId(req.params.slug);
 
-  if (!found) {
+  if (!story) {
     return res.status(404).json({ error: 'Story not found' });
   }
 
-  res.json(found);
+  res.json(story);
 });
 
 // GET /api/stories/:slug/related
-app.get('/api/stories/:slug/related', (req: Request, res: Response) => {
-  const cleanSlug = decodeURIComponent(req.params.slug).toLowerCase().trim();
-  const current = memoryDatabase.stories.find(
-    (s) => (s.slug || '').toLowerCase() === cleanSlug || s.id === cleanSlug
-  );
-
+app.get('/api/stories/:slug/related', async (req: Request, res: Response) => {
+  const current = await findStoryBySlugOrId(req.params.slug);
   const limit = parseInt(req.query.limit as string, 10) || 4;
   const all = memoryDatabase.stories.filter((s) => s.published !== false && s.id !== current?.id);
 
@@ -777,6 +1028,7 @@ export async function startServer(): Promise<http.Server> {
 
     // Development SSR Routes
     app.get('/', async (req: Request, res: Response) => {
+      await syncStoriesFromFirestore(false);
       let template = getHtmlTemplate();
       template = await vite.transformIndexHtml(req.originalUrl, template);
       const rendered = renderHomeSeo(template);
@@ -785,10 +1037,7 @@ export async function startServer(): Promise<http.Server> {
     });
 
     app.get('/story/:slug', async (req: Request, res: Response) => {
-      const slug = decodeURIComponent(req.params.slug).toLowerCase().trim();
-      const story = memoryDatabase.stories.find(
-        (s) => (s.slug || '').toLowerCase() === slug || s.id === slug
-      );
+      const story = await findStoryBySlugOrId(req.params.slug);
 
       let template = getHtmlTemplate();
       template = await vite.transformIndexHtml(req.originalUrl, template);
@@ -803,6 +1052,7 @@ export async function startServer(): Promise<http.Server> {
     });
 
     app.get('/category/:slug', async (req: Request, res: Response) => {
+      await syncStoriesFromFirestore(false);
       let template = getHtmlTemplate();
       template = await vite.transformIndexHtml(req.originalUrl, template);
       const rendered = renderCategorySeo(template, req.params.slug);
@@ -811,12 +1061,33 @@ export async function startServer(): Promise<http.Server> {
     });
 
     app.get(['/sitemap', '/archives'], async (req: Request, res: Response) => {
+      await syncStoriesFromFirestore(false);
       let template = getHtmlTemplate();
       template = await vite.transformIndexHtml(req.originalUrl, template);
+
+      const allStoriesList = memoryDatabase.stories
+        .filter((s) => s.published !== false)
+        .map(
+          (s) =>
+            `<li style="margin-bottom: 12px;"><a href="/story/${encodeURIComponent(s.slug)}" style="color: #2563eb; font-weight: 500;">${escapeHtml(s.title)}</a> <span style="color: #64748b; font-size: 13px;">(${escapeHtml(getCategoryDisplayName(s.category))})</span></li>`
+        )
+        .join('\n');
+
+      const archiveBody = `
+        <main style="max-width: 1000px; margin: 0 auto; padding: 24px;">
+          <nav style="margin-bottom: 20px;"><a href="/">← නැවත මුල් පිටුවට</a></nav>
+          <h1>Walkathawa Archives & Sitemap (සියලු කතා සූචිය)</h1>
+          <p>සියලුම සිංහල කතා, ආදර කතා සහ වර්ගීකරණ නාමාවලිය.</p>
+          <ul style="list-style: none; padding: 0; margin-top: 24px;">
+            ${allStoriesList}
+          </ul>
+        </main>`;
+
       const rendered = injectSeoIntoHtml(template, {
         title: 'Walkathawa Archives & Sitemap (සියලු කතා සූචිය)',
         description: 'Google Indexing සහ පාඨක පහසුව සඳහා සියලුම සිංහල කතා සහ වර්ගීකරණ නාමාවලිය.',
         canonicalUrl: 'https://www.walkathawa.site/sitemap',
+        bodyContent: archiveBody,
       });
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       return res.status(200).send(rendered);
@@ -852,47 +1123,68 @@ export async function startServer(): Promise<http.Server> {
     }
 
     // Production SSR Routes
-    app.get('/', (_req: Request, res: Response) => {
+    app.get('/', async (_req: Request, res: Response) => {
+      await syncStoriesFromFirestore(false);
       const template = getHtmlTemplate();
       const rendered = renderHomeSeo(template);
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=3600');
+      res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800');
       return res.status(200).send(rendered);
     });
 
-    app.get('/story/:slug', (req: Request, res: Response) => {
-      const slug = decodeURIComponent(req.params.slug).toLowerCase().trim();
-      const story = memoryDatabase.stories.find(
-        (s) => (s.slug || '').toLowerCase() === slug || s.id === slug
-      );
-
+    app.get('/story/:slug', async (req: Request, res: Response) => {
+      const story = await findStoryBySlugOrId(req.params.slug);
       const template = getHtmlTemplate();
+
       if (!story) {
         return res.status(404).send(renderHomeSeo(template));
       }
 
       const rendered = renderStorySeo(template, story);
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=3600');
+      res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800');
       return res.status(200).send(rendered);
     });
 
-    app.get('/category/:slug', (req: Request, res: Response) => {
+    app.get('/category/:slug', async (req: Request, res: Response) => {
+      await syncStoriesFromFirestore(false);
       const template = getHtmlTemplate();
       const rendered = renderCategorySeo(template, req.params.slug);
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=3600');
+      res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800');
       return res.status(200).send(rendered);
     });
 
-    app.get(['/sitemap', '/archives'], (_req: Request, res: Response) => {
+    app.get(['/sitemap', '/archives'], async (_req: Request, res: Response) => {
+      await syncStoriesFromFirestore(false);
       const template = getHtmlTemplate();
+
+      const allStoriesList = memoryDatabase.stories
+        .filter((s) => s.published !== false)
+        .map(
+          (s) =>
+            `<li style="margin-bottom: 12px;"><a href="/story/${encodeURIComponent(s.slug)}" style="color: #2563eb; font-weight: 500;">${escapeHtml(s.title)}</a> <span style="color: #64748b; font-size: 13px;">(${escapeHtml(getCategoryDisplayName(s.category))})</span></li>`
+        )
+        .join('\n');
+
+      const archiveBody = `
+        <main style="max-width: 1000px; margin: 0 auto; padding: 24px;">
+          <nav style="margin-bottom: 20px;"><a href="/">← නැවත මුල් පිටුවට</a></nav>
+          <h1>Walkathawa Archives & Sitemap (සියලු කතා සූචිය)</h1>
+          <p>සියලුම සිංහල කතා, ආදර කතා සහ වර්ගීකරණ නාමාවලිය.</p>
+          <ul style="list-style: none; padding: 0; margin-top: 24px;">
+            ${allStoriesList}
+          </ul>
+        </main>`;
+
       const rendered = injectSeoIntoHtml(template, {
         title: 'Walkathawa Archives & Sitemap (සියලු කතා සූචිය)',
         description: 'Google Indexing සහ පාඨක පහසුව සඳහා සියලුම සිංහල කතා සහ වර්ගීකරණ නාමාවලිය.',
         canonicalUrl: 'https://www.walkathawa.site/sitemap',
+        bodyContent: archiveBody,
       });
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800');
       return res.status(200).send(rendered);
     });
 

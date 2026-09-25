@@ -178,30 +178,14 @@ export class SEOService {
           'position': 2,
           'name': section,
           'item': `${CANONICAL_SITE_URL}/category/${sectionSlug}`
+        },
+        {
+          '@type': 'ListItem',
+          'position': 3,
+          'name': seo.title || 'Story',
+          'item': canonicalUrl
         }
       ];
-
-      if (hasSeries) {
-        breadcrumbItems.push({
-          '@type': 'ListItem',
-          'position': 3,
-          'name': seriesTitle,
-          'item': `${CANONICAL_SITE_URL}/posts/${seriesSlug}/episodes`
-        });
-        breadcrumbItems.push({
-          '@type': 'ListItem',
-          'position': 4,
-          'name': `Episode ${episodeNum}`,
-          'item': canonicalUrl
-        });
-      } else {
-        breadcrumbItems.push({
-          '@type': 'ListItem',
-          'position': 3,
-          'name': seo.title,
-          'item': canonicalUrl
-        });
-      }
 
       const articleGraph = {
         '@context': 'https://schema.org',
@@ -395,7 +379,7 @@ export class SEOService {
       rawTitle: series.title,
       description: cleanDesc,
       keywords: `${series.title}, ${series.categoryName}, sinhala series, wal katha series, walkathawa`,
-      canonicalUrl: `${CANONICAL_SITE_URL}/posts/${series.slug}/episodes`,
+      canonicalUrl: `${CANONICAL_SITE_URL}/category/${encodeURIComponent(series.category || 'all')}`,
       ogImage: series.coverImage || this.DEFAULT_IMAGE,
       ogType: 'website',
       seriesData: {
@@ -409,27 +393,28 @@ export class SEOService {
   }
 
   /**
-   * Generates dynamic SEO payload for an individual episode
-   * URL: https://www.walkathawa.site/posts/${seriesSlug}/episodes/${episodeNumber}
+   * Generates dynamic SEO payload for an individual episode / story
+   * Canonical URL: https://www.walkathawa.site/story/${encodeURIComponent(story.slug)}
    */
   public static generateEpisodeSEO(story: Story, series?: Series | null, episodeNumber?: number): SEOData {
-    const rawDesc = story.shortDescription || story.fullContent.replace(/[\n\r]+/g, ' ').trim();
-    const cleanDesc = rawDesc.length > 160 ? `${rawDesc.slice(0, 157)}...` : rawDesc;
+    return this.generateStorySEO(story);
+  }
 
-    const detected = detectSeriesInfo(story);
-    const seriesSlug = series ? series.slug : detected.seriesSlug;
-    const seriesTitle = series ? series.title : detected.seriesTitle;
-    const epNum = episodeNumber || detected.episodeNumber;
+  /**
+   * Generates SEO payload for an individual story with accurate canonical URL and rich metadata
+   */
+  public static generateStorySEO(story: Story): SEOData {
+    const rawDesc = story.shortDescription || story.description || story.fullContent?.slice(0, 160) || '';
+    const cleanDesc = rawDesc.length > 160 ? `${rawDesc.slice(0, 157)}...` : rawDesc;
 
     const canonicalCat = getStoryCanonicalCategory(story);
     const catDisplayName = getCategoryDisplayName(canonicalCat);
 
     const storyKeywords = Array.from(
       new Set([
-        ...story.tags,
+        ...(story.tags || []),
         catDisplayName,
-        seriesTitle,
-        `Episode ${epNum}`,
+        story.title,
         'walkatha',
         'walakatha',
         'walkathawa',
@@ -440,33 +425,25 @@ export class SEOService {
       ])
     ).join(', ');
 
+    const storyUrl = `${CANONICAL_SITE_URL}/story/${encodeURIComponent(story.slug)}`;
+
     return {
-      title: `${story.title} - Episode ${epNum}`,
+      title: story.title,
       rawTitle: story.title,
       description: cleanDesc,
       keywords: storyKeywords,
-      canonicalUrl: `${CANONICAL_SITE_URL}/posts/${seriesSlug}/episodes/${epNum}`,
-      ogImage: story.coverImage,
+      canonicalUrl: storyUrl,
+      ogImage: story.coverImage || this.DEFAULT_IMAGE,
       ogType: 'article',
       articleData: {
         publishedTime: story.uploadDate,
-        modifiedTime: story.updatedDate,
-        authorName: story.author?.name || 'Walkathawa Author',
+        modifiedTime: story.updatedDate || story.uploadDate,
+        authorName: story.author?.name || 'Walkathawa',
         section: catDisplayName,
         tags: story.tags || [],
         slug: story.slug,
-        seriesSlug,
-        seriesTitle,
-        episodeNumber: epNum,
       },
     };
-  }
-
-  /**
-   * Generates SEO payload for an individual story (fallback)
-   */
-  public static generateStorySEO(story: Story): SEOData {
-    return this.generateEpisodeSEO(story);
   }
 
   /**
@@ -528,7 +505,7 @@ export class SEOService {
     return {
       title: 'All Sinhala Stories Archives (සියලු කතා සූචිය)',
       description: 'Complete directory and archive of Sinhala stories, series hubs, wal katha, and novels on Walkathawa (වල් කතාව). Easily explore by genre, series, or title.',
-      canonicalUrl: `${CANONICAL_SITE_URL}/archives`,
+      canonicalUrl: `${CANONICAL_SITE_URL}/sitemap`,
       ogType: 'website',
     };
   }

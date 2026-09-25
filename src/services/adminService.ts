@@ -134,14 +134,20 @@ class AdminService {
       readingTime: storyData.readingTime || Math.max(3, Math.ceil((storyData.fullContent || '').length / 450)),
     };
 
-    // Save directly to Firestore
+    // 1. Save directly to Firestore
+    let firestoreSuccess = false;
     try {
       await setDoc(doc(db, 'stories', id), {
         ...cleanStory,
         updatedAt: serverTimestamp(),
       });
+      firestoreSuccess = true;
     } catch (err: any) {
-      // If direct write fails, try server proxy
+      console.warn('Direct Firestore save failed, using server fallback:', err);
+    }
+
+    // 2. Always sync with server API and persist so server-side sitemap & SSR update instantly
+    try {
       await fetch(`/api/admin/stories/${id}`, {
         method: 'PUT',
         headers: {
@@ -149,7 +155,16 @@ class AdminService {
           Authorization: `Bearer ${authService.getToken()}`,
         },
         body: JSON.stringify(cleanStory),
-      }).catch(() => {});
+      });
+    } catch (e) {
+      // Non-fatal
+    }
+
+    // 3. Ping search engine indexing if published
+    if (cleanStory.published) {
+      try {
+        fetch('/api/ping-indexing', { method: 'POST' }).catch(() => {});
+      } catch {}
     }
 
     return cleanStory;

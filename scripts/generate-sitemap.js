@@ -94,6 +94,23 @@ async function run() {
   fs.writeFileSync(sitemapPath, xml, 'utf8');
   console.log(`[Sitemap] Generated ${sitemapPath} successfully with ${stories.length} stories.`);
 
+  // Write dedicated stories sitemap public/sitemap-stories.xml
+  let storiesXml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+  storiesXml += `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n`;
+  for (const story of stories) {
+    const storyUrl = `${baseUrl}/story/${encodeURIComponent(story.slug)}`;
+    const lastMod = story.updatedDate || story.uploadDate || nowIso;
+    storiesXml += `  <url>\n    <loc>${storyUrl}</loc>\n    <lastmod>${lastMod}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>0.9</priority>\n`;
+    if (story.coverImage && story.coverImage.startsWith('http')) {
+      storiesXml += `    <image:image>\n      <image:loc>${escapeXml(story.coverImage)}</image:loc>\n      <image:title>${escapeXml(story.title)}</image:title>\n    </image:image>\n`;
+    }
+    storiesXml += `  </url>\n`;
+  }
+  storiesXml += `</urlset>\n`;
+  const storiesSitemapPath = path.join(publicDir, 'sitemap-stories.xml');
+  fs.writeFileSync(storiesSitemapPath, storiesXml, 'utf8');
+  console.log(`[Sitemap] Generated ${storiesSitemapPath} successfully.`);
+
   // Write clean robots.txt
   const robotsContent = `User-agent: *
 Allow: /
@@ -101,6 +118,7 @@ Disallow: /admin
 Disallow: /api/
 
 Sitemap: ${baseUrl}/sitemap.xml
+Sitemap: ${baseUrl}/sitemap-stories.xml
 `;
   const robotsPath = path.join(publicDir, 'robots.txt');
   fs.writeFileSync(robotsPath, robotsContent, 'utf8');

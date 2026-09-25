@@ -25,19 +25,14 @@ service cloud.firestore {
 
     // Stories collection
     match /stories/{storyId} {
-      // Public visitors can read published stories; Admins can read all stories
-      allow read: if resource.data.published == true || isAdmin();
-      
-      // Only admins can create or delete stories
-      allow create, delete: if isAdmin();
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
 
-      // Admins can update any field; Public unauthenticated visitors can only increment views atomically on published stories
-      allow update: if isAdmin() || (
-        resource.data.published == true &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views']) &&
-        request.resource.data.views is number &&
-        request.resource.data.views == resource.data.get('views', 0) + 1
-      );
+    // Posts collection (alternate collection alias)
+    match /posts/{postId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
     }
 
     // Categories collection
@@ -76,4 +71,3 @@ service cloud.firestore {
     }
   }
 }
-

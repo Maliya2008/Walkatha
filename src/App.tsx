@@ -36,6 +36,7 @@ export default function App() {
   const [isAdminView, setIsAdminView] = useState<boolean>(false);
   const [isSitemapView, setIsSitemapView] = useState<boolean>(false);
   const [currentStorySlug, setCurrentStorySlug] = useState<string | null>(null);
+  const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
 
   // Active story hook
   const { story: activeStory, relatedStories, isLoading: isStoryLoading } = useStory(currentStorySlug);
@@ -245,12 +246,24 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 selection:bg-indigo-500 selection:text-white transition-colors duration-200">
+    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 selection:bg-rose-500 selection:text-white transition-colors duration-200">
       {/* Header */}
       <Header
         onHomeClick={handleHomeClick}
         theme={theme}
         onToggleTheme={handleToggleTheme}
+        categories={categories}
+        selectedCategory={params.category || 'all'}
+        onSelectCategory={handleSelectCategory}
+        onToggleSearch={() => {
+          if (currentStorySlug || isSitemapView) {
+            handleHomeClick();
+            setIsSearchOpen(true);
+          } else {
+            setIsSearchOpen((prev) => !prev);
+          }
+        }}
+        isSearchOpen={isSearchOpen}
       />
 
       {/* Main Content Area */}
@@ -259,10 +272,11 @@ export default function App() {
           /* Reader View */
           <Suspense
             fallback={
-              <div className="max-w-4xl mx-auto px-4 py-16 text-center animate-pulse space-y-4">
-                <div className="h-8 bg-slate-200 dark:bg-slate-800 rounded-lg w-2/3 mx-auto" />
-                <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded-lg w-1/3 mx-auto" />
-                <div className="h-64 bg-slate-200 dark:bg-slate-800 rounded-2xl" />
+              <div className="max-w-2xl mx-auto px-4 py-16 text-center animate-pulse space-y-4">
+                <div className="h-6 bg-slate-200 dark:bg-slate-800 rounded-md w-24 mx-auto" />
+                <div className="h-8 bg-slate-200 dark:bg-slate-800 rounded-lg w-3/4 mx-auto" />
+                <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded-lg w-1/2 mx-auto" />
+                <div className="h-64 bg-slate-200 dark:bg-slate-800 rounded-xl mt-6" />
               </div>
             }
           >
@@ -289,7 +303,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={handleHomeClick}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-semibold cursor-pointer"
+                  className="px-4 py-2 bg-rose-600 text-white rounded-xl text-sm font-semibold cursor-pointer"
                 >
                   මුල් පිටුවට යන්න
                 </button>
@@ -326,6 +340,8 @@ export default function App() {
             }}
             onReadStory={handleReadStory}
             isLoading={isStoriesLoading}
+            isSearchOpen={isSearchOpen}
+            onCloseSearch={() => setIsSearchOpen(false)}
           />
         )}
       </main>

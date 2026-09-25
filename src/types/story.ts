@@ -27,7 +27,7 @@ export interface Story {
   updatedDate: string;
   createdAt?: any;
   updatedAt?: any;
-  views: number;
+  views?: number;
   featured: boolean;
   published: boolean;
   metaTitle?: string;

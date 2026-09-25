@@ -61,7 +61,7 @@ export const SitemapPage: React.FC<SitemapPageProps> = ({
             <button
               type="button"
               onClick={onNavigateHome}
-              className="inline-flex items-center gap-2 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline mb-2 cursor-pointer"
+              className="inline-flex items-center gap-2 text-xs font-bold text-rose-600 dark:text-rose-400 hover:underline mb-2 cursor-pointer"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>මුල් පිටුවට</span>
@@ -79,7 +79,7 @@ export const SitemapPage: React.FC<SitemapPageProps> = ({
               href="/sitemap.xml"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50 dark:border-indigo-800/50 hover:bg-indigo-100 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-50 dark:bg-rose-950/80 text-rose-600 dark:text-rose-400 border border-rose-200/50 dark:border-rose-800/50 hover:bg-rose-100 transition-colors"
             >
               <Globe className="w-3.5 h-3.5" />
               <span>XML Sitemap</span>
@@ -117,18 +117,18 @@ export const SitemapPage: React.FC<SitemapPageProps> = ({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="සූචිය තුළ සොයන්න..."
-            className="w-full pl-9 pr-4 py-2 rounded-xl text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:outline-hidden focus:border-indigo-500 text-slate-900 dark:text-white"
+            className="w-full pl-9 pr-4 py-2 rounded-xl text-sm bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 focus:outline-hidden focus:border-rose-500 text-slate-900 dark:text-white"
           />
         </div>
 
-        <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto scrollbar-none py-1">
+        <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto scrollbar-none py-1">
           <button
             type="button"
             onClick={() => setSelectedCat('all')}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap cursor-pointer ${
               selectedCat === 'all'
-                ? 'bg-indigo-600 text-white'
-                : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400'
+                ? 'bg-rose-600 text-white'
+                : 'bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 text-slate-600 dark:text-slate-400'
             }`}
           >
             සියල්ල ({stories.length})
@@ -142,8 +142,8 @@ export const SitemapPage: React.FC<SitemapPageProps> = ({
                 onClick={() => setSelectedCat(c.slug)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap cursor-pointer ${
                   selectedCat === c.slug
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400'
+                    ? 'bg-rose-600 text-white'
+                    : 'bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 text-slate-600 dark:text-slate-400'
                 }`}
               >
                 {c.name}
@@ -153,7 +153,7 @@ export const SitemapPage: React.FC<SitemapPageProps> = ({
       </div>
 
       {/* Directory Stories List */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-xs">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-xl overflow-hidden shadow-xs">
         <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500 font-semibold uppercase tracking-wider">
           <span>කතා නාමාවලිය ({filteredStories.length})</span>
           <span>වර්ගීකරණය</span>

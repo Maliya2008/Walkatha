@@ -8,11 +8,18 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  Eye,
   BookOpen,
 } from 'lucide-react';
 import { Story, ReadingTheme, FontSize } from '../../types/story';
 import { StoryCard } from './StoryCard';
 import { getCategoryDisplayName } from '../../utils/categoryTaxonomy';
+import {
+  formatSinhalaDate,
+  formatSinhalaTimeAgo,
+  formatViewsCount,
+  cleanCategoryBadgeName,
+} from '../../utils/formatters';
 
 interface StoryReaderProps {
   story: Story;
@@ -40,7 +47,7 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
   const [copied, setCopied] = useState(false);
   const [scrollProgress, setScrollProgress] = useState(0);
 
-  // Calculate scroll reading progress
+  // Calculate reading progress percentage
   useEffect(() => {
     const handleScroll = () => {
       const totalHeight = document.documentElement.scrollHeight - window.innerHeight;
@@ -54,7 +61,7 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Split story content into clean paragraphs
+  // Split story into clean paragraphs
   const paragraphs = useMemo(() => {
     const raw = story.fullContent || story.content || '';
     return raw
@@ -63,16 +70,10 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
       .filter((p) => p.length > 0);
   }, [story]);
 
-  const formattedDate = new Date(story.uploadDate || story.uploadedDate || story.createdAt || 0).toLocaleDateString(
-    'si-LK',
-    {
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric',
-    }
-  );
-
+  const dateFormatted = formatSinhalaDate(story.uploadDate || story.uploadedDate || story.createdAt);
   const readingTime = story.readingTime || Math.max(3, Math.ceil((story.fullContent || story.content || '').length / 450));
+  const viewsDisplay = formatViewsCount(story.views);
+  const categoryName = cleanCategoryBadgeName(story.categoryName || getCategoryDisplayName(story.category));
 
   const handleCopyLink = () => {
     try {
@@ -89,44 +90,47 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
     window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
   };
 
-  // Font size styling
-  const fontSizeClass = {
-    sm: 'text-base sm:text-lg leading-relaxed sm:leading-loose',
-    md: 'text-lg sm:text-xl leading-relaxed sm:leading-loose',
-    lg: 'text-xl sm:text-2xl leading-relaxed sm:leading-loose',
-    xl: 'text-2xl sm:text-3xl leading-loose',
-  }[fontSize] || 'text-lg sm:text-xl leading-relaxed sm:leading-loose';
+  // Font size styling classes tailored for Sinhala readability
+  const fontClass = {
+    sm: 'text-[16px] sm:text-[17px] leading-[1.8] sm:leading-[1.9]',
+    md: 'text-[18px] sm:text-[19px] leading-[1.85] sm:leading-[1.95]',
+    lg: 'text-[20px] sm:text-[21px] leading-[1.9] sm:leading-[2.0]',
+    xl: 'text-[22px] sm:text-[24px] leading-[1.95] sm:leading-[2.05]',
+  }[fontSize] || 'text-[18px] sm:text-[19px] leading-[1.85] sm:leading-[1.95]';
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors">
       {/* Top Reading Progress Bar */}
       <div className="fixed top-0 left-0 right-0 h-1 bg-slate-200 dark:bg-slate-800 z-50">
         <div
-          className="h-full bg-indigo-600 dark:bg-indigo-500 transition-all duration-150"
+          className="h-full bg-rose-600 transition-all duration-150"
           style={{ width: `${scrollProgress}%` }}
         />
       </div>
 
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-10 space-y-8">
-        {/* Navigation Breadcrumbs & Back Button */}
-        <div className="flex items-center justify-between gap-4">
+      {/* Narrow reading column */}
+      <div className="max-w-2xl mx-auto px-4 py-4 sm:py-6 space-y-6">
+        {/* Top Controls: Back button & Reading Tools */}
+        <div className="flex items-center justify-between gap-3 pt-2">
           <button
             type="button"
             onClick={onBack}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-semibold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer shadow-xs"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer shadow-xs"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>නැවත මුල් පිටුවට</span>
+            <span>මුල් පිටුවට</span>
           </button>
 
-          {/* Reading Font Size Controls */}
-          <div className="flex items-center gap-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1 rounded-xl shadow-xs">
-            <span className="text-xs font-semibold px-2 text-slate-400">අකුරු:</span>
+          {/* Reading Font Size Adjustment */}
+          <div className="flex items-center gap-1 bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-1 rounded-lg shadow-xs text-xs">
+            <span className="px-1 text-[11px] font-medium text-slate-400">අකුරු:</span>
             <button
               type="button"
               onClick={() => onFontSizeChange('sm')}
-              className={`px-2 py-1 rounded-lg text-xs font-bold ${
-                fontSize === 'sm' ? 'bg-indigo-600 text-white' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+              className={`px-2 py-0.5 rounded font-semibold cursor-pointer ${
+                fontSize === 'sm'
+                  ? 'bg-rose-600 text-white'
+                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
               }`}
             >
               A-
@@ -134,8 +138,10 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
             <button
               type="button"
               onClick={() => onFontSizeChange('md')}
-              className={`px-2 py-1 rounded-lg text-xs font-bold ${
-                fontSize === 'md' ? 'bg-indigo-600 text-white' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+              className={`px-2 py-0.5 rounded font-semibold cursor-pointer ${
+                fontSize === 'md'
+                  ? 'bg-rose-600 text-white'
+                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
               }`}
             >
               A
@@ -143,8 +149,10 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
             <button
               type="button"
               onClick={() => onFontSizeChange('lg')}
-              className={`px-2 py-1 rounded-lg text-xs font-bold ${
-                fontSize === 'lg' ? 'bg-indigo-600 text-white' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+              className={`px-2 py-0.5 rounded font-semibold cursor-pointer ${
+                fontSize === 'lg'
+                  ? 'bg-rose-600 text-white'
+                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
               }`}
             >
               A+
@@ -153,95 +161,113 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
         </div>
 
         {/* Story Article Container */}
-        <article className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 sm:p-10 shadow-xs">
+        <article className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-xl p-5 sm:p-7 shadow-xs">
           {/* Header Metadata */}
-          <header className="border-b border-slate-100 dark:border-slate-800/80 pb-6 space-y-4">
-            <div className="flex items-center gap-2">
-              <span className="px-3 py-1 rounded-full text-xs font-bold bg-indigo-50 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50 dark:border-indigo-800/50">
-                {getCategoryDisplayName(story.category)}
+          <header className="border-b border-slate-100 dark:border-slate-800/80 pb-5 space-y-3">
+            {/* 1. Category */}
+            <div>
+              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 border border-rose-200/50 dark:border-rose-900/40 inline-block">
+                {categoryName}
               </span>
             </div>
 
-            <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-slate-900 dark:text-white leading-tight">
+            {/* 2. Story Title */}
+            <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-slate-900 dark:text-white leading-snug break-words">
               {story.title}
             </h1>
 
-            <div className="flex flex-wrap items-center justify-between gap-4 text-xs sm:text-sm text-slate-500 dark:text-slate-400 pt-2">
-              <div className="flex items-center gap-4">
-                <span className="flex items-center gap-1.5">
-                  <Calendar className="w-4 h-4" />
-                  <span>{formattedDate}</span>
+            {/* 3. Updated Date / Reading Duration / Views & Share */}
+            <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400 pt-1">
+              <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
+                <span className="flex items-center gap-1 font-medium">
+                  <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                  <span>{dateFormatted}</span>
                 </span>
-                <span className="flex items-center gap-1.5">
-                  <Clock className="w-4 h-4" />
-                  <span>කියවීමේ කාලය විනාඩි {readingTime}</span>
+                <span className="flex items-center gap-1 font-medium">
+                  <Clock className="w-3.5 h-3.5 text-slate-400" />
+                  <span>විනාඩි {readingTime} කියවීමක්</span>
                 </span>
+                {viewsDisplay && (
+                  <span className="flex items-center gap-1 font-medium">
+                    <Eye className="w-3.5 h-3.5 text-slate-400" />
+                    <span>{viewsDisplay}</span>
+                  </span>
+                )}
               </div>
 
-              {/* Share Buttons */}
-              <div className="flex items-center gap-2">
+              {/* Share Controls */}
+              <div className="flex items-center gap-1.5">
                 <button
                   type="button"
                   onClick={handleCopyLink}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
-                  title="Copy link"
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
+                  title="ලින්ක් එක පිටපත් කරන්න"
                 >
-                  {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copied ? 'පිටපත් විය!' : 'ලින්ක් එක ගන්න'}</span>
+                  {copied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                  <span>{copied ? 'පිටපත් විය' : 'ලින්ක් එක'}</span>
                 </button>
                 <button
                   type="button"
                   onClick={handleShareWhatsApp}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors cursor-pointer"
-                  title="WhatsApp share"
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors cursor-pointer"
+                  title="WhatsApp වෙත යවන්න"
                 >
-                  <Share2 className="w-3.5 h-3.5" />
+                  <Share2 className="w-3 h-3" />
                   <span>WhatsApp</span>
                 </button>
               </div>
             </div>
           </header>
 
-          {/* Cover Photo (Optional Banner) */}
+          {/* Optional Story Cover Image */}
           {story.coverImage && (
-            <div className="my-6 rounded-2xl overflow-hidden aspect-[16/9] max-h-96 bg-slate-100 dark:bg-slate-800">
+            <div className="my-5 rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-800">
               <img
                 src={story.coverImage}
                 alt={story.title}
-                className="w-full h-full object-cover"
+                className="w-full max-h-80 object-cover"
               />
             </div>
           )}
 
-          {/* Story Body Paragraphs */}
-          <div className={`mt-8 text-slate-800 dark:text-slate-200 font-sans space-y-6 ${fontSizeClass}`}>
+          {/* Story Introduction / Description if available */}
+          {(story.shortDescription || story.description) && (
+            <div className="my-5 p-3.5 bg-slate-50 dark:bg-slate-950/60 rounded-lg border-l-4 border-rose-500 text-sm sm:text-base text-slate-600 dark:text-slate-300 italic leading-relaxed">
+              {story.shortDescription || story.description}
+            </div>
+          )}
+
+          {/* Distraction-Free Story Body */}
+          <div className={`mt-6 text-slate-800 dark:text-slate-200 space-y-5 ${fontClass}`}>
             {paragraphs.map((para, idx) => (
-              <p key={idx} className="indent-4 sm:indent-8">
+              <p key={idx} className="break-words">
                 {para}
               </p>
             ))}
           </div>
 
           {/* Story End Marker */}
-          <div className="mt-12 pt-6 border-t border-slate-100 dark:border-slate-800 text-center">
-            <span className="text-sm font-semibold text-slate-400 dark:text-slate-500 tracking-widest uppercase">
+          <div className="mt-10 pt-6 border-t border-slate-100 dark:border-slate-800/80 text-center">
+            <span className="text-xs sm:text-sm font-semibold text-slate-400 dark:text-slate-500 tracking-wider">
               ~ කතාව නිමි ~
             </span>
           </div>
         </article>
 
         {/* Previous & Next Story Navigation */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {prevStory ? (
             <button
               type="button"
               onClick={() => onSelectStory(prevStory.slug)}
-              className="flex items-center gap-3 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-left hover:border-indigo-500/50 transition-all cursor-pointer group shadow-xs"
+              className="flex items-center gap-3 p-3.5 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 text-left hover:border-slate-300 dark:hover:border-slate-700 transition-colors cursor-pointer group shadow-xs"
             >
-              <ChevronLeft className="w-6 h-6 text-slate-400 group-hover:text-indigo-600 transition-colors shrink-0" />
+              <ChevronLeft className="w-5 h-5 text-slate-400 group-hover:text-rose-600 transition-colors shrink-0" />
               <div className="overflow-hidden">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">කලින් කතාව</span>
-                <span className="text-sm font-bold text-slate-900 dark:text-white truncate block group-hover:text-indigo-600">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  කලින් කතාව
+                </span>
+                <span className="text-sm font-bold text-slate-900 dark:text-white truncate block group-hover:text-rose-600">
                   {prevStory.title}
                 </span>
               </div>
@@ -252,30 +278,32 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
             <button
               type="button"
               onClick={() => onSelectStory(nextStory.slug)}
-              className="flex items-center justify-between gap-3 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-right hover:border-indigo-500/50 transition-all cursor-pointer group shadow-xs sm:col-start-2"
+              className="flex items-center justify-between gap-3 p-3.5 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 text-right hover:border-slate-300 dark:hover:border-slate-700 transition-colors cursor-pointer group shadow-xs sm:col-start-2"
             >
               <div className="overflow-hidden text-right w-full">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">ඊළඟ කතාව</span>
-                <span className="text-sm font-bold text-slate-900 dark:text-white truncate block group-hover:text-indigo-600">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  ඊළඟ කතාව
+                </span>
+                <span className="text-sm font-bold text-slate-900 dark:text-white truncate block group-hover:text-rose-600">
                   {nextStory.title}
                 </span>
               </div>
-              <ChevronRight className="w-6 h-6 text-slate-400 group-hover:text-indigo-600 transition-colors shrink-0" />
+              <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-rose-600 transition-colors shrink-0" />
             </button>
           ) : null}
         </div>
 
-        {/* 4 Related Stories Gallery */}
+        {/* Related Stories */}
         {relatedStories && relatedStories.length > 0 && (
-          <div className="space-y-4 pt-4">
+          <div className="space-y-3 pt-2">
             <div className="flex items-center gap-2">
-              <BookOpen className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-              <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">
-                තවත් රසවත් කතා (Related Stories)
+              <BookOpen className="w-4 h-4 text-rose-600 dark:text-rose-400" />
+              <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                තවත් රසවත් කතා
               </h2>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {relatedStories.map((relStory) => (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {relatedStories.slice(0, 4).map((relStory) => (
                 <StoryCard
                   key={relStory.id}
                   story={relStory}

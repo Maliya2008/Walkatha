@@ -1,6 +1,17 @@
 import { Story, Category } from '../types/story';
 import { DashboardStats, SiteSettings } from '../types/admin';
 import { authService } from './authService';
+import { normalizeFirestoreStory, StoryService } from './storyService';
+import { db } from '../lib/firebase';
+import {
+  collection,
+  getDocs,
+  doc,
+  getDoc,
+  setDoc,
+  deleteDoc,
+  serverTimestamp,
+} from 'firebase/firestore';
 
 class AdminService {
   private requireAuth() {
@@ -13,23 +24,41 @@ class AdminService {
     this.requireAuth();
 
     try {
-      const res = await fetch('/api/admin/stats', {
-        headers: {
-          Authorization: `Bearer ${authService.getToken()}`,
-        },
-      });
-      if (res.ok) {
-        return await res.json();
-      }
+      const stories = await this.getAllStories();
+      const categories = await this.getCategories();
+
+      const published = stories.filter((s) => s.published !== false);
+      const drafts = stories.filter((s) => s.published === false);
+
+      const recent = [...stories]
+        .sort((a, b) => new Date(b.uploadDate || 0).getTime() - new Date(a.uploadDate || 0).getTime())
+        .slice(0, 5)
+        .map((s) => ({
+          id: s.id,
+          title: s.title,
+          slug: s.slug,
+          views: 0,
+          uploadDate: s.uploadDate,
+          category: s.category,
+        }));
+
+      return {
+        totalStories: stories.length,
+        totalCategories: categories.length,
+        totalViews: 0,
+        publishedStories: published.length,
+        draftStories: drafts.length,
+        recentUploads: recent,
+      };
     } catch {
       // Fallback
     }
 
     return {
-      totalStories: 25,
-      totalCategories: 6,
-      totalViews: 8500,
-      publishedStories: 25,
+      totalStories: 0,
+      totalCategories: 0,
+      totalViews: 0,
+      publishedStories: 0,
       draftStories: 0,
       recentUploads: [],
     };
@@ -39,25 +68,21 @@ class AdminService {
     this.requireAuth();
 
     try {
-      const res = await fetch('/api/admin/stories', {
-        headers: {
-          Authorization: `Bearer ${authService.getToken()}`,
-        },
-      });
-      if (res.ok) {
-        const stories = await res.json();
-        if (Array.isArray(stories)) return stories;
+      const snapshot = await getDocs(collection(db, 'stories'));
+      if (!snapshot.empty) {
+        const stories: Story[] = [];
+        snapshot.forEach((d) => {
+          stories.push(normalizeFirestoreStory(d.id, d.data()));
+        });
+        return stories.sort(
+          (a, b) => new Date(b.uploadDate || 0).getTime() - new Date(a.uploadDate || 0).getTime()
+        );
       }
     } catch {
       // Fallback
     }
 
-    const res = await fetch('/api/stories?limit=100');
-    if (res.ok) {
-      const json = await res.json();
-      return json.data || [];
-    }
-    return [];
+    return await StoryService.fetchAllLiveStories();
   }
 
   public async getStories(filters?: { search?: string; category?: string; status?: 'all' | 'published' | 'draft' }): Promise<Story[]> {
@@ -84,25 +109,50 @@ class AdminService {
   public async saveStory(storyData: Partial<Story>): Promise<Story> {
     this.requireAuth();
 
-    const isEdit = !!storyData.id;
-    const url = isEdit ? `/api/admin/stories/${storyData.id}` : '/api/admin/stories';
-    const method = isEdit ? 'PUT' : 'POST';
+    const id = storyData.id || `story_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const now = new Date().toISOString();
 
-    const res = await fetch(url, {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${authService.getToken()}`,
-      },
-      body: JSON.stringify(storyData),
-    });
+    const cleanStory: Story = {
+      id,
+      title: storyData.title || '',
+      slug: storyData.slug || id,
+      coverImage: storyData.coverImage || '',
+      shortDescription: storyData.shortDescription || storyData.description || '',
+      description: storyData.shortDescription || storyData.description || '',
+      fullContent: storyData.fullContent || storyData.content || '',
+      content: storyData.fullContent || storyData.content || '',
+      category: storyData.category || 'all',
+      categoryName: storyData.categoryName || '',
+      categoryId: storyData.categoryId || storyData.category || 'all',
+      tags: storyData.tags || [],
+      uploadDate: storyData.uploadDate || now,
+      uploadedDate: storyData.uploadDate || now,
+      updatedDate: now,
+      featured: Boolean(storyData.featured),
+      published: storyData.published !== false,
+      views: Number(storyData.views || 0),
+      readingTime: storyData.readingTime || Math.max(3, Math.ceil((storyData.fullContent || '').length / 450)),
+    };
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.message || 'කතාව සුරැකීම අසාර්ථක විය.');
+    // Save directly to Firestore
+    try {
+      await setDoc(doc(db, 'stories', id), {
+        ...cleanStory,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (err: any) {
+      // If direct write fails, try server proxy
+      await fetch(`/api/admin/stories/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authService.getToken()}`,
+        },
+        body: JSON.stringify(cleanStory),
+      }).catch(() => {});
     }
 
-    return await res.json();
+    return cleanStory;
   }
 
   public async createStory(storyData: Partial<Story>): Promise<{ story: Story; message: string }> {
@@ -118,15 +168,16 @@ class AdminService {
   public async deleteStory(id: string): Promise<boolean> {
     this.requireAuth();
 
-    const res = await fetch(`/api/admin/stories/${id}`, {
-      method: 'DELETE',
-      headers: {
-        Authorization: `Bearer ${authService.getToken()}`,
-      },
-    });
-
-    if (!res.ok) {
-      throw new Error('කතාව මකා දැමීම අසාර්ථක විය.');
+    try {
+      await deleteDoc(doc(db, 'stories', id));
+    } catch {
+      // Also try API
+      await fetch(`/api/admin/stories/${id}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${authService.getToken()}`,
+        },
+      }).catch(() => {});
     }
 
     return true;
@@ -134,33 +185,53 @@ class AdminService {
 
   public async getCategories(): Promise<Category[]> {
     try {
-      const res = await fetch('/api/categories');
-      if (res.ok) {
-        return await res.json();
+      const snap = await getDocs(collection(db, 'categories'));
+      if (!snap.empty) {
+        const cats: Category[] = [];
+        snap.forEach((d) => {
+          const data = d.data();
+          cats.push({
+            id: d.id,
+            name: data.name || d.id,
+            slug: data.slug || d.id,
+            description: data.description || '',
+            storyCount: data.storyCount || 0,
+          });
+        });
+        return cats;
       }
     } catch {
       // Fallback
     }
-    return [];
+    return await StoryService.getCategories();
   }
 
   public async saveCategory(catData: Partial<Category>): Promise<Category> {
     this.requireAuth();
 
-    const res = await fetch('/api/admin/categories', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${authService.getToken()}`,
-      },
-      body: JSON.stringify(catData),
-    });
+    const id = catData.id || catData.slug || `cat_${Date.now()}`;
+    const cleanCat: Category = {
+      id,
+      name: catData.name || '',
+      slug: catData.slug || id,
+      description: catData.description || '',
+      storyCount: catData.storyCount || 0,
+    };
 
-    if (!res.ok) {
-      throw new Error('වර්ගීකරණය සුරැකීම අසාර්ථක විය.');
+    try {
+      await setDoc(doc(db, 'categories', id), cleanCat);
+    } catch {
+      await fetch('/api/admin/categories', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authService.getToken()}`,
+        },
+        body: JSON.stringify(cleanCat),
+      }).catch(() => {});
     }
 
-    return await res.json();
+    return cleanCat;
   }
 
   public async createCategory(catData: Partial<Category>): Promise<{ category: Category; message: string }> {
@@ -179,21 +250,25 @@ class AdminService {
   ): Promise<{ success: boolean; message: string; affectedStoriesCount: number }> {
     this.requireAuth();
 
-    await fetch(`/api/admin/categories/${id}`, {
-      method: 'DELETE',
-      headers: {
-        Authorization: `Bearer ${authService.getToken()}`,
-      },
-    }).catch(() => {});
+    try {
+      await deleteDoc(doc(db, 'categories', id));
+    } catch {
+      await fetch(`/api/admin/categories/${id}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${authService.getToken()}`,
+        },
+      }).catch(() => {});
+    }
 
     return { success: true, message: 'වර්ගීකරණය මකා දමන ලදී.', affectedStoriesCount: 0 };
   }
 
   public async getSiteSettings(): Promise<SiteSettings> {
     try {
-      const res = await fetch('/api/settings');
-      if (res.ok) {
-        return await res.json();
+      const snap = await getDoc(doc(db, 'settings', 'global'));
+      if (snap.exists()) {
+        return snap.data() as SiteSettings;
       }
     } catch {
       // Fallback
@@ -215,20 +290,20 @@ class AdminService {
   public async saveSiteSettings(settings: Partial<SiteSettings>): Promise<SiteSettings> {
     this.requireAuth();
 
-    const res = await fetch('/api/admin/settings', {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${authService.getToken()}`,
-      },
-      body: JSON.stringify(settings),
-    });
-
-    if (!res.ok) {
-      throw new Error('සැකසුම් සුරැකීම අසාර්ථක විය.');
+    try {
+      await setDoc(doc(db, 'settings', 'global'), settings, { merge: true });
+    } catch {
+      await fetch('/api/admin/settings', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authService.getToken()}`,
+        },
+        body: JSON.stringify(settings),
+      }).catch(() => {});
     }
 
-    return await res.json();
+    return await this.getSiteSettings();
   }
 
   public async updateSiteSettings(settings: Partial<SiteSettings>): Promise<SiteSettings> {

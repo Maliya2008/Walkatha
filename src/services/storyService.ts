@@ -1,12 +1,12 @@
 import { Category, PaginatedResponse, Story, StoryFilterParams } from '../types/story';
 import { INITIAL_STORIES, INITIAL_CATEGORIES } from '../data/seedStories';
 import {
-  normalizeCategorySlug,
   storyMatchesCategory,
   getStoryCanonicalCategory,
+  getCategoryDisplayName,
 } from '../utils/categoryTaxonomy';
-
-const STORAGE_CACHE_KEY = 'walkathawa_cached_stories_v4';
+import { db } from '../lib/firebase';
+import { collection, getDocs, doc, getDoc, query, where } from 'firebase/firestore';
 
 function matchesSearchQuery(s: Story, queryText: string): boolean {
   if (!queryText) return true;
@@ -26,8 +26,103 @@ function matchesSearchQuery(s: Story, queryText: string): boolean {
   });
 }
 
+export function normalizeFirestoreStory(id: string, data: any): Story {
+  let uploadDate = new Date().toISOString();
+  if (data.uploadDate) {
+    if (typeof data.uploadDate.toDate === 'function') {
+      uploadDate = data.uploadDate.toDate().toISOString();
+    } else if (typeof data.uploadDate === 'string') {
+      uploadDate = data.uploadDate;
+    }
+  } else if (data.createdAt) {
+    if (typeof data.createdAt.toDate === 'function') {
+      uploadDate = data.createdAt.toDate().toISOString();
+    } else if (typeof data.createdAt === 'string') {
+      uploadDate = data.createdAt;
+    }
+  } else if (data.uploadedDate) {
+    if (typeof data.uploadedDate.toDate === 'function') {
+      uploadDate = data.uploadedDate.toDate().toISOString();
+    } else if (typeof data.uploadedDate === 'string') {
+      uploadDate = data.uploadedDate;
+    }
+  }
+
+  const fullContent = data.fullContent || data.content || data.body || '';
+  const shortDescription = data.shortDescription || data.description || data.synopsis || '';
+  const slug = data.slug || id;
+
+  return {
+    id: id || data.id || slug,
+    title: data.title || 'Untitled Story',
+    slug,
+    coverImage: data.coverImage || data.image || data.thumbnail || '',
+    shortDescription,
+    description: shortDescription,
+    fullContent,
+    content: fullContent,
+    category: data.category || 'all',
+    categoryName: data.categoryName || getCategoryDisplayName(data.category || 'all'),
+    categoryId: data.categoryId || data.category,
+    tags: Array.isArray(data.tags) ? data.tags : [],
+    uploadDate,
+    uploadedDate: uploadDate,
+    updatedDate: data.updatedDate || uploadDate,
+    featured: Boolean(data.featured),
+    published: data.published !== false,
+    views: Number(data.views || 0),
+    readingTime: data.readingTime || Math.max(3, Math.ceil(fullContent.length / 450)),
+  };
+}
+
 export class StoryService {
   private static memoryStories: Story[] = [...INITIAL_STORIES];
+  private static firestoreLoaded = false;
+
+  /**
+   * Fetches all live stories directly from Firestore ('stories' or 'posts' collection)
+   */
+  public static async fetchAllLiveStories(): Promise<Story[]> {
+    try {
+      // 1. Try 'stories' collection
+      let snapshot = await getDocs(collection(db, 'stories'));
+
+      // 2. Fallback to 'posts' collection if 'stories' is empty
+      if (snapshot.empty) {
+        snapshot = await getDocs(collection(db, 'posts'));
+      }
+
+      if (!snapshot.empty) {
+        const firestoreStories: Story[] = [];
+        snapshot.forEach((docSnap) => {
+          firestoreStories.push(normalizeFirestoreStory(docSnap.id, docSnap.data()));
+        });
+        if (firestoreStories.length > 0) {
+          this.memoryStories = firestoreStories;
+          this.firestoreLoaded = true;
+          return firestoreStories;
+        }
+      }
+    } catch (err) {
+      console.warn('Firestore fetch error:', err);
+    }
+
+    // Fallback to local database endpoint
+    try {
+      const res = await fetch('/api/stories?limit=200');
+      if (res.ok) {
+        const json = await res.json();
+        if (json && Array.isArray(json.data) && json.data.length > 0) {
+          this.memoryStories = json.data;
+          return json.data;
+        }
+      }
+    } catch {
+      // Fallback
+    }
+
+    return this.memoryStories;
+  }
 
   public static async getStories(params: StoryFilterParams = {}): Promise<PaginatedResponse<Story>> {
     const page = Math.max(1, params.page || 1);
@@ -36,36 +131,8 @@ export class StoryService {
     const search = params.search || '';
     const sortBy = params.sortBy || 'latest';
 
-    // Attempt to fetch from backend API
-    try {
-      const urlParams = new URLSearchParams();
-      urlParams.set('page', String(page));
-      urlParams.set('limit', String(limit));
-      if (category && category !== 'all') urlParams.set('category', category);
-      if (search) urlParams.set('search', search);
-      if (sortBy) urlParams.set('sortBy', sortBy);
-
-      const res = await fetch(`/api/stories?${urlParams.toString()}`);
-      if (res.ok) {
-        const json = await res.json();
-        if (json && Array.isArray(json.data) && json.data.length > 0) {
-          // Cache in memory
-          return {
-            data: json.data,
-            total: json.total,
-            page: json.page,
-            totalPages: json.totalPages,
-            hasMore: json.page < json.totalPages,
-            limit: json.limit || limit,
-          };
-        }
-      }
-    } catch {
-      // Fallback to local memory / seed data
-    }
-
-    // Fallback: local filtering
-    let all = [...this.memoryStories].filter((s) => s.published !== false);
+    const allLive = await this.fetchAllLiveStories();
+    let all = allLive.filter((s) => s.published !== false);
 
     if (category && category !== 'all') {
       all = all.filter((s) => storyMatchesCategory(s, category));
@@ -101,72 +168,97 @@ export class StoryService {
     if (!slug) return null;
     const cleanSlug = decodeURIComponent(slug).toLowerCase().trim();
 
+    // Check memory first
+    const cached = this.memoryStories.find(
+      (s) => (s.slug || '').toLowerCase() === cleanSlug || s.id === cleanSlug
+    );
+    if (cached && this.firestoreLoaded) {
+      return cached;
+    }
+
+    // Direct Firestore queries
     try {
-      const res = await fetch(`/api/stories/${encodeURIComponent(cleanSlug)}`);
-      if (res.ok) {
-        const story = await res.json();
-        if (story && story.id) {
-          return story;
-        }
+      const docSnap = await getDoc(doc(db, 'stories', cleanSlug));
+      if (docSnap.exists()) {
+        return normalizeFirestoreStory(docSnap.id, docSnap.data());
+      }
+
+      const q = query(collection(db, 'stories'), where('slug', '==', cleanSlug));
+      const qSnap = await getDocs(q);
+      if (!qSnap.empty) {
+        const firstDoc = qSnap.docs[0];
+        return normalizeFirestoreStory(firstDoc.id, firstDoc.data());
+      }
+
+      // Check posts collection
+      const postSnap = await getDoc(doc(db, 'posts', cleanSlug));
+      if (postSnap.exists()) {
+        return normalizeFirestoreStory(postSnap.id, postSnap.data());
       }
     } catch {
       // Fallback
     }
 
-    // Local fallback
-    const found = this.memoryStories.find(
+    // Reload all live stories and try matching
+    const all = await this.fetchAllLiveStories();
+    const found = all.find(
       (s) => (s.slug || '').toLowerCase() === cleanSlug || s.id === cleanSlug
     );
-    if (found) {
-      found.views = (found.views || 0) + 1;
-      return found;
-    }
+    if (found) return found;
 
     return null;
   }
 
   public static async getRelatedStories(currentStory: Story, limit = 4): Promise<Story[]> {
     if (!currentStory) return [];
-    try {
-      const res = await fetch(`/api/stories/${encodeURIComponent(currentStory.slug)}/related?limit=${limit}`);
-      if (res.ok) {
-        const json = await res.json();
-        if (Array.isArray(json) && json.length > 0) {
-          return json;
-        }
-      }
-    } catch {
-      // Fallback
-    }
-
+    const all = this.memoryStories.length > 0 ? this.memoryStories : await this.fetchAllLiveStories();
     const currentCat = getStoryCanonicalCategory(currentStory);
-    const related = this.memoryStories.filter(
-      (s) => s.id !== currentStory.id && storyMatchesCategory(s, currentCat)
+    const related = all.filter(
+      (s) => s.id !== currentStory.id && s.published !== false && storyMatchesCategory(s, currentCat)
     );
 
     if (related.length >= limit) {
       return related.slice(0, limit);
     }
 
-    // Fill with other stories
-    const others = this.memoryStories.filter(
-      (s) => s.id !== currentStory.id && !related.some((r) => r.id === s.id)
+    const others = all.filter(
+      (s) => s.id !== currentStory.id && s.published !== false && !related.some((r) => r.id === s.id)
     );
     return [...related, ...others].slice(0, limit);
   }
 
   public static async getCategories(): Promise<Category[]> {
     try {
-      const res = await fetch('/api/categories');
-      if (res.ok) {
-        const cats = await res.json();
-        if (Array.isArray(cats) && cats.length > 0) {
+      const catRef = collection(db, 'categories');
+      const snap = await getDocs(catRef);
+      if (!snap.empty) {
+        const cats: Category[] = [];
+        snap.forEach((d) => {
+          const data = d.data();
+          cats.push({
+            id: d.id,
+            name: data.name || d.id,
+            slug: data.slug || d.id,
+            description: data.description || '',
+            storyCount: data.storyCount || 0,
+          });
+        });
+        if (cats.length > 0) {
+          if (!cats.some((c) => c.slug === 'all')) {
+            cats.unshift({
+              id: 'all',
+              name: 'සියලුම කතා (All Stories)',
+              slug: 'all',
+              description: 'සියලුම අලුත් සිංහල කතා සහ රසවත් කතා එකතුව',
+            });
+          }
           return cats;
         }
       }
     } catch {
       // Fallback
     }
+
     return INITIAL_CATEGORIES;
   }
 }

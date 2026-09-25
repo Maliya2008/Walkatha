@@ -1,25 +1,11 @@
-import { initializeApp, getApps } from 'firebase/app';
+import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import {
-  initializeFirestore,
-  getFirestore,
-  persistentLocalCache,
-  persistentMultipleTabManager,
-  setLogLevel,
-  Firestore,
-} from 'firebase/firestore';
+import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { getAnalytics, isSupported } from 'firebase/analytics';
 
-// Suppress transient network retry / offline mode connection warnings from cluttering console
-try {
-  setLogLevel('error');
-} catch {
-  // Ignore in environments where setLogLevel is restricted
-}
-
 // Your web app's Firebase configuration
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: "AIzaSyDWIC_GSMIOliCrhHKPgZgNUAZKUZ96nh4",
   authDomain: "walkathawa-93f80.firebaseapp.com",
   projectId: "walkathawa-93f80",
@@ -29,36 +15,20 @@ const firebaseConfig = {
   measurementId: "G-E0YMRGV1SK"
 };
 
-// Initialize Firebase
-export const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+// Initialize Firebase safely
+export const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 export const auth = getAuth(app);
-
-// Initialize Firestore with HTTP long-polling to prevent WebSocket connection timeouts / 10s hang in iframes & proxies
-function initFirestoreInstance(): Firestore {
-  try {
-    return initializeFirestore(app, {
-      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
-      experimentalForceLongPolling: true,
-    });
-  } catch {
-    try {
-      return initializeFirestore(app, {
-        experimentalForceLongPolling: true,
-      });
-    } catch {
-      return getFirestore(app);
-    }
-  }
-}
-
-export const db: Firestore = initFirestoreInstance();
+export const db = getFirestore(app);
 export const storage = getStorage(app);
 
+// Initialize Analytics if supported in browser environment
 export let analytics: any = null;
 if (typeof window !== 'undefined') {
-  isSupported().then((supported) => {
-    if (supported) {
-      analytics = getAnalytics(app);
-    }
-  }).catch(() => {});
+  isSupported()
+    .then((supported) => {
+      if (supported) {
+        analytics = getAnalytics(app);
+      }
+    })
+    .catch(() => {});
 }

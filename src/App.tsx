@@ -6,6 +6,7 @@ import { Header } from './components/layout/Header';
 import { Footer } from './components/layout/Footer';
 import { StoryGallery } from './components/stories/StoryGallery';
 import { SitemapPage } from './components/sitemap/SitemapPage';
+import { CategoriesPage } from './components/categories/CategoriesPage';
 import { normalizeCategorySlug, getCategoryDisplayName } from './utils/categoryTaxonomy';
 
 const StoryReader = lazy(() =>
@@ -35,6 +36,7 @@ export default function App() {
 
   const [isAdminView, setIsAdminView] = useState<boolean>(false);
   const [isSitemapView, setIsSitemapView] = useState<boolean>(false);
+  const [isCategoriesView, setIsCategoriesView] = useState<boolean>(false);
   const [currentStorySlug, setCurrentStorySlug] = useState<string | null>(null);
   const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
 
@@ -64,6 +66,7 @@ export default function App() {
     if (path.startsWith('/admin') || hash === '#admin' || hash.startsWith('#/admin')) {
       setIsAdminView(true);
       setIsSitemapView(false);
+      setIsCategoriesView(false);
       setCurrentStorySlug(null);
       return;
     }
@@ -72,12 +75,21 @@ export default function App() {
     // 2. Sitemap / Archives
     if (path === '/sitemap' || path === '/archives' || hash === '#sitemap') {
       setIsSitemapView(true);
+      setIsCategoriesView(false);
       setCurrentStorySlug(null);
       return;
     }
     setIsSitemapView(false);
 
-    // 3. Single Story: /story/:slug or /posts/:slug or legacy /katha/:slug
+    // 3. Categories Special Page: /categories
+    if (path === '/categories' || hash === '#categories') {
+      setIsCategoriesView(true);
+      setCurrentStorySlug(null);
+      return;
+    }
+    setIsCategoriesView(false);
+
+    // 4. Single Story: /story/:slug or /posts/:slug or legacy /katha/:slug
     const storyMatch = path.match(/^\/(?:story|posts|katha)\/([^/]+)/);
     if (storyMatch && storyMatch[1]) {
       const slug = decodeURIComponent(storyMatch[1]);
@@ -85,7 +97,7 @@ export default function App() {
       return;
     }
 
-    // 4. Category: /category/:slug
+    // 5. Category: /category/:slug
     const catMatch = path.match(/^\/category\/([^/]+)/);
     if (catMatch && catMatch[1]) {
       const rawSlug = decodeURIComponent(catMatch[1]);
@@ -95,7 +107,7 @@ export default function App() {
       return;
     }
 
-    // 5. Popular / Latest
+    // 6. Popular / Latest
     if (path === '/popular') {
       setSortBy('popular');
       setCurrentStorySlug(null);
@@ -107,7 +119,7 @@ export default function App() {
       return;
     }
 
-    // 6. Root Homepage
+    // 7. Root Homepage
     setCurrentStorySlug(null);
   }, [setCategory, setSortBy]);
 
@@ -142,6 +154,14 @@ export default function App() {
       return;
     }
 
+    if (isCategoriesView) {
+      document.title = 'කතා වර්ගීකරණ (Story Categories) | Walkathawa (වල් කතාව)';
+      if (canonical) {
+        canonical.href = 'https://www.walkathawa.site/categories';
+      }
+      return;
+    }
+
     if (params.category && params.category !== 'all') {
       const catName = getCategoryDisplayName(params.category);
       document.title = `${catName} | Walkathawa (වල් කතාව)`;
@@ -155,7 +175,7 @@ export default function App() {
     if (canonical) {
       canonical.href = 'https://www.walkathawa.site/';
     }
-  }, [isAdminView, currentStorySlug, activeStory, isSitemapView, params.category]);
+  }, [isAdminView, currentStorySlug, activeStory, isSitemapView, isCategoriesView, params.category]);
 
   // Compute previous and next stories in current active list
   const { prevStory, nextStory } = useMemo(() => {
@@ -181,10 +201,20 @@ export default function App() {
     setPage(1);
     setCurrentStorySlug(null);
     setIsSitemapView(false);
+    setIsCategoriesView(false);
     setIsAdminView(false);
     navigateTo('/');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [setCategory, setSearch, setPage, navigateTo]);
+
+  const handleOpenCategories = useCallback(() => {
+    setCurrentStorySlug(null);
+    setIsSitemapView(false);
+    setIsCategoriesView(true);
+    setIsAdminView(false);
+    navigateTo('/categories');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [navigateTo]);
 
   const handleSelectCategory = useCallback(
     (catSlug: string) => {
@@ -192,6 +222,7 @@ export default function App() {
       setPage(1);
       setCurrentStorySlug(null);
       setIsSitemapView(false);
+      setIsCategoriesView(false);
       setIsAdminView(false);
       if (catSlug === 'all') {
         navigateTo('/');
@@ -207,6 +238,7 @@ export default function App() {
     (slug: string) => {
       setCurrentStorySlug(slug);
       setIsSitemapView(false);
+      setIsCategoriesView(false);
       setIsAdminView(false);
       navigateTo(`/story/${encodeURIComponent(slug)}`);
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -250,13 +282,18 @@ export default function App() {
       {/* Header */}
       <Header
         onHomeClick={handleHomeClick}
+        onOpenCategories={handleOpenCategories}
         theme={theme}
         onToggleTheme={handleToggleTheme}
-        categories={categories}
-        selectedCategory={params.category || 'all'}
-        onSelectCategory={handleSelectCategory}
+        onOpenSitemap={() => {
+          setIsSitemapView(true);
+          setIsCategoriesView(false);
+          setCurrentStorySlug(null);
+          navigateTo('/sitemap');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
         onToggleSearch={() => {
-          if (currentStorySlug || isSitemapView) {
+          if (currentStorySlug || isSitemapView || isCategoriesView) {
             handleHomeClick();
             setIsSearchOpen(true);
           } else {
@@ -319,6 +356,13 @@ export default function App() {
             onNavigateHome={handleHomeClick}
             onSelectCategory={handleSelectCategory}
           />
+        ) : isCategoriesView ? (
+          /* Special Categories View (5 rows by 4 columns grid per page) */
+          <CategoriesPage
+            categories={categories}
+            onSelectCategory={handleSelectCategory}
+            onNavigateHome={handleHomeClick}
+          />
         ) : (
           /* Gallery View - At least 20 posts per view */
           <StoryGallery
@@ -352,6 +396,7 @@ export default function App() {
         onSelectCategory={handleSelectCategory}
         onOpenSitemap={() => {
           setIsSitemapView(true);
+          setIsCategoriesView(false);
           setCurrentStorySlug(null);
           navigateTo('/sitemap');
           window.scrollTo({ top: 0, behavior: 'smooth' });

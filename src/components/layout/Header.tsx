@@ -1,30 +1,50 @@
-import React, { useState } from 'react';
-import { Search, Moon, Sun, Menu, X } from 'lucide-react';
-import { ReadingTheme, Category } from '../../types/story';
-import { cleanCategoryBadgeName } from '../../utils/formatters';
+import React, { useState, useRef, useEffect } from 'react';
+import { Search, Moon, Sun, Menu, X, Home, FolderTree, Compass, Sparkles } from 'lucide-react';
+import { ReadingTheme } from '../../types/story';
 
 interface HeaderProps {
   onHomeClick: () => void;
+  onOpenCategories: () => void;
   theme: ReadingTheme;
   onToggleTheme: () => void;
-  categories?: Category[];
-  selectedCategory?: string;
-  onSelectCategory?: (categorySlug: string) => void;
+  onOpenSitemap?: () => void;
   onToggleSearch?: () => void;
   isSearchOpen?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   onHomeClick,
+  onOpenCategories,
   theme,
   onToggleTheme,
-  categories = [],
-  selectedCategory = 'all',
-  onSelectCategory,
+  onOpenSitemap,
   onToggleSearch,
   isSearchOpen = false,
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const menuBtnRef = useRef<HTMLButtonElement>(null);
+
+  // Close menu on outside click
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        menuRef.current &&
+        !menuRef.current.contains(event.target as Node) &&
+        menuBtnRef.current &&
+        !menuBtnRef.current.contains(event.target as Node)
+      ) {
+        setIsMenuOpen(false);
+      }
+    }
+
+    if (isMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isMenuOpen]);
 
   return (
     <header
@@ -66,7 +86,7 @@ export const Header: React.FC<HeaderProps> = ({
         </a>
 
         {/* Header Action Controls */}
-        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+        <div className="relative flex items-center gap-1 sm:gap-1.5 shrink-0">
           {/* Search Trigger */}
           {onToggleSearch && (
             <button
@@ -99,72 +119,116 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </button>
 
-          {/* Menu / Categories Toggle Button */}
-          {categories.length > 0 && onSelectCategory && (
-            <button
-              type="button"
-              id="header-menu-btn"
-              onClick={() => setIsMenuOpen(!isMenuOpen)}
-              aria-label="වර්ගීකරණ මෙනුව (Categories Menu)"
-              className={`p-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer ${
-                isMenuOpen ? 'bg-slate-100 dark:bg-slate-800 text-rose-600 dark:text-rose-400' : ''
-              }`}
-              title="වර්ගීකරණ"
-            >
-              {isMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
-            </button>
-          )}
-        </div>
-      </div>
+          {/* Menu / Expansion Button in Top Right Corner */}
+          <button
+            ref={menuBtnRef}
+            type="button"
+            id="header-menu-btn"
+            onClick={() => setIsMenuOpen(!isMenuOpen)}
+            aria-label="මෙනුව විවෘත කරන්න (Main Menu)"
+            aria-expanded={isMenuOpen}
+            className={`p-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer ${
+              isMenuOpen ? 'bg-slate-100 dark:bg-slate-800 text-rose-600 dark:text-rose-400' : ''
+            }`}
+            title="මෙනුව"
+          >
+            {isMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+          </button>
 
-      {/* Mobile/Compact Category Drawer when Menu opened */}
-      {isMenuOpen && categories.length > 0 && onSelectCategory && (
-        <div className="border-t border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-950 px-4 py-3 shadow-lg">
-          <div className="max-w-4xl mx-auto space-y-2">
-            <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wider pb-1">
-              <span>කතා වර්ගීකරණ (Categories)</span>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
+          {/* Button Expansion Dropdown Menu */}
+          {isMenuOpen && (
+            <div
+              ref={menuRef}
+              className="absolute right-0 top-full mt-2 w-64 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-xl py-2 z-50 animate-fadeIn"
+            >
+              <div className="px-3 py-1.5 text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                ප්‍රධාන මෙනුව (Navigation)
+              </div>
+
+              {/* 1. Home Redirection Option */}
               <button
                 type="button"
                 onClick={() => {
-                  onSelectCategory('all');
+                  onHomeClick();
                   setIsMenuOpen(false);
                 }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                  selectedCategory === 'all'
-                    ? 'bg-rose-600 text-white'
-                    : 'bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-                }`}
+                className="w-full flex items-center gap-3 px-3.5 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 dark:hover:text-rose-400 transition-colors text-left cursor-pointer group"
               >
-                සියලුම කතා (All)
+                <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 group-hover:bg-rose-100 dark:group-hover:bg-rose-900/60 group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors">
+                  <Home className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="font-semibold leading-tight">මුල් පිටුව</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">Home Page</div>
+                </div>
               </button>
-              {categories
-                .filter((c) => c.slug !== 'all')
-                .map((cat) => {
-                  const isSelected = selectedCategory === cat.slug;
-                  return (
-                    <button
-                      key={cat.id || cat.slug}
-                      type="button"
-                      onClick={() => {
-                        onSelectCategory(cat.slug);
-                        setIsMenuOpen(false);
-                      }}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                        isSelected
-                          ? 'bg-rose-600 text-white'
-                          : 'bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-                      }`}
-                    >
-                      {cleanCategoryBadgeName(cat.name)}
-                    </button>
-                  );
-                })}
+
+              {/* 2. Categories Redirection Option */}
+              <button
+                type="button"
+                onClick={() => {
+                  onOpenCategories();
+                  setIsMenuOpen(false);
+                }}
+                className="w-full flex items-center gap-3 px-3.5 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 dark:hover:text-rose-400 transition-colors text-left cursor-pointer group"
+              >
+                <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 group-hover:bg-rose-100 dark:group-hover:bg-rose-900/60 group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors">
+                  <FolderTree className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="font-semibold leading-tight flex items-center gap-1.5">
+                    <span>කතා වර්ගීකරණ</span>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-500 text-white">Grid</span>
+                  </div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">Categories (5x4 Grids)</div>
+                </div>
+              </button>
+
+              {/* 3. Sitemap / Archives Option */}
+              {onOpenSitemap && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onOpenSitemap();
+                    setIsMenuOpen(false);
+                  }}
+                  className="w-full flex items-center gap-3 px-3.5 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 dark:hover:text-rose-400 transition-colors text-left cursor-pointer group"
+                >
+                  <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 group-hover:bg-rose-100 dark:group-hover:bg-rose-900/60 group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors">
+                    <Compass className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="font-semibold leading-tight">සියලු කතා සූචිය</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">Sitemap & Archives</div>
+                  </div>
+                </button>
+              )}
+
+              {/* Divider & Quick Theme Toggle in Menu */}
+              <div className="mt-1 pt-1 border-t border-slate-100 dark:border-slate-800 px-3.5 py-2 flex items-center justify-between text-xs text-slate-500">
+                <span>තේමාව (Theme):</span>
+                <button
+                  type="button"
+                  onClick={onToggleTheme}
+                  className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-colors flex items-center gap-1.5"
+                >
+                  {theme === 'dark' ? (
+                    <>
+                      <Sun className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Light</span>
+                    </>
+                  ) : (
+                    <>
+                      <Moon className="w-3.5 h-3.5 text-slate-600" />
+                      <span>Dark</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
-      )}
+      </div>
     </header>
   );
 };

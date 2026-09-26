@@ -6,7 +6,7 @@ export const INITIAL_CATEGORIES: Category[] = [
     "name": "සියලුම කතා (All Stories)",
     "slug": "all",
     "description": "සියලුම අලුත් සිංහල කතා සහ රසවත් කතා එකතුව",
-    "storyCount": 25
+    "storyCount": 24
   },
   {
     "id": "wife",
@@ -19,7 +19,7 @@ export const INITIAL_CATEGORIES: Category[] = [
     "id": "akka-malli",
     "name": "අක්කා - මල්ලි (Akka Malli)",
     "slug": "akka-malli",
-    "description": "අක්කා මල්ලි සහ අසල්වැසි සබඳතා පිළිබඳ රසවත් කතා",
+    "description": "අක්කා මල්ලි සහ සමීප සබඳතා පිළිබඳ රසවත් කතා",
     "storyCount": 3
   },
   {
@@ -38,10 +38,108 @@ export const INITIAL_CATEGORIES: Category[] = [
   },
   {
     "id": "romantic",
-    "name": "ආදර සහ වෙනත් (Romantic & Other)",
+    "name": "ආදර සහ ප්‍රේම (Romantic Stories)",
     "slug": "romantic",
-    "description": "ආදරය, හැඟීම්බර සහ ආශාවන් පිරි කෙටිකතා",
+    "description": "ආදරය, ප්‍රේමය සහ හැඟීම්බර සබඳතා ඇසුරින් ලියවුණු කතා",
     "storyCount": 3
+  },
+  {
+    "id": "office",
+    "name": "කාර්යාල සහ රැකියා (Office Stories)",
+    "slug": "office",
+    "description": "කාර්යාලීය පරිසරයන් සහ රැකියා ස්ථානවල රසවත් සිදුවීම්",
+    "storyCount": 2
+  },
+  {
+    "id": "neighbour",
+    "name": "අසල්වැසි සහ ගම්බද (Neighbour Stories)",
+    "slug": "neighbour",
+    "description": "අසල්වැසි ගෙවල් සහ ගම්බද පරිසරයන් ආශ්‍රිත කතා",
+    "storyCount": 2
+  },
+  {
+    "id": "series",
+    "name": "දීර්ඝ කතා මාලා (Story Series)",
+    "slug": "series",
+    "description": "කොටස් වශයෙන් ලියැවෙන රසවත් දීර්ඝ සිංහල කතා මාලා",
+    "storyCount": 4
+  },
+  {
+    "id": "short-stories",
+    "name": "කෙටිකතා එකතුව (Short Stories)",
+    "slug": "short-stories",
+    "description": "එකවර කියවා රසවිඳිය හැකි අපූරු සිංහල කෙටිකතා",
+    "storyCount": 5
+  },
+  {
+    "id": "boarding",
+    "name": "බෝඩිං ජීවිතේ (Boarding Stories)",
+    "slug": "boarding",
+    "description": "බෝඩිං කාමර සහ නවාතැන්පොළවල අමතක නොවන අත්දැකීම්",
+    "storyCount": 2
+  },
+  {
+    "id": "travel",
+    "name": "චාරිකා සහ විනෝද (Travel Stories)",
+    "slug": "travel",
+    "description": "ට්‍රිප්, විනෝද චාරිකා සහ ගමන් බිමන් වලදී වූ සිදුවීම්",
+    "storyCount": 1
+  },
+  {
+    "id": "family",
+    "name": "පවුලේ කතාන්දර (Family Stories)",
+    "slug": "family",
+    "description": "පවුලේ විවිධ සබඳතා සහ ගෙදරදොර සිදුවීම්",
+    "storyCount": 3
+  },
+  {
+    "id": "true-story",
+    "name": "සත්‍ය අත්දැකීම් (True Experiences)",
+    "slug": "true-story",
+    "description": "පාඨකයන් අප වෙත එවූ සත්‍ය ජීවිත අත්දැකීම්",
+    "storyCount": 4
+  },
+  {
+    "id": "mystery",
+    "name": "අභිරහස් සහ ත්‍රාසජනක (Mystery Stories)",
+    "slug": "mystery",
+    "description": "කුතුහලය සහ ත්‍රාසය පිරි අපූරු අභිරහස් කතා",
+    "storyCount": 2
+  },
+  {
+    "id": "chat",
+    "name": "චැට් සහ දුරකථන (Chat Stories)",
+    "slug": "chat",
+    "description": "සමාජ මාධ්‍ය සහ දුරකථන සංවාද ඔස්සේ ගෙතුණු කතා",
+    "storyCount": 2
+  },
+  {
+    "id": "fantasy",
+    "name": "මනඃකල්පිත කතා (Fantasy & Fiction)",
+    "slug": "fantasy",
+    "description": "කල්පනා ලෝකයේ රසබර අත්දැකීම් ගෙනෙන කතා",
+    "storyCount": 2
+  },
+  {
+    "id": "drama",
+    "name": "සමාජ හා නාට්‍යමය (Drama & Life)",
+    "slug": "drama",
+    "description": "සමාජයේ නොදුටු පැතිකඩ හෙළිදරව් කරන කතා",
+    "storyCount": 3
+  },
+  {
+    "id": "classic",
+    "name": "සම්භාව්‍ය සහ පැරණි (Classic Tales)",
+    "slug": "classic",
+    "description": "ඉතිහාසයේ රසවත් පැරණි සිංහල කතා එකතුව",
+    "storyCount": 2
+  },
+  {
+    "id": "popular",
+    "name": "ජනප්‍රියම කතා (Most Popular)",
+    "slug": "popular",
+    "description": "වැඩිම පිරිසක් කියවා ප්‍රිය කළ ජනප්‍රිය කතා",
+    "storyCount": 8
   }
 ];
 

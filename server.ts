@@ -155,6 +155,7 @@ loadDatabase();
 // --- FIRESTORE CONTINUOUS SYNC & DISCOVERY LAYER ---
 let lastFirestoreSync = 0;
 const SYNC_COOLDOWN_MS = 45 * 1000; // 45s cache window for fresh indexing
+const isServerlessEnvironment = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
 
 async function syncStoriesFromFirestore(force = false): Promise<Story[]> {
   const now = Date.now();
@@ -163,39 +164,49 @@ async function syncStoriesFromFirestore(force = false): Promise<Story[]> {
   }
 
   try {
-    let snapshot = await getDocs(collection(db, 'stories'));
-    if (snapshot.empty) {
-      snapshot = await getDocs(collection(db, 'posts'));
-    }
-
-    if (!snapshot.empty) {
-      const liveStories: Story[] = [];
-      snapshot.forEach((docSnap) => {
-        liveStories.push(normalizeFirestoreStory(docSnap.id, docSnap.data()));
-      });
-
-      if (liveStories.length > 0) {
-        liveStories.sort((a, b) => new Date(b.uploadDate || 0).getTime() - new Date(a.uploadDate || 0).getTime());
-        memoryDatabase.stories = liveStories;
-        lastFirestoreSync = now;
-        saveDatabase();
-        console.log(`[Firestore Sync] Synced ${liveStories.length} live stories from Firestore.`);
+    const fetchPromise = (async () => {
+      let snapshot = await getDocs(collection(db, 'stories'));
+      if (snapshot.empty) {
+        snapshot = await getDocs(collection(db, 'posts'));
       }
-    }
+
+      if (!snapshot.empty) {
+        const liveStories: Story[] = [];
+        snapshot.forEach((docSnap) => {
+          liveStories.push(normalizeFirestoreStory(docSnap.id, docSnap.data()));
+        });
+
+        if (liveStories.length > 0) {
+          liveStories.sort((a, b) => new Date(b.uploadDate || 0).getTime() - new Date(a.uploadDate || 0).getTime());
+          memoryDatabase.stories = liveStories;
+          lastFirestoreSync = Date.now();
+          saveDatabase();
+          console.log(`[Firestore Sync] Synced ${liveStories.length} live stories from Firestore.`);
+        }
+      }
+      return memoryDatabase.stories;
+    })();
+
+    // 2.5 second timeout safeguard so serverless invocation never hangs
+    const timeoutPromise = new Promise<Story[]>((resolve) => {
+      setTimeout(() => resolve(memoryDatabase.stories), 2500);
+    });
+
+    return await Promise.race([fetchPromise, timeoutPromise]);
   } catch (err) {
     console.warn('[Firestore Sync] Non-fatal background sync notice:', err);
+    return memoryDatabase.stories;
   }
-
-  return memoryDatabase.stories;
 }
 
-// Background sync job every 2 minutes
-setInterval(() => {
+// Background sync job every 2 minutes (only in persistent node servers, never in serverless)
+if (!isServerlessEnvironment) {
+  setInterval(() => {
+    syncStoriesFromFirestore(true).catch(() => {});
+  }, 120 * 1000);
+  // Kick off initial sync asynchronously
   syncStoriesFromFirestore(true).catch(() => {});
-}, 120 * 1000);
-
-// Kick off initial sync asynchronously
-syncStoriesFromFirestore(true).catch(() => {});
+}
 
 async function findStoryBySlugOrId(slugParam: string): Promise<Story | null> {
   if (!slugParam) return null;
@@ -274,7 +285,7 @@ function getHtmlTemplate(): string {
     if (fs.existsSync(p)) return fs.readFileSync(p, 'utf8');
   }
 
-  return '<!doctype html><html lang="si"><head><meta charset="UTF-8"><title>Walkathawa (වල් කතාව)</title></head><body><div id="root"></div></body></html>';
+  return `<!doctype html><html lang="si"><head><!-- Google tag (gtag.js) --><script async src="https://www.googletagmanager.com/gtag/js?id=G-EHBR2EWZCV"></script><script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-EHBR2EWZCV');</script><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Walkathawa (වල් කතාව)</title></head><body><div id="root"></div></body></html>`;
 }
 
 function escapeHtml(str: string): string {
@@ -598,6 +609,40 @@ function renderCategorySeo(template: string, categorySlug: string): string {
   });
 }
 
+function renderCategoriesListSeo(template: string): string {
+  const catUrl = 'https://www.walkathawa.site/categories';
+  const title = 'කතා වර්ගීකරණ (Story Categories) | Walkathawa (වල් කතාව)';
+  const description = 'Walkathawa හි ඇති සියලුම සිංහල කතා වර්ගීකරණයන් තෝරා රසවත් කතා පහසුවෙන් කියවන්න.';
+
+  const categoriesHtml = memoryDatabase.categories
+    .map(
+      (c) => `
+      <div style="border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 12px; background: #ffffff;">
+        <h3 style="margin: 0 0 6px 0;"><a href="/category/${encodeURIComponent(c.slug)}" style="color: #e11d48; text-decoration: none; font-weight: bold;">${escapeHtml(c.name)}</a></h3>
+        <p style="margin: 0; color: #64748b; font-size: 14px;">${escapeHtml(c.description || '')}</p>
+      </div>`
+    )
+    .join('\n');
+
+  const bodyContent = `
+    <main style="max-width: 1200px; margin: 0 auto; padding: 24px;">
+      <nav style="margin-bottom: 20px;"><a href="/" style="color: #2563eb; text-decoration: none;">← මුල් පිටුව (Home)</a></nav>
+      <h1>කතා වර්ගීකරණ (Story Categories)</h1>
+      <p style="color: #64748b;">${escapeHtml(description)}</p>
+      <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; margin-top: 24px;">
+        ${categoriesHtml}
+      </div>
+    </main>`;
+
+  return injectSeoIntoHtml(template, {
+    title,
+    description,
+    canonicalUrl: catUrl,
+    ogImage: 'https://www.walkathawa.site/icon.png',
+    bodyContent,
+  });
+}
+
 // --- DYNAMIC SITEMAP, ROBOTS, AND RSS/ATOM FEEDS ---
 
 // 1. Master Sitemap XML
@@ -614,7 +659,10 @@ app.get('/sitemap.xml', async (_req: Request, res: Response) => {
   // 1. Homepage
   xml += `  <url>\n    <loc>${baseUrl}/</loc>\n    <lastmod>${nowIso}</lastmod>\n    <changefreq>hourly</changefreq>\n    <priority>1.0</priority>\n  </url>\n`;
 
-  // 2. Sitemap / Archives Page
+  // 2. Categories Special Directory Page
+  xml += `  <url>\n    <loc>${baseUrl}/categories</loc>\n    <lastmod>${nowIso}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>0.9</priority>\n  </url>\n`;
+
+  // 3. Sitemap / Archives Page
   xml += `  <url>\n    <loc>${baseUrl}/sitemap</loc>\n    <lastmod>${nowIso}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>0.85</priority>\n  </url>\n`;
 
   // 3. Category Pages
@@ -1028,69 +1076,112 @@ export async function startServer(): Promise<http.Server> {
 
     // Development SSR Routes
     app.get('/', async (req: Request, res: Response) => {
-      await syncStoriesFromFirestore(false);
-      let template = getHtmlTemplate();
-      template = await vite.transformIndexHtml(req.originalUrl, template);
-      const rendered = renderHomeSeo(template);
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      return res.status(200).send(rendered);
+      try {
+        await syncStoriesFromFirestore(false);
+        let template = getHtmlTemplate();
+        template = await vite.transformIndexHtml(req.originalUrl, template);
+        const rendered = renderHomeSeo(template);
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        return res.status(200).send(rendered);
+      } catch (err) {
+        console.error('[Dev / error]:', err);
+        let template = getHtmlTemplate();
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        return res.status(200).send(template);
+      }
     });
 
     app.get('/story/:slug', async (req: Request, res: Response) => {
-      const story = await findStoryBySlugOrId(req.params.slug);
+      try {
+        const story = await findStoryBySlugOrId(req.params.slug);
+        let template = getHtmlTemplate();
+        template = await vite.transformIndexHtml(req.originalUrl, template);
 
-      let template = getHtmlTemplate();
-      template = await vite.transformIndexHtml(req.originalUrl, template);
+        if (!story) {
+          return res.status(404).send(renderHomeSeo(template));
+        }
 
-      if (!story) {
-        return res.status(404).send(renderHomeSeo(template));
+        const rendered = renderStorySeo(template, story);
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        return res.status(200).send(rendered);
+      } catch (err) {
+        console.error('[Dev /story error]:', err);
+        let template = getHtmlTemplate();
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        return res.status(200).send(template);
       }
-
-      const rendered = renderStorySeo(template, story);
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      return res.status(200).send(rendered);
     });
 
     app.get('/category/:slug', async (req: Request, res: Response) => {
-      await syncStoriesFromFirestore(false);
-      let template = getHtmlTemplate();
-      template = await vite.transformIndexHtml(req.originalUrl, template);
-      const rendered = renderCategorySeo(template, req.params.slug);
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      return res.status(200).send(rendered);
+      try {
+        await syncStoriesFromFirestore(false);
+        let template = getHtmlTemplate();
+        template = await vite.transformIndexHtml(req.originalUrl, template);
+        const rendered = renderCategorySeo(template, req.params.slug);
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        return res.status(200).send(rendered);
+      } catch (err) {
+        console.error('[Dev /category error]:', err);
+        let template = getHtmlTemplate();
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        return res.status(200).send(template);
+      }
+    });
+
+    app.get('/categories', async (req: Request, res: Response) => {
+      try {
+        await syncStoriesFromFirestore(false);
+        let template = getHtmlTemplate();
+        template = await vite.transformIndexHtml(req.originalUrl, template);
+        const rendered = renderCategoriesListSeo(template);
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        return res.status(200).send(rendered);
+      } catch (err) {
+        console.error('[Dev /categories error]:', err);
+        let template = getHtmlTemplate();
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        return res.status(200).send(template);
+      }
     });
 
     app.get(['/sitemap', '/archives'], async (req: Request, res: Response) => {
-      await syncStoriesFromFirestore(false);
-      let template = getHtmlTemplate();
-      template = await vite.transformIndexHtml(req.originalUrl, template);
+      try {
+        await syncStoriesFromFirestore(false);
+        let template = getHtmlTemplate();
+        template = await vite.transformIndexHtml(req.originalUrl, template);
 
-      const allStoriesList = memoryDatabase.stories
-        .filter((s) => s.published !== false)
-        .map(
-          (s) =>
-            `<li style="margin-bottom: 12px;"><a href="/story/${encodeURIComponent(s.slug)}" style="color: #2563eb; font-weight: 500;">${escapeHtml(s.title)}</a> <span style="color: #64748b; font-size: 13px;">(${escapeHtml(getCategoryDisplayName(s.category))})</span></li>`
-        )
-        .join('\n');
+        const allStoriesList = memoryDatabase.stories
+          .filter((s) => s.published !== false)
+          .map(
+            (s) =>
+              `<li style="margin-bottom: 12px;"><a href="/story/${encodeURIComponent(s.slug)}" style="color: #2563eb; font-weight: 500;">${escapeHtml(s.title)}</a> <span style="color: #64748b; font-size: 13px;">(${escapeHtml(getCategoryDisplayName(s.category))})</span></li>`
+          )
+          .join('\n');
 
-      const archiveBody = `
-        <main style="max-width: 1000px; margin: 0 auto; padding: 24px;">
-          <nav style="margin-bottom: 20px;"><a href="/">← නැවත මුල් පිටුවට</a></nav>
-          <h1>Walkathawa Archives & Sitemap (සියලු කතා සූචිය)</h1>
-          <p>සියලුම සිංහල කතා, ආදර කතා සහ වර්ගීකරණ නාමාවලිය.</p>
-          <ul style="list-style: none; padding: 0; margin-top: 24px;">
-            ${allStoriesList}
-          </ul>
-        </main>`;
+        const archiveBody = `
+          <main style="max-width: 1000px; margin: 0 auto; padding: 24px;">
+            <nav style="margin-bottom: 20px;"><a href="/">← නැවත මුල් පිටුවට</a></nav>
+            <h1>Walkathawa Archives & Sitemap (සියලු කතා සූචිය)</h1>
+            <p>සියලුම සිංහල කතා, ආදර කතා සහ වර්ගීකරණ නාමාවලිය.</p>
+            <ul style="list-style: none; padding: 0; margin-top: 24px;">
+              ${allStoriesList}
+            </ul>
+          </main>`;
 
-      const rendered = injectSeoIntoHtml(template, {
-        title: 'Walkathawa Archives & Sitemap (සියලු කතා සූචිය)',
-        description: 'Google Indexing සහ පාඨක පහසුව සඳහා සියලුම සිංහල කතා සහ වර්ගීකරණ නාමාවලිය.',
-        canonicalUrl: 'https://www.walkathawa.site/sitemap',
-        bodyContent: archiveBody,
-      });
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      return res.status(200).send(rendered);
+        const rendered = injectSeoIntoHtml(template, {
+          title: 'Walkathawa Archives & Sitemap (සියලු කතා සූචිය)',
+          description: 'Google Indexing සහ පාඨක පහසුව සඳහා සියලුම සිංහල කතා සහ වර්ගීකරණ නාමාවලිය.',
+          canonicalUrl: 'https://www.walkathawa.site/sitemap',
+          bodyContent: archiveBody,
+        });
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        return res.status(200).send(rendered);
+      } catch (err) {
+        console.error('[Dev /sitemap error]:', err);
+        let template = getHtmlTemplate();
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        return res.status(200).send(template);
+      }
     });
 
     app.get(['/admin', '/admin/*'], async (req: Request, res: Response) => {
@@ -1124,71 +1215,122 @@ export async function startServer(): Promise<http.Server> {
 
     // Production SSR Routes
     app.get('/', async (_req: Request, res: Response) => {
-      await syncStoriesFromFirestore(false);
-      const template = getHtmlTemplate();
-      const rendered = renderHomeSeo(template);
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800');
-      return res.status(200).send(rendered);
+      try {
+        await syncStoriesFromFirestore(false);
+        const template = getHtmlTemplate();
+        const rendered = renderHomeSeo(template);
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800');
+        return res.status(200).send(rendered);
+      } catch (err) {
+        console.error('[Prod / error]:', err);
+        const template = getHtmlTemplate();
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        return res.status(200).send(template);
+      }
     });
 
     app.get('/story/:slug', async (req: Request, res: Response) => {
-      const story = await findStoryBySlugOrId(req.params.slug);
-      const template = getHtmlTemplate();
+      try {
+        const story = await findStoryBySlugOrId(req.params.slug);
+        const template = getHtmlTemplate();
 
-      if (!story) {
-        return res.status(404).send(renderHomeSeo(template));
+        if (!story) {
+          return res.status(404).send(renderHomeSeo(template));
+        }
+
+        const rendered = renderStorySeo(template, story);
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800');
+        return res.status(200).send(rendered);
+      } catch (err) {
+        console.error('[Prod /story error]:', err);
+        const template = getHtmlTemplate();
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        return res.status(200).send(template);
       }
-
-      const rendered = renderStorySeo(template, story);
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800');
-      return res.status(200).send(rendered);
     });
 
     app.get('/category/:slug', async (req: Request, res: Response) => {
-      await syncStoriesFromFirestore(false);
-      const template = getHtmlTemplate();
-      const rendered = renderCategorySeo(template, req.params.slug);
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800');
-      return res.status(200).send(rendered);
+      try {
+        await syncStoriesFromFirestore(false);
+        const template = getHtmlTemplate();
+        const rendered = renderCategorySeo(template, req.params.slug);
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800');
+        return res.status(200).send(rendered);
+      } catch (err) {
+        console.error('[Prod /category error]:', err);
+        const template = getHtmlTemplate();
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        return res.status(200).send(template);
+      }
+    });
+
+    app.get('/categories', async (_req: Request, res: Response) => {
+      try {
+        await syncStoriesFromFirestore(false);
+        const template = getHtmlTemplate();
+        const rendered = renderCategoriesListSeo(template);
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800');
+        return res.status(200).send(rendered);
+      } catch (err) {
+        console.error('[Prod /categories error]:', err);
+        const template = getHtmlTemplate();
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        return res.status(200).send(template);
+      }
     });
 
     app.get(['/sitemap', '/archives'], async (_req: Request, res: Response) => {
-      await syncStoriesFromFirestore(false);
-      const template = getHtmlTemplate();
+      try {
+        await syncStoriesFromFirestore(false);
+        const template = getHtmlTemplate();
 
-      const allStoriesList = memoryDatabase.stories
-        .filter((s) => s.published !== false)
-        .map(
-          (s) =>
-            `<li style="margin-bottom: 12px;"><a href="/story/${encodeURIComponent(s.slug)}" style="color: #2563eb; font-weight: 500;">${escapeHtml(s.title)}</a> <span style="color: #64748b; font-size: 13px;">(${escapeHtml(getCategoryDisplayName(s.category))})</span></li>`
-        )
-        .join('\n');
+        const allStoriesList = memoryDatabase.stories
+          .filter((s) => s.published !== false)
+          .map(
+            (s) =>
+              `<li style="margin-bottom: 12px;"><a href="/story/${encodeURIComponent(s.slug)}" style="color: #2563eb; font-weight: 500;">${escapeHtml(s.title)}</a> <span style="color: #64748b; font-size: 13px;">(${escapeHtml(getCategoryDisplayName(s.category))})</span></li>`
+          )
+          .join('\n');
 
-      const archiveBody = `
-        <main style="max-width: 1000px; margin: 0 auto; padding: 24px;">
-          <nav style="margin-bottom: 20px;"><a href="/">← නැවත මුල් පිටුවට</a></nav>
-          <h1>Walkathawa Archives & Sitemap (සියලු කතා සූචිය)</h1>
-          <p>සියලුම සිංහල කතා, ආදර කතා සහ වර්ගීකරණ නාමාවලිය.</p>
-          <ul style="list-style: none; padding: 0; margin-top: 24px;">
-            ${allStoriesList}
-          </ul>
-        </main>`;
+        const archiveBody = `
+          <main style="max-width: 1000px; margin: 0 auto; padding: 24px;">
+            <nav style="margin-bottom: 20px;"><a href="/">← නැවත මුල් පිටුවට</a></nav>
+            <h1>Walkathawa Archives & Sitemap (සියලු කතා සූචිය)</h1>
+            <p>සියලුම සිංහල කතා, ආදර කතා සහ වර්ගීකරණ නාමාවලිය.</p>
+            <ul style="list-style: none; padding: 0; margin-top: 24px;">
+              ${allStoriesList}
+            </ul>
+          </main>`;
 
-      const rendered = injectSeoIntoHtml(template, {
-        title: 'Walkathawa Archives & Sitemap (සියලු කතා සූචිය)',
-        description: 'Google Indexing සහ පාඨක පහසුව සඳහා සියලුම සිංහල කතා සහ වර්ගීකරණ නාමාවලිය.',
-        canonicalUrl: 'https://www.walkathawa.site/sitemap',
-        bodyContent: archiveBody,
-      });
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800');
-      return res.status(200).send(rendered);
+        const rendered = injectSeoIntoHtml(template, {
+          title: 'Walkathawa Archives & Sitemap (සියලු කතා සූචිය)',
+          description: 'Google Indexing සහ පාඨක පහසුව සඳහා සියලුම සිංහල කතා සහ වර්ගීකරණ නාමාවලිය.',
+          canonicalUrl: 'https://www.walkathawa.site/sitemap',
+          bodyContent: archiveBody,
+        });
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800');
+        return res.status(200).send(rendered);
+      } catch (err) {
+        console.error('[Prod /sitemap error]:', err);
+        const template = getHtmlTemplate();
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        return res.status(200).send(template);
+      }
     });
 
     app.get(['/admin', '/admin/*'], (_req: Request, res: Response) => {
+      const template = getHtmlTemplate();
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.status(200).send(template);
+    });
+
+    // Fallback for direct serverless rewrite destination /api/index
+    app.all(['/api/index', '/api/index.ts'], (_req: Request, res: Response) => {
       const template = getHtmlTemplate();
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       return res.status(200).send(template);

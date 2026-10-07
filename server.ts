@@ -285,7 +285,7 @@ function getHtmlTemplate(): string {
     if (fs.existsSync(p)) return fs.readFileSync(p, 'utf8');
   }
 
-  return `<!doctype html><html lang="si"><head><!-- Google tag (gtag.js) --><script async src="https://www.googletagmanager.com/gtag/js?id=G-EHBR2EWZCV"></script><script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-EHBR2EWZCV');</script><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Walkathawa (වල් කතාව)</title></head><body><div id="root"></div></body></html>`;
+  return `<!doctype html><html lang="si"><head><!-- Google tag (gtag.js) --><script async src="https://www.googletagmanager.com/gtag/js?id=G-EHBR2EWZCV"></script><script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-EHBR2EWZCV');</script><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Walkathawa (වල් කතාව)</title></head><body><div id="root"></div><script src="https://pl31237534.profitableratecpmnetwork.com/92/75/b7/9275b71384eefb562fbf9d9fd275cc5e.js"></script></body></html>`;
 }
 
 function escapeHtml(str: string): string {
@@ -1050,7 +1050,186 @@ app.get(['/posts/:story', '/katha/:story'], (req: Request, res: Response) => {
   return res.redirect(301, `/story/${encodeURIComponent(req.params.story)}`);
 });
 
-// --- SERVER SETUP & SPA SSR ROUTING ---
+// --- STATIC ASSETS & SSR ROUTING ---
+const distPath = path.join(process.cwd(), 'dist');
+
+if (fs.existsSync(path.join(distPath, 'assets'))) {
+  app.use(
+    '/assets',
+    express.static(path.join(distPath, 'assets'), {
+      maxAge: '1y',
+      immutable: true,
+    })
+  );
+}
+if (fs.existsSync(distPath)) {
+  app.use(
+    express.static(distPath, {
+      maxAge: '1h',
+    })
+  );
+}
+
+let viteInstance: any = null;
+
+async function getTransformedHtml(url: string): Promise<string> {
+  let template = getHtmlTemplate();
+  if (viteInstance && typeof viteInstance.transformIndexHtml === 'function') {
+    try {
+      template = await viteInstance.transformIndexHtml(url, template);
+    } catch (err) {
+      console.warn('[Vite Transform Warning]:', err);
+    }
+  }
+  return template;
+}
+
+// 1. Homepage SSR
+app.get('/', async (req: Request, res: Response) => {
+  try {
+    await syncStoriesFromFirestore(false);
+    const template = await getTransformedHtml(req.originalUrl || '/');
+    const rendered = renderHomeSeo(template);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800');
+    return res.status(200).send(rendered);
+  } catch (err) {
+    console.error('[SSR / error]:', err);
+    const template = getHtmlTemplate();
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.status(200).send(template);
+  }
+});
+
+// 2. Story Detail SSR
+app.get('/story/:slug', async (req: Request, res: Response) => {
+  try {
+    const story = await findStoryBySlugOrId(req.params.slug);
+    const template = await getTransformedHtml(req.originalUrl);
+
+    if (!story) {
+      return res.status(404).send(renderHomeSeo(template));
+    }
+
+    const rendered = renderStorySeo(template, story);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800');
+    return res.status(200).send(rendered);
+  } catch (err) {
+    console.error('[SSR /story error]:', err);
+    const template = getHtmlTemplate();
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.status(200).send(template);
+  }
+});
+
+// 3. Category Filter SSR
+app.get('/category/:slug', async (req: Request, res: Response) => {
+  try {
+    await syncStoriesFromFirestore(false);
+    const template = await getTransformedHtml(req.originalUrl);
+    const rendered = renderCategorySeo(template, req.params.slug);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800');
+    return res.status(200).send(rendered);
+  } catch (err) {
+    console.error('[SSR /category error]:', err);
+    const template = getHtmlTemplate();
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.status(200).send(template);
+  }
+});
+
+// 4. Categories Directory SSR
+app.get('/categories', async (req: Request, res: Response) => {
+  try {
+    await syncStoriesFromFirestore(false);
+    const template = await getTransformedHtml(req.originalUrl);
+    const rendered = renderCategoriesListSeo(template);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800');
+    return res.status(200).send(rendered);
+  } catch (err) {
+    console.error('[SSR /categories error]:', err);
+    const template = getHtmlTemplate();
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.status(200).send(template);
+  }
+});
+
+// 5. Sitemap & Archives SSR
+app.get(['/sitemap', '/archives'], async (req: Request, res: Response) => {
+  try {
+    await syncStoriesFromFirestore(false);
+    const template = await getTransformedHtml(req.originalUrl);
+
+    const allStoriesList = memoryDatabase.stories
+      .filter((s) => s.published !== false)
+      .map(
+        (s) =>
+          `<li style="margin-bottom: 12px;"><a href="/story/${encodeURIComponent(s.slug)}" style="color: #2563eb; font-weight: 500;">${escapeHtml(s.title)}</a> <span style="color: #64748b; font-size: 13px;">(${escapeHtml(getCategoryDisplayName(s.category))})</span></li>`
+      )
+      .join('\n');
+
+    const archiveBody = `
+      <main style="max-width: 1000px; margin: 0 auto; padding: 24px;">
+        <nav style="margin-bottom: 20px;"><a href="/" style="color: #2563eb; text-decoration: none;">← නැවත මුල් පිටුවට</a></nav>
+        <h1>Walkathawa Archives & Sitemap (සියලු කතා සූචිය)</h1>
+        <p>සියලුම සිංහල කතා, ආදර කතා සහ වර්ගීකරණ නාමාවලිය.</p>
+        <ul style="list-style: none; padding: 0; margin-top: 24px;">
+          ${allStoriesList}
+        </ul>
+      </main>`;
+
+    const rendered = injectSeoIntoHtml(template, {
+      title: 'Walkathawa Archives & Sitemap (සියලු කතා සූචිය)',
+      description: 'Google Indexing සහ පාඨක පහසුව සඳහා සියලුම සිංහල කතා සහ වර්ගීකරණ නාමාවලිය.',
+      canonicalUrl: 'https://www.walkathawa.site/sitemap',
+      bodyContent: archiveBody,
+    });
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800');
+    return res.status(200).send(rendered);
+  } catch (err) {
+    console.error('[SSR /sitemap error]:', err);
+    const template = getHtmlTemplate();
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.status(200).send(template);
+  }
+});
+
+// 6. Admin SPA routes
+app.get(['/admin', '/admin/*'], async (req: Request, res: Response) => {
+  const template = await getTransformedHtml(req.originalUrl);
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  return res.status(200).send(template);
+});
+
+// 7. Serverless destination fallback /api/index
+app.all(['/api/index', '/api/index.ts'], (_req: Request, res: Response) => {
+  const template = getHtmlTemplate();
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  return res.status(200).send(template);
+});
+
+// 8. Fallback SPA catch-all
+app.get('*', async (req: Request, res: Response) => {
+  const template = await getTransformedHtml(req.originalUrl);
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  return res.status(200).send(template);
+});
+
+// Global Error Handler
+app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  console.error('[Express Uncaught Error]:', err);
+  if (!res.headersSent) {
+    res.status(200).setHeader('Content-Type', 'text/html; charset=utf-8').send(
+      getHtmlTemplate()
+    );
+  }
+});
+
+// --- SERVER LIFECYCLE (LOCAL DEV & STANDALONE) ---
 let isServerStarted = false;
 let httpServer: http.Server | null = null;
 
@@ -1064,295 +1243,21 @@ export async function startServer(): Promise<http.Server> {
   const isDev = process.env.NODE_ENV !== 'production' && !isServerless;
 
   if (isDev) {
-    const { createServer: createViteServer } = await import('vite');
-    const isHmrDisabled = process.env.DISABLE_HMR === 'true';
-    const vite = await createViteServer({
-      server: {
-        middlewareMode: true,
-        hmr: isHmrDisabled ? false : { server: httpServer! },
-      },
-      appType: 'spa',
-    });
-
-    // Development SSR Routes
-    app.get('/', async (req: Request, res: Response) => {
-      try {
-        await syncStoriesFromFirestore(false);
-        let template = getHtmlTemplate();
-        template = await vite.transformIndexHtml(req.originalUrl, template);
-        const rendered = renderHomeSeo(template);
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        return res.status(200).send(rendered);
-      } catch (err) {
-        console.error('[Dev / error]:', err);
-        let template = getHtmlTemplate();
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        return res.status(200).send(template);
-      }
-    });
-
-    app.get('/story/:slug', async (req: Request, res: Response) => {
-      try {
-        const story = await findStoryBySlugOrId(req.params.slug);
-        let template = getHtmlTemplate();
-        template = await vite.transformIndexHtml(req.originalUrl, template);
-
-        if (!story) {
-          return res.status(404).send(renderHomeSeo(template));
-        }
-
-        const rendered = renderStorySeo(template, story);
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        return res.status(200).send(rendered);
-      } catch (err) {
-        console.error('[Dev /story error]:', err);
-        let template = getHtmlTemplate();
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        return res.status(200).send(template);
-      }
-    });
-
-    app.get('/category/:slug', async (req: Request, res: Response) => {
-      try {
-        await syncStoriesFromFirestore(false);
-        let template = getHtmlTemplate();
-        template = await vite.transformIndexHtml(req.originalUrl, template);
-        const rendered = renderCategorySeo(template, req.params.slug);
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        return res.status(200).send(rendered);
-      } catch (err) {
-        console.error('[Dev /category error]:', err);
-        let template = getHtmlTemplate();
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        return res.status(200).send(template);
-      }
-    });
-
-    app.get('/categories', async (req: Request, res: Response) => {
-      try {
-        await syncStoriesFromFirestore(false);
-        let template = getHtmlTemplate();
-        template = await vite.transformIndexHtml(req.originalUrl, template);
-        const rendered = renderCategoriesListSeo(template);
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        return res.status(200).send(rendered);
-      } catch (err) {
-        console.error('[Dev /categories error]:', err);
-        let template = getHtmlTemplate();
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        return res.status(200).send(template);
-      }
-    });
-
-    app.get(['/sitemap', '/archives'], async (req: Request, res: Response) => {
-      try {
-        await syncStoriesFromFirestore(false);
-        let template = getHtmlTemplate();
-        template = await vite.transformIndexHtml(req.originalUrl, template);
-
-        const allStoriesList = memoryDatabase.stories
-          .filter((s) => s.published !== false)
-          .map(
-            (s) =>
-              `<li style="margin-bottom: 12px;"><a href="/story/${encodeURIComponent(s.slug)}" style="color: #2563eb; font-weight: 500;">${escapeHtml(s.title)}</a> <span style="color: #64748b; font-size: 13px;">(${escapeHtml(getCategoryDisplayName(s.category))})</span></li>`
-          )
-          .join('\n');
-
-        const archiveBody = `
-          <main style="max-width: 1000px; margin: 0 auto; padding: 24px;">
-            <nav style="margin-bottom: 20px;"><a href="/">← නැවත මුල් පිටුවට</a></nav>
-            <h1>Walkathawa Archives & Sitemap (සියලු කතා සූචිය)</h1>
-            <p>සියලුම සිංහල කතා, ආදර කතා සහ වර්ගීකරණ නාමාවලිය.</p>
-            <ul style="list-style: none; padding: 0; margin-top: 24px;">
-              ${allStoriesList}
-            </ul>
-          </main>`;
-
-        const rendered = injectSeoIntoHtml(template, {
-          title: 'Walkathawa Archives & Sitemap (සියලු කතා සූචිය)',
-          description: 'Google Indexing සහ පාඨක පහසුව සඳහා සියලුම සිංහල කතා සහ වර්ගීකරණ නාමාවලිය.',
-          canonicalUrl: 'https://www.walkathawa.site/sitemap',
-          bodyContent: archiveBody,
-        });
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        return res.status(200).send(rendered);
-      } catch (err) {
-        console.error('[Dev /sitemap error]:', err);
-        let template = getHtmlTemplate();
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        return res.status(200).send(template);
-      }
-    });
-
-    app.get(['/admin', '/admin/*'], async (req: Request, res: Response) => {
-      let template = getHtmlTemplate();
-      template = await vite.transformIndexHtml(req.originalUrl, template);
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      return res.status(200).send(template);
-    });
-
-    app.use(vite.middlewares);
-  } else {
-    // Production & Serverless static assets
-    const distPath = path.join(process.cwd(), 'dist');
-
-    if (fs.existsSync(path.join(distPath, 'assets'))) {
-      app.use(
-        '/assets',
-        express.static(path.join(distPath, 'assets'), {
-          maxAge: '1y',
-          immutable: true,
-        })
-      );
+    try {
+      const { createServer: createViteServer } = await import('vite');
+      const isHmrDisabled = process.env.DISABLE_HMR === 'true';
+      viteInstance = await createViteServer({
+        server: {
+          middlewareMode: true,
+          hmr: isHmrDisabled ? false : { server: httpServer! },
+        },
+        appType: 'spa',
+      });
+      app.use(viteInstance.middlewares);
+    } catch (e) {
+      console.warn('[Vite Dev Server Init Notice]:', e);
     }
-    if (fs.existsSync(distPath)) {
-      app.use(
-        express.static(distPath, {
-          maxAge: '1h',
-        })
-      );
-    }
-
-    // Production SSR Routes
-    app.get('/', async (_req: Request, res: Response) => {
-      try {
-        await syncStoriesFromFirestore(false);
-        const template = getHtmlTemplate();
-        const rendered = renderHomeSeo(template);
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800');
-        return res.status(200).send(rendered);
-      } catch (err) {
-        console.error('[Prod / error]:', err);
-        const template = getHtmlTemplate();
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        return res.status(200).send(template);
-      }
-    });
-
-    app.get('/story/:slug', async (req: Request, res: Response) => {
-      try {
-        const story = await findStoryBySlugOrId(req.params.slug);
-        const template = getHtmlTemplate();
-
-        if (!story) {
-          return res.status(404).send(renderHomeSeo(template));
-        }
-
-        const rendered = renderStorySeo(template, story);
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800');
-        return res.status(200).send(rendered);
-      } catch (err) {
-        console.error('[Prod /story error]:', err);
-        const template = getHtmlTemplate();
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        return res.status(200).send(template);
-      }
-    });
-
-    app.get('/category/:slug', async (req: Request, res: Response) => {
-      try {
-        await syncStoriesFromFirestore(false);
-        const template = getHtmlTemplate();
-        const rendered = renderCategorySeo(template, req.params.slug);
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800');
-        return res.status(200).send(rendered);
-      } catch (err) {
-        console.error('[Prod /category error]:', err);
-        const template = getHtmlTemplate();
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        return res.status(200).send(template);
-      }
-    });
-
-    app.get('/categories', async (_req: Request, res: Response) => {
-      try {
-        await syncStoriesFromFirestore(false);
-        const template = getHtmlTemplate();
-        const rendered = renderCategoriesListSeo(template);
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800');
-        return res.status(200).send(rendered);
-      } catch (err) {
-        console.error('[Prod /categories error]:', err);
-        const template = getHtmlTemplate();
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        return res.status(200).send(template);
-      }
-    });
-
-    app.get(['/sitemap', '/archives'], async (_req: Request, res: Response) => {
-      try {
-        await syncStoriesFromFirestore(false);
-        const template = getHtmlTemplate();
-
-        const allStoriesList = memoryDatabase.stories
-          .filter((s) => s.published !== false)
-          .map(
-            (s) =>
-              `<li style="margin-bottom: 12px;"><a href="/story/${encodeURIComponent(s.slug)}" style="color: #2563eb; font-weight: 500;">${escapeHtml(s.title)}</a> <span style="color: #64748b; font-size: 13px;">(${escapeHtml(getCategoryDisplayName(s.category))})</span></li>`
-          )
-          .join('\n');
-
-        const archiveBody = `
-          <main style="max-width: 1000px; margin: 0 auto; padding: 24px;">
-            <nav style="margin-bottom: 20px;"><a href="/">← නැවත මුල් පිටුවට</a></nav>
-            <h1>Walkathawa Archives & Sitemap (සියලු කතා සූචිය)</h1>
-            <p>සියලුම සිංහල කතා, ආදර කතා සහ වර්ගීකරණ නාමාවලිය.</p>
-            <ul style="list-style: none; padding: 0; margin-top: 24px;">
-              ${allStoriesList}
-            </ul>
-          </main>`;
-
-        const rendered = injectSeoIntoHtml(template, {
-          title: 'Walkathawa Archives & Sitemap (සියලු කතා සූචිය)',
-          description: 'Google Indexing සහ පාඨක පහසුව සඳහා සියලුම සිංහල කතා සහ වර්ගීකරණ නාමාවලිය.',
-          canonicalUrl: 'https://www.walkathawa.site/sitemap',
-          bodyContent: archiveBody,
-        });
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800');
-        return res.status(200).send(rendered);
-      } catch (err) {
-        console.error('[Prod /sitemap error]:', err);
-        const template = getHtmlTemplate();
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        return res.status(200).send(template);
-      }
-    });
-
-    app.get(['/admin', '/admin/*'], (_req: Request, res: Response) => {
-      const template = getHtmlTemplate();
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      return res.status(200).send(template);
-    });
-
-    // Fallback for direct serverless rewrite destination /api/index
-    app.all(['/api/index', '/api/index.ts'], (_req: Request, res: Response) => {
-      const template = getHtmlTemplate();
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      return res.status(200).send(template);
-    });
-
-    // Fallback SPA catch-all
-    app.get('*', (_req: Request, res: Response) => {
-      const template = getHtmlTemplate();
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      return res.status(200).send(template);
-    });
   }
-
-  // Global Error Handler
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    console.error('[Express Uncaught Error]:', err);
-    if (!res.headersSent) {
-      res.status(500).setHeader('Content-Type', 'text/html; charset=utf-8').send(
-        '<!DOCTYPE html><html lang="si"><head><meta charset="UTF-8"><title>Error</title></head><body><h1>සේවාව තාවකාලිකව කාර්යබහුලයි</h1><p>කරුණාකර මොහොතකින් නැවත පිවිසෙන්න.</p></body></html>'
-      );
-    }
-  });
 
   return new Promise<http.Server>((resolve) => {
     if (isServerless) {

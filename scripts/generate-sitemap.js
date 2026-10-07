@@ -48,12 +48,20 @@ async function run() {
   xml += `    <priority>1.0</priority>\n`;
   xml += `  </url>\n`;
 
-  // 2. Sitemap / Archives Page
+  // 2. Categories Special Directory Page
+  xml += `  <url>\n`;
+  xml += `    <loc>${baseUrl}/categories</loc>\n`;
+  xml += `    <lastmod>${nowIso}</lastmod>\n`;
+  xml += `    <changefreq>daily</changefreq>\n`;
+  xml += `    <priority>0.9</priority>\n`;
+  xml += `  </url>\n`;
+
+  // 3. Sitemap / Archives Page
   xml += `  <url>\n`;
   xml += `    <loc>${baseUrl}/sitemap</loc>\n`;
   xml += `    <lastmod>${nowIso}</lastmod>\n`;
   xml += `    <changefreq>daily</changefreq>\n`;
-  xml += `    <priority>0.8</priority>\n`;
+  xml += `    <priority>0.85</priority>\n`;
   xml += `  </url>\n`;
 
   // 3. Category Pages

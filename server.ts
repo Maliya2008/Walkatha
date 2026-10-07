@@ -13,27 +13,39 @@ import { normalizeFirestoreStory } from './src/services/storyService';
 const app = express();
 const PORT = 3000;
 
+function getHeaderString(val: string | string[] | undefined): string {
+  if (!val) return '';
+  if (Array.isArray(val)) return val[0] || '';
+  return String(val);
+}
+
 // Enable trust proxy for serverless environments (Vercel, Cloud Run)
 app.set('trust proxy', true);
 
 // URL and Header Normalization for serverless rewrites (Vercel, AWS Lambda, Cloud Run)
 app.use((req: Request, _res: Response, next: NextFunction) => {
-  const forwardedUri =
-    req.headers['x-forwarded-uri'] ||
-    req.headers['x-vercel-sc-path'] ||
-    req.headers['x-original-url'] ||
-    req.headers['x-rewrite-url'] ||
-    req.headers['x-invoke-path'] ||
-    req.headers['x-matched-path'];
+  try {
+    const rawUri =
+      req.headers['x-forwarded-uri'] ||
+      req.headers['x-vercel-sc-path'] ||
+      req.headers['x-original-url'] ||
+      req.headers['x-rewrite-url'] ||
+      req.headers['x-invoke-path'] ||
+      req.headers['x-matched-path'];
 
-  if (
-    typeof forwardedUri === 'string' &&
-    forwardedUri.startsWith('/') &&
-    !forwardedUri.startsWith('/api/index') &&
-    !forwardedUri.startsWith('/api/')
-  ) {
-    req.url = forwardedUri;
-    (req as any).originalUrl = forwardedUri;
+    const forwardedUri = getHeaderString(rawUri);
+
+    if (
+      forwardedUri &&
+      forwardedUri.startsWith('/') &&
+      !forwardedUri.startsWith('/api/index') &&
+      !forwardedUri.startsWith('/api/')
+    ) {
+      req.url = forwardedUri;
+      (req as any).originalUrl = forwardedUri;
+    }
+  } catch (e) {
+    console.warn('[URL Normalization Notice]:', e);
   }
   next();
 });
@@ -48,39 +60,41 @@ app.use((_req: Request, res: Response, next: NextFunction) => {
 
 // Canonical Host Enforcement & Protocol Detection
 app.use((req: Request, res: Response, next: NextFunction) => {
-  const forwardedHost = (req.headers['x-forwarded-host'] as string) || '';
-  const hostHeader = (typeof req.get === 'function' ? req.get('host') : (req.headers['host'] as string)) || '';
-  const host = (forwardedHost || hostHeader).split(':')[0].toLowerCase();
+  try {
+    const forwardedHost = getHeaderString(req.headers['x-forwarded-host']);
+    const hostHeader = (typeof req.get === 'function' ? req.get('host') : getHeaderString(req.headers['host'])) || '';
+    const host = (forwardedHost || hostHeader).split(':')[0].toLowerCase().trim();
 
-  let proto = 'https';
-  const forwardedProto = req.headers['x-forwarded-proto'];
-  if (typeof forwardedProto === 'string') {
-    proto = forwardedProto.split(',')[0].trim().toLowerCase();
-  } else if (Array.isArray(forwardedProto) && forwardedProto.length > 0) {
-    proto = forwardedProto[0].trim().toLowerCase();
-  }
+    let proto = 'https';
+    const forwardedProto = getHeaderString(req.headers['x-forwarded-proto']);
+    if (forwardedProto) {
+      proto = forwardedProto.split(',')[0].trim().toLowerCase();
+    }
 
-  const isCanonicalProd = host === 'www.walkathawa.site';
-  const isApexProd = host === 'walkathawa.site';
+    const isCanonicalProd = host === 'www.walkathawa.site';
+    const isApexProd = host === 'walkathawa.site';
 
-  const rawPath = req.originalUrl || req.url || '/';
-  const cleanPath = rawPath.startsWith('/api/index') ? '/' : rawPath;
+    const rawPath = req.originalUrl || req.url || '/';
+    const cleanPath = rawPath.startsWith('/api/index') ? '/' : rawPath;
 
-  // 1. Apex to canonical redirect: walkathawa.site -> www.walkathawa.site
-  if (isApexProd) {
-    return res.redirect(301, `https://www.walkathawa.site${cleanPath}`);
-  }
+    // 1. Apex to canonical redirect: walkathawa.site -> www.walkathawa.site
+    if (isApexProd) {
+      return res.redirect(301, `https://www.walkathawa.site${cleanPath}`);
+    }
 
-  // 2. HTTP to HTTPS redirect on production domain
-  if (isCanonicalProd && proto === 'http') {
-    return res.redirect(301, `https://www.walkathawa.site${cleanPath}`);
-  }
+    // 2. HTTP to HTTPS redirect on production domain (only if strictly http)
+    if (isCanonicalProd && proto === 'http') {
+      return res.redirect(301, `https://www.walkathawa.site${cleanPath}`);
+    }
 
-  // 3. Search Engine Indexing: Disallow /admin and /api paths, index all public content
-  if (req.path.startsWith('/admin') || req.path.startsWith('/api')) {
-    res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
-  } else {
-    res.setHeader('X-Robots-Tag', 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1');
+    // 3. Search Engine Indexing: Disallow /admin and /api paths, index all public content
+    if (req.path && (req.path.startsWith('/admin') || req.path.startsWith('/api'))) {
+      res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+    } else {
+      res.setHeader('X-Robots-Tag', 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1');
+    }
+  } catch (err) {
+    console.warn('[Host Middleware Notice]:', err);
   }
 
   next();
@@ -278,34 +292,35 @@ async function findStoryBySlugOrId(slugParam: string): Promise<Story | null> {
   let found = memoryDatabase.stories.find(matches);
   if (found) return found;
 
-  // Cache miss: sync immediately with Firestore
-  try {
-    await syncStoriesFromFirestore(true);
-    found = memoryDatabase.stories.find(matches);
-    if (found) return found;
-  } catch (e) {}
-
-  // Direct Firestore document check by ID or slug with timeout
+  // Direct Firestore document check by ID or slug with strict try-catch and 1.5s timeout
   try {
     const directFetch = async () => {
-      const docRef = doc(db, 'stories', slugParam.trim());
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        const story = normalizeFirestoreStory(docSnap.id, docSnap.data());
-        memoryDatabase.stories.unshift(story);
-        saveDatabase();
-        return story;
+      // Safe doc id lookup (avoid slashes or invalid doc paths)
+      if (!slugParam.includes('/') && !slugParam.includes('..')) {
+        try {
+          const docRef = doc(db, 'stories', slugParam.trim());
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            const story = normalizeFirestoreStory(docSnap.id, docSnap.data());
+            memoryDatabase.stories.unshift(story);
+            saveDatabase();
+            return story;
+          }
+        } catch (e) {}
       }
 
       // Direct Firestore query by slug field
-      const q = query(collection(db, 'stories'), where('slug', '==', decodedParam), limit(1));
-      const querySnap = await getDocs(q);
-      if (!querySnap.empty) {
-        const story = normalizeFirestoreStory(querySnap.docs[0].id, querySnap.docs[0].data());
-        memoryDatabase.stories.unshift(story);
-        saveDatabase();
-        return story;
-      }
+      try {
+        const q = query(collection(db, 'stories'), where('slug', '==', decodedParam), limit(1));
+        const querySnap = await getDocs(q);
+        if (!querySnap.empty) {
+          const story = normalizeFirestoreStory(querySnap.docs[0].id, querySnap.docs[0].data());
+          memoryDatabase.stories.unshift(story);
+          saveDatabase();
+          return story;
+        }
+      } catch (e) {}
+
       return null;
     };
 
@@ -1470,14 +1485,35 @@ export async function startServer(): Promise<http.Server> {
         console.log(`[Walkathawa Server] Listening on http://localhost:${PORT}`);
         resolve(httpServer!);
       });
+      httpServer.on('error', (err: any) => {
+        if (err.code === 'EADDRINUSE') {
+          console.warn(`[Walkathawa Server] Port ${PORT} already active.`);
+          resolve(httpServer!);
+        } else {
+          console.error('[Walkathawa Server] Server error:', err);
+        }
+      });
     }
   });
 }
 
-// Auto-start when executed directly
-if (!process.env.VERCEL && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
+// Auto-start only when executed as the main entrypoint
+const isDirectExecution =
+  Boolean(
+    process.argv[1] &&
+      (process.argv[1].endsWith('server.ts') ||
+        process.argv[1].endsWith('server.js') ||
+        process.argv[1].endsWith('server.cjs'))
+  );
+
+if (
+  isDirectExecution &&
+  !process.env.VERCEL &&
+  !process.env.AWS_LAMBDA_FUNCTION_NAME &&
+  !process.env.NOW_REGION
+) {
   startServer().catch((err) => {
-    console.error('Fatal server boot error:', err);
+    console.warn('[Server Startup Warning]:', err);
   });
 }
 

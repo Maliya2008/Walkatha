@@ -1,4 +1,5 @@
 import app from '../server';
 
-// Export Express app directly so Vercel Serverless runtime connects natively
+// Export Express app directly for Vercel Serverless Function runtime
 export default app;
+

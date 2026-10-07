@@ -127,72 +127,12 @@
   ],
   "rewrites": [
     {
-      "source": "/assets/(.*)",
-      "destination": "/assets/$1"
-    },
-    {
-      "source": "/favicon.svg",
-      "destination": "/favicon.svg"
-    },
-    {
-      "source": "/favicon.ico",
-      "destination": "/favicon.svg"
-    },
-    {
-      "source": "/icon.png",
-      "destination": "/icon.png"
-    },
-    {
-      "source": "/icon.jpg",
-      "destination": "/icon.jpg"
-    },
-    {
-      "source": "/icon.svg",
-      "destination": "/icon.svg"
-    },
-    {
-      "source": "/apple-touch-icon.png",
-      "destination": "/apple-touch-icon.png"
-    },
-    {
-      "source": "/manifest.json",
-      "destination": "/manifest.json"
-    },
-    {
-      "source": "/sitemap.xsl",
-      "destination": "/sitemap.xsl"
-    },
-    {
-      "source": "/google0a8bbd03676eca90.html",
-      "destination": "/google0a8bbd03676eca90.html"
-    },
-    {
-      "source": "/sw.js",
-      "destination": "/sw.js"
-    },
-    {
-      "source": "/admin",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/admin/(.*)",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/sitemap",
-      "destination": "/api/index"
-    },
-    {
-      "source": "/sitemap.xml",
-      "destination": "/api/index"
-    },
-    {
-      "source": "/robots.txt",
+      "source": "/api/(.*)",
       "destination": "/api/index"
     },
     {
       "source": "/(.*)",
-      "destination": "/api/index"
+      "destination": "/index.html"
     }
   ]
 }

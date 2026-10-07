@@ -16,6 +16,28 @@ const PORT = 3000;
 // Enable trust proxy for serverless environments (Vercel, Cloud Run)
 app.set('trust proxy', true);
 
+// URL and Header Normalization for serverless rewrites (Vercel, AWS Lambda, Cloud Run)
+app.use((req: Request, _res: Response, next: NextFunction) => {
+  const forwardedUri =
+    req.headers['x-forwarded-uri'] ||
+    req.headers['x-vercel-sc-path'] ||
+    req.headers['x-original-url'] ||
+    req.headers['x-rewrite-url'] ||
+    req.headers['x-invoke-path'] ||
+    req.headers['x-matched-path'];
+
+  if (
+    typeof forwardedUri === 'string' &&
+    forwardedUri.startsWith('/') &&
+    !forwardedUri.startsWith('/api/index') &&
+    !forwardedUri.startsWith('/api/')
+  ) {
+    req.url = forwardedUri;
+    (req as any).originalUrl = forwardedUri;
+  }
+  next();
+});
+
 // Standard security headers
 app.use((_req: Request, res: Response, next: NextFunction) => {
   res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
@@ -41,14 +63,17 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   const isCanonicalProd = host === 'www.walkathawa.site';
   const isApexProd = host === 'walkathawa.site';
 
+  const rawPath = req.originalUrl || req.url || '/';
+  const cleanPath = rawPath.startsWith('/api/index') ? '/' : rawPath;
+
   // 1. Apex to canonical redirect: walkathawa.site -> www.walkathawa.site
   if (isApexProd) {
-    return res.redirect(301, `https://www.walkathawa.site${req.originalUrl || req.url || ''}`);
+    return res.redirect(301, `https://www.walkathawa.site${cleanPath}`);
   }
 
   // 2. HTTP to HTTPS redirect on production domain
   if (isCanonicalProd && proto === 'http') {
-    return res.redirect(301, `https://www.walkathawa.site${req.originalUrl || req.url || ''}`);
+    return res.redirect(301, `https://www.walkathawa.site${cleanPath}`);
   }
 
   // 3. Search Engine Indexing: Disallow /admin and /api paths, index all public content
@@ -675,6 +700,35 @@ function renderCategoriesListSeo(template: string): string {
   });
 }
 
+function renderPageSeo(
+  template: string,
+  title: string,
+  description: string,
+  urlPath: string,
+  heading: string,
+  bodyHtml: string
+): string {
+  const canonicalUrl = `https://www.walkathawa.site${urlPath}`;
+  const bodyContent = `
+    <main style="max-width: 860px; margin: 0 auto; padding: 24px; line-height: 1.8;">
+      <nav style="margin-bottom: 20px;"><a href="/" style="color: #2563eb; text-decoration: none;">← මුල් පිටුව (Home)</a></nav>
+      <article>
+        <h1 style="font-size: 26px; margin-bottom: 16px;">${escapeHtml(heading)}</h1>
+        <div style="color: #334155; font-size: 16px;">
+          ${bodyHtml}
+        </div>
+      </article>
+    </main>`;
+
+  return injectSeoIntoHtml(template, {
+    title: `${title} | Walkathawa (වල් කතාව)`,
+    description,
+    canonicalUrl,
+    ogImage: 'https://www.walkathawa.site/icon.png',
+    bodyContent,
+  });
+}
+
 // --- DYNAMIC SITEMAP, ROBOTS, AND RSS/ATOM FEEDS ---
 
 // 1. Master Sitemap XML
@@ -1230,7 +1284,123 @@ app.get(['/sitemap', '/archives'], async (req: Request, res: Response) => {
   }
 });
 
-// 6. Admin SPA routes
+// 6. Privacy Policy SSR
+app.get('/privacy', async (req: Request, res: Response) => {
+  try {
+    const template = await getTransformedHtml(req.originalUrl);
+    const content = `
+      <p>Walkathawa (වල් කතාව) වෙබ් අඩවිය භාවිතා කරන ඔබගේ පෞද්ගලිකත්වය ආරක්ෂා කිරීම අපගේ ප්‍රමුඛතාවයයි.</p>
+      <h2 style="font-size: 20px; margin-top: 20px;">1. තොරතුරු රැස්කිරීම</h2>
+      <p>අපගේ වෙබ් අඩවියේ කතා කියවීම සඳහා කිසිදු පෞද්ගලික තොරතුරක් ඇතුළත් කිරීම අවශ්‍ය නොවේ. Google Analytics හරහා වෙබ් අඩවියේ ක්‍රියාකාරිත්වය පිළිබඳ නිර්නාමික සංඛ්‍යාලේඛන පමණක් විශ්ලේෂණය කරනු ලැබේ.</p>
+      <h2 style="font-size: 20px; margin-top: 20px;">2. කුකීස් (Cookies)</h2>
+      <p>පරිශීලක අත්දැකීම වැඩිදියුණු කිරීම සහ වෙබ් අඩවියේ තේමා තේරීම් සුරැකීමට බ්‍රවුසරයේ Local Storage සහ කුකීස් භාවිතා වේ.</p>
+    `;
+    const rendered = renderPageSeo(
+      template,
+      'Privacy Policy (පෞද්ගලිකත්ව ප්‍රතිපත්තිය)',
+      'Walkathawa පෞද්ගලිකත්ව ප්‍රතිපත්තිය සහ දත්ත ආරක්ෂණ මාර්ගෝපදේශ.',
+      '/privacy',
+      'Privacy Policy (පෞද්ගලිකත්ව ප්‍රතිපත්තිය)',
+      content
+    );
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.status(200).send(rendered);
+  } catch (err) {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.status(200).send(getHtmlTemplate());
+  }
+});
+
+// 7. Terms & Conditions SSR
+app.get('/terms', async (req: Request, res: Response) => {
+  try {
+    const template = await getTransformedHtml(req.originalUrl);
+    const content = `
+      <p>Walkathawa (වල් කතාව) වෙබ් අඩවියට පිවිසීමෙන් ඔබ මෙම කොන්දේසි වලට එකඟ වේ.</p>
+      <h2 style="font-size: 20px; margin-top: 20px;">1. අන්තර්ගත භාවිතය</h2>
+      <p>මෙහි පළවන සියලුම නිර්මාණ සහ කතා කියවීම සඳහා පමණක් වන අතර කතුවරුන්ගේ අවසරයකින් තොරව වෙනත් මාධ්‍යවල නැවත පළකිරීම තහනම් වේ.</p>
+      <h2 style="font-size: 20px; margin-top: 20px;">2. වයස් සීමාව</h2>
+      <p>අඩවියේ අන්තර්ගත ඇතැම් කතා වැඩිහිටි පාඨකයින් සඳහා පමණක් අදහස් කෙරේ.</p>
+    `;
+    const rendered = renderPageSeo(
+      template,
+      'Terms & Conditions (භාවිත නියමයන්)',
+      'Walkathawa වෙබ් අඩවියේ භාවිත නියමයන් සහ කොන්දේසි.',
+      '/terms',
+      'Terms & Conditions (භාවිත නියමයන්)',
+      content
+    );
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.status(200).send(rendered);
+  } catch (err) {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.status(200).send(getHtmlTemplate());
+  }
+});
+
+// 8. DMCA / Copyright SSR
+app.get('/dmca', async (req: Request, res: Response) => {
+  try {
+    const template = await getTransformedHtml(req.originalUrl);
+    const content = `
+      <p>Walkathawa respects the intellectual property rights of others. If you believe that your copyrighted work has been copied in a way that constitutes copyright infringement, please contact us with the details.</p>
+      <p>Contact: <a href="mailto:mchethiyabandara@gmail.com" style="color: #2563eb;">mchethiyabandara@gmail.com</a></p>
+    `;
+    const rendered = renderPageSeo(
+      template,
+      'DMCA & Copyright Policy',
+      'Digital Millennium Copyright Act (DMCA) policy for Walkathawa.',
+      '/dmca',
+      'DMCA & Copyright Policy',
+      content
+    );
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.status(200).send(rendered);
+  } catch (err) {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.status(200).send(getHtmlTemplate());
+  }
+});
+
+// 9. About Us SSR
+app.get('/about', async (req: Request, res: Response) => {
+  try {
+    const template = await getTransformedHtml(req.originalUrl);
+    const content = `
+      <p>Walkathawa (වල් කතාව) යනු සිංහල භාෂාවෙන් නිර්මාණය වූ නවකතා, කෙටිකතා සහ ආදර කතා කියවීමට නිර්මාණය කළ සරල, වේගවත් අන්තර්ජාල එකතුවකි.</p>
+      <p>අපගේ අරමුණ පාඨකයින්ට පහසුවෙන් රසවත් නිර්මාණ රසවිඳීමට මෙන්ම නවක නිර්මාණකරුවන්ට තම කතා පළකිරීමට සුදුසු වේදිකාවක් සැපයීමයි.</p>
+    `;
+    const rendered = renderPageSeo(
+      template,
+      'About Us (අප ගැන)',
+      'Walkathawa (වල් කතාව) පිළිබඳ තොරතුරු සහ අපගේ සේවාව.',
+      '/about',
+      'About Us (අප ගැන)',
+      content
+    );
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.status(200).send(rendered);
+  } catch (err) {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.status(200).send(getHtmlTemplate());
+  }
+});
+
+// 10. Popular & Latest aliases
+app.get(['/popular', '/latest'], async (req: Request, res: Response) => {
+  try {
+    await syncStoriesFromFirestore(false);
+    const template = await getTransformedHtml(req.originalUrl);
+    const rendered = renderHomeSeo(template);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.status(200).send(rendered);
+  } catch (err) {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.status(200).send(getHtmlTemplate());
+  }
+});
+
+// 11. Admin SPA routes
 app.get(['/admin', '/admin/*'], async (req: Request, res: Response) => {
   const template = await getTransformedHtml(req.originalUrl);
   res.setHeader('Content-Type', 'text/html; charset=utf-8');

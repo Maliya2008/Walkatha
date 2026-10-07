@@ -65,9 +65,22 @@ app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
 // --- DATABASE PERSISTENCE LAYER ---
+const isServerlessEnvironment = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
 const currentDirname = typeof __dirname !== 'undefined' ? __dirname : process.cwd();
 
+function safeDecode(str: string): string {
+  if (!str) return '';
+  try {
+    return decodeURIComponent(str);
+  } catch (e) {
+    return str;
+  }
+}
+
 function getDatabaseFilePath(): string {
+  if (isServerlessEnvironment) {
+    return path.join('/tmp', 'database.json');
+  }
   const paths = [
     path.join('/tmp', 'database.json'),
     path.join(process.cwd(), 'data', 'database.json'),
@@ -79,7 +92,7 @@ function getDatabaseFilePath(): string {
   return path.join(process.cwd(), 'data', 'database.json');
 }
 
-const DATA_DIR = path.join(process.cwd(), 'data');
+const DATA_DIR = isServerlessEnvironment ? '/tmp' : path.join(process.cwd(), 'data');
 const DB_PATH = getDatabaseFilePath();
 
 interface DatabaseSchema {
@@ -116,20 +129,29 @@ let memoryDatabase: DatabaseSchema = {
 
 function loadDatabase(): DatabaseSchema {
   try {
-    if (fs.existsSync(DB_PATH)) {
-      const raw = fs.readFileSync(DB_PATH, 'utf8');
-      const parsed = JSON.parse(raw);
-      if (parsed && Array.isArray(parsed.stories) && parsed.stories.length > 0) {
-        memoryDatabase.stories = parsed.stories;
-      }
-      if (parsed && Array.isArray(parsed.categories) && parsed.categories.length > 0) {
-        memoryDatabase.categories = parsed.categories;
-      }
-      if (parsed && parsed.settings) {
-        memoryDatabase.settings = { ...memoryDatabase.settings, ...parsed.settings };
-      }
-      if (parsed && Array.isArray(parsed.users) && parsed.users.length > 0) {
-        memoryDatabase.users = parsed.users;
+    const candidatePaths = [
+      DB_PATH,
+      path.join(process.cwd(), 'data', 'database.json'),
+      path.join(currentDirname, 'data', 'database.json'),
+      path.join('/tmp', 'database.json'),
+    ];
+    for (const cp of candidatePaths) {
+      if (fs.existsSync(cp)) {
+        const raw = fs.readFileSync(cp, 'utf8');
+        const parsed = JSON.parse(raw);
+        if (parsed && Array.isArray(parsed.stories) && parsed.stories.length > 0) {
+          memoryDatabase.stories = parsed.stories;
+        }
+        if (parsed && Array.isArray(parsed.categories) && parsed.categories.length > 0) {
+          memoryDatabase.categories = parsed.categories;
+        }
+        if (parsed && parsed.settings) {
+          memoryDatabase.settings = { ...memoryDatabase.settings, ...parsed.settings };
+        }
+        if (parsed && Array.isArray(parsed.users) && parsed.users.length > 0) {
+          memoryDatabase.users = parsed.users;
+        }
+        break;
       }
     }
   } catch (err) {
@@ -140,12 +162,13 @@ function loadDatabase(): DatabaseSchema {
 
 function saveDatabase(): void {
   try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
+    const targetDir = path.dirname(DB_PATH);
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
     }
     fs.writeFileSync(DB_PATH, JSON.stringify(memoryDatabase, null, 2), 'utf8');
   } catch (err) {
-    console.warn('[DB] Could not save database to disk:', err);
+    // Read-only filesystem warning in serverless is benign
   }
 }
 
@@ -155,7 +178,6 @@ loadDatabase();
 // --- FIRESTORE CONTINUOUS SYNC & DISCOVERY LAYER ---
 let lastFirestoreSync = 0;
 const SYNC_COOLDOWN_MS = 45 * 1000; // 45s cache window for fresh indexing
-const isServerlessEnvironment = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
 
 async function syncStoriesFromFirestore(force = false): Promise<Story[]> {
   const now = Date.now();
@@ -187,9 +209,9 @@ async function syncStoriesFromFirestore(force = false): Promise<Story[]> {
       return memoryDatabase.stories;
     })();
 
-    // 2.5 second timeout safeguard so serverless invocation never hangs
+    // 2.0 second timeout safeguard so serverless invocation never hangs
     const timeoutPromise = new Promise<Story[]>((resolve) => {
-      setTimeout(() => resolve(memoryDatabase.stories), 2500);
+      setTimeout(() => resolve(memoryDatabase.stories), 2000);
     });
 
     return await Promise.race([fetchPromise, timeoutPromise]);
@@ -210,19 +232,21 @@ if (!isServerlessEnvironment) {
 
 async function findStoryBySlugOrId(slugParam: string): Promise<Story | null> {
   if (!slugParam) return null;
-  const cleanParam = decodeURIComponent(slugParam).toLowerCase().trim();
-  const rawParam = slugParam.trim();
+  const decodedParam = safeDecode(slugParam).toLowerCase().trim();
+  const rawParam = slugParam.toLowerCase().trim();
 
   const matches = (s: Story) => {
+    if (!s) return false;
     const sSlug = (s.slug || '').toLowerCase().trim();
-    const sId = (s.id || '').trim();
-    const decodedSlug = decodeURIComponent(s.slug || '').toLowerCase().trim();
+    const sId = (s.id || '').toLowerCase().trim();
+    const decodedSlug = safeDecode(s.slug || '').toLowerCase().trim();
     return (
-      sSlug === cleanParam ||
-      sId.toLowerCase() === cleanParam.toLowerCase() ||
-      decodedSlug === cleanParam ||
-      sSlug === rawParam.toLowerCase() ||
-      sId === rawParam
+      sSlug === decodedParam ||
+      sSlug === rawParam ||
+      sId === decodedParam ||
+      sId === rawParam ||
+      decodedSlug === decodedParam ||
+      decodedSlug === rawParam
     );
   };
 
@@ -230,30 +254,38 @@ async function findStoryBySlugOrId(slugParam: string): Promise<Story | null> {
   if (found) return found;
 
   // Cache miss: sync immediately with Firestore
-  await syncStoriesFromFirestore(true);
-  found = memoryDatabase.stories.find(matches);
-  if (found) return found;
-
-  // Direct Firestore document check by ID
   try {
-    const docRef = doc(db, 'stories', rawParam);
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      const story = normalizeFirestoreStory(docSnap.id, docSnap.data());
-      memoryDatabase.stories.unshift(story);
-      saveDatabase();
-      return story;
-    }
+    await syncStoriesFromFirestore(true);
+    found = memoryDatabase.stories.find(matches);
+    if (found) return found;
+  } catch (e) {}
 
-    // Direct Firestore query by slug field
-    const q = query(collection(db, 'stories'), where('slug', '==', cleanParam), limit(1));
-    const querySnap = await getDocs(q);
-    if (!querySnap.empty) {
-      const story = normalizeFirestoreStory(querySnap.docs[0].id, querySnap.docs[0].data());
-      memoryDatabase.stories.unshift(story);
-      saveDatabase();
-      return story;
-    }
+  // Direct Firestore document check by ID or slug with timeout
+  try {
+    const directFetch = async () => {
+      const docRef = doc(db, 'stories', slugParam.trim());
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const story = normalizeFirestoreStory(docSnap.id, docSnap.data());
+        memoryDatabase.stories.unshift(story);
+        saveDatabase();
+        return story;
+      }
+
+      // Direct Firestore query by slug field
+      const q = query(collection(db, 'stories'), where('slug', '==', decodedParam), limit(1));
+      const querySnap = await getDocs(q);
+      if (!querySnap.empty) {
+        const story = normalizeFirestoreStory(querySnap.docs[0].id, querySnap.docs[0].data());
+        memoryDatabase.stories.unshift(story);
+        saveDatabase();
+        return story;
+      }
+      return null;
+    };
+
+    const timeoutPromise = new Promise<Story | null>((resolve) => setTimeout(() => resolve(null), 1500));
+    return await Promise.race([directFetch(), timeoutPromise]);
   } catch (err) {
     console.warn('[FindStory] Direct query fallback error:', err);
   }

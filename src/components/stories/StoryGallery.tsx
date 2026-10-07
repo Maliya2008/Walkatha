@@ -4,6 +4,7 @@ import { Category, Story } from '../../types/story';
 import { StoryCard } from './StoryCard';
 import { getCategoryDisplayName } from '../../utils/categoryTaxonomy';
 import { cleanCategoryBadgeName } from '../../utils/formatters';
+import { AdBanner, SmartLinkCallout } from '../common/AdBanner';
 
 interface StoryGalleryProps {
   stories: Story[];
@@ -137,6 +138,9 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
         </div>
       </div>
 
+      {/* Top Gallery Ad Banner */}
+      <AdBanner type="responsive" className="my-2" />
+
       {/* 4. Story Feed (4-columns Gallery Grid Layout with at least 5 rows per page) */}
       {isLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5 py-2">
@@ -192,6 +196,14 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
           )}
         </div>
       )}
+
+      {/* Mid/Bottom Feed Callout and Ad Banner */}
+      <SmartLinkCallout
+        label="🔥 අලුත්ම විශේෂ කතා සහ චැට් කතා කියවන්න (Click Here)"
+        sublabel="දිනපතා අලුත්වන රසවත් සිංහල කතා එකතුව"
+        variant="primary"
+      />
+      <AdBanner type="responsive" className="my-2" />
 
       {/* 5. Simple Accessible Pagination */}
       {totalPages > 1 && (

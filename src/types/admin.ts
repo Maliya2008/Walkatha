@@ -34,6 +34,8 @@ export interface DashboardStats {
     slug: string;
     views: number;
     uploadDate: string;
+    uploadedDate?: string;
     category: string;
+    published?: boolean;
   }>;
 }

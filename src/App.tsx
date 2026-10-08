@@ -7,6 +7,7 @@ import { Footer } from './components/layout/Footer';
 import { StoryGallery } from './components/stories/StoryGallery';
 import { SitemapPage } from './components/sitemap/SitemapPage';
 import { CategoriesPage } from './components/categories/CategoriesPage';
+import { DesktopSideSkyscrapers } from './components/common/DesktopSideSkyscrapers';
 import { normalizeCategorySlug, getCategoryDisplayName } from './utils/categoryTaxonomy';
 
 const StoryReader = lazy(() =>
@@ -279,6 +280,9 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 selection:bg-rose-500 selection:text-white transition-colors duration-200">
+      {/* Desktop Outer Edge Skyscraper Ads (Positioned only at the sidest points of the site on desktop) */}
+      <DesktopSideSkyscrapers />
+
       {/* Header */}
       <Header
         onHomeClick={handleHomeClick}

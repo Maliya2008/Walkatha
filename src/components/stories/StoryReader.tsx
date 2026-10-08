@@ -13,7 +13,6 @@ import {
 } from 'lucide-react';
 import { Story, ReadingTheme, FontSize } from '../../types/story';
 import { StoryCard } from './StoryCard';
-import { AdBanner, SmartLinkCallout } from '../common/AdBanner';
 import { getCategoryDisplayName } from '../../utils/categoryTaxonomy';
 import {
   formatSinhalaDate,
@@ -238,46 +237,17 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
             </div>
           )}
 
-          {/* Top Banner Ad */}
-          <AdBanner type="responsive" className="my-3" />
-
           {/* Distraction-Free Story Body */}
           <div className={`mt-6 text-slate-800 dark:text-slate-200 space-y-5 ${fontClass}`}>
-            {paragraphs.map((para, idx) => {
-              const isMidPoint = idx === Math.floor(paragraphs.length / 2);
-              return (
-                <React.Fragment key={idx}>
-                  <p className="break-words">
-                    {para}
-                  </p>
-                  {/* Smart link 1 & mid-story banner */}
-                  {isMidPoint && paragraphs.length > 2 && (
-                    <div className="my-6">
-                      <SmartLinkCallout
-                        label="🔥 මෙතනින් නවතම විශේෂ කතා කියවන්න (Special Stories)"
-                        sublabel="දිනපතා අලුත් වන තවත් රසවත් සිංහල කතා කියවන්න ක්ලික් කරන්න"
-                        variant="primary"
-                      />
-                      <AdBanner type="responsive" className="my-3" />
-                    </div>
-                  )}
-                </React.Fragment>
-              );
-            })}
-          </div>
-
-          {/* Smart link 2 (End of Post) */}
-          <div className="mt-8">
-            <SmartLinkCallout
-              label="✨ ඊළඟ කොටස් සහ අලුත්ම කතා කියවන්න (Next Stories)"
-              sublabel="නොමිලේ සියලුම කතා සහ අලුත් ලිපි කියවීමට පිවිසෙන්න"
-              variant="secondary"
-            />
-            <AdBanner type="responsive" className="my-3" />
+            {paragraphs.map((para, idx) => (
+              <p key={idx} className="break-words">
+                {para}
+              </p>
+            ))}
           </div>
 
           {/* Story End Marker */}
-          <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-800/80 text-center">
+          <div className="mt-10 pt-6 border-t border-slate-100 dark:border-slate-800/80 text-center">
             <span className="text-xs sm:text-sm font-semibold text-slate-400 dark:text-slate-500 tracking-wider">
               ~ කතාව නිමි ~
             </span>

@@ -203,7 +203,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     )}
                   </td>
                   <td className="py-3 px-4 text-slate-400 text-[11px]">
-                    {new Date(story.uploadDate || story.uploadedDate || Date.now()).toLocaleDateString()}
+                    {new Date(story.uploadedDate).toLocaleDateString()}
                   </td>
                   <td className="py-3 px-4 text-right">
                     <div className="inline-flex items-center gap-2">

@@ -14,6 +14,7 @@ import {
 import { Story, ReadingTheme, FontSize } from '../../types/story';
 import { StoryCard } from './StoryCard';
 import { AdBanner320x50 } from '../common/AdBanner320x50';
+import { AdSkyscraper160x600 } from '../common/AdSkyscraper160x600';
 import { getCategoryDisplayName } from '../../utils/categoryTaxonomy';
 import {
   formatSinhalaDate,
@@ -109,9 +110,16 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
         />
       </div>
 
-      {/* Narrow reading column */}
-      <div className="max-w-2xl mx-auto px-4 py-4 sm:py-6 space-y-6">
-        {/* Top Controls: Back button & Reading Tools */}
+      {/* Main Container with desktop skyscraper sidebars */}
+      <div className="max-w-6xl mx-auto px-4 py-4 sm:py-6 flex justify-center gap-6">
+        {/* Left Skyscraper on wide screens */}
+        <aside className="hidden xl:block shrink-0 sticky top-20 self-start w-[160px]">
+          <AdSkyscraper160x600 />
+        </aside>
+
+        {/* Central reading column */}
+        <div className="max-w-2xl w-full space-y-6">
+          {/* Top Controls: Back button & Reading Tools */}
         <div className="flex items-center justify-between gap-3 pt-2">
           <button
             type="button"
@@ -317,6 +325,12 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
             </div>
           </div>
         )}
+        </div>
+
+        {/* Right Skyscraper on wide screens */}
+        <aside className="hidden xl:block shrink-0 sticky top-20 self-start w-[160px]">
+          <AdSkyscraper160x600 />
+        </aside>
       </div>
     </div>
   );

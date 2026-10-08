@@ -254,8 +254,11 @@ async function syncStoriesFromFirestore(force = false): Promise<Story[]> {
     });
 
     return await Promise.race([fetchPromise, timeoutPromise]);
-  } catch (err) {
-    console.warn('[Firestore Sync] Non-fatal background sync notice:', err);
+  } catch (err: any) {
+    // Only log unexpected errors; permission-denied in unauthenticated backend sync is expected when rules require auth
+    if (err?.code !== 'permission-denied') {
+      console.warn('[Firestore Sync] Non-fatal background sync notice:', err?.message || err);
+    }
     return memoryDatabase.stories;
   }
 }
@@ -326,8 +329,10 @@ async function findStoryBySlugOrId(slugParam: string): Promise<Story | null> {
 
     const timeoutPromise = new Promise<Story | null>((resolve) => setTimeout(() => resolve(null), 1500));
     return await Promise.race([directFetch(), timeoutPromise]);
-  } catch (err) {
-    console.warn('[FindStory] Direct query fallback error:', err);
+  } catch (err: any) {
+    if (err?.code !== 'permission-denied') {
+      console.warn('[FindStory] Direct query fallback error:', err?.message || err);
+    }
   }
 
   return null;

@@ -7,8 +7,31 @@ import { SiteSettings } from './src/types/admin';
 import { INITIAL_STORIES, INITIAL_CATEGORIES } from './src/data/seedStories';
 import { normalizeCategorySlug, getCategoryDisplayName } from './src/utils/categoryTaxonomy';
 import { db } from './src/lib/firebase';
-import { collection, getDocs, doc, getDoc, query, where, limit } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, query, where, limit, setLogLevel } from 'firebase/firestore';
 import { normalizeFirestoreStory } from './src/services/storyService';
+
+// Ensure Firestore internal logging is silent to avoid idle gRPC stream cancellation notices in Node
+try {
+  setLogLevel('silent');
+} catch {}
+
+// Suppress benign internal gRPC idle stream disconnection notices
+const originalConsoleWarn = console.warn;
+const originalConsoleError = console.error;
+const isIdleStreamNotice = (args: any[]): boolean => {
+  const text = args.map((a) => (typeof a === 'string' ? a : (a?.message || ''))).join(' ');
+  return text.includes('Disconnecting idle stream') || text.includes('Timed out waiting for new targets');
+};
+
+console.warn = (...args: any[]) => {
+  if (isIdleStreamNotice(args)) return;
+  originalConsoleWarn.apply(console, args);
+};
+
+console.error = (...args: any[]) => {
+  if (isIdleStreamNotice(args)) return;
+  originalConsoleError.apply(console, args);
+};
 
 const app = express();
 const PORT = 3000;
@@ -254,19 +277,18 @@ async function syncStoriesFromFirestore(force = false): Promise<Story[]> {
     });
 
     return await Promise.race([fetchPromise, timeoutPromise]);
-  } catch (err) {
-    console.warn('[Firestore Sync] Non-fatal background sync notice:', err);
+  } catch (err: any) {
+    // Only log unexpected errors; permission-denied in unauthenticated backend sync is expected when rules require auth
+    if (err?.code !== 'permission-denied') {
+      console.warn('[Firestore Sync] Non-fatal background sync notice:', err?.message || err);
+    }
     return memoryDatabase.stories;
   }
 }
 
-// Background sync job every 2 minutes (only in persistent node servers, never in serverless)
+// Initial background sync check on boot (only in persistent node servers, never in serverless)
 if (!isServerlessEnvironment) {
-  setInterval(() => {
-    syncStoriesFromFirestore(true).catch(() => {});
-  }, 120 * 1000);
-  // Kick off initial sync asynchronously
-  syncStoriesFromFirestore(true).catch(() => {});
+  syncStoriesFromFirestore(false).catch(() => {});
 }
 
 async function findStoryBySlugOrId(slugParam: string): Promise<Story | null> {
@@ -326,8 +348,10 @@ async function findStoryBySlugOrId(slugParam: string): Promise<Story | null> {
 
     const timeoutPromise = new Promise<Story | null>((resolve) => setTimeout(() => resolve(null), 1500));
     return await Promise.race([directFetch(), timeoutPromise]);
-  } catch (err) {
-    console.warn('[FindStory] Direct query fallback error:', err);
+  } catch (err: any) {
+    if (err?.code !== 'permission-denied') {
+      console.warn('[FindStory] Direct query fallback error:', err?.message || err);
+    }
   }
 
   return null;

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { Story, ReadingTheme, FontSize } from '../../types/story';
 import { StoryCard } from './StoryCard';
+import { AdBanner320x50 } from '../common/AdBanner320x50';
 import { getCategoryDisplayName } from '../../utils/categoryTaxonomy';
 import {
   formatSinhalaDate,
@@ -292,6 +293,9 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
             </button>
           ) : null}
         </div>
+
+        {/* 320x50 In-Page Story Ad Banner */}
+        <AdBanner320x50 />
 
         {/* Related Stories */}
         {relatedStories && relatedStories.length > 0 && (

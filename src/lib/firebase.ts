@@ -1,8 +1,15 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore, setLogLevel } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { getAnalytics, isSupported } from 'firebase/analytics';
+
+// Silence internal Firestore stream disconnection notices across client and server
+try {
+  setLogLevel('silent');
+} catch {
+  // Ignore in environments where setLogLevel might not be permitted
+}
 
 // Your web app's Firebase configuration
 export const firebaseConfig = {

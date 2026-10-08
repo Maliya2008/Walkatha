@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Category } from '../../types/story';
 import { PrivacyTermsModal } from '../common/PrivacyTermsModal';
+import { AdBanner320x50 } from '../common/AdBanner320x50';
 import { cleanCategoryBadgeName } from '../../utils/formatters';
 
 interface FooterProps {
@@ -54,6 +55,9 @@ export const Footer: React.FC<FooterProps> = ({
                 ))}
             </div>
           </div>
+
+          {/* 320x50 In-Page Footer Ad Banner */}
+          <AdBanner320x50 />
 
           {/* Legal & Navigation Links */}
           <div className="pt-4 border-t border-slate-100 dark:border-slate-850/80 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">

@@ -7,8 +7,31 @@ import { SiteSettings } from './src/types/admin';
 import { INITIAL_STORIES, INITIAL_CATEGORIES } from './src/data/seedStories';
 import { normalizeCategorySlug, getCategoryDisplayName } from './src/utils/categoryTaxonomy';
 import { db } from './src/lib/firebase';
-import { collection, getDocs, doc, getDoc, query, where, limit } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, query, where, limit, setLogLevel } from 'firebase/firestore';
 import { normalizeFirestoreStory } from './src/services/storyService';
+
+// Ensure Firestore internal logging is silent to avoid idle gRPC stream cancellation notices in Node
+try {
+  setLogLevel('silent');
+} catch {}
+
+// Suppress benign internal gRPC idle stream disconnection notices
+const originalConsoleWarn = console.warn;
+const originalConsoleError = console.error;
+const isIdleStreamNotice = (args: any[]): boolean => {
+  const text = args.map((a) => (typeof a === 'string' ? a : (a?.message || ''))).join(' ');
+  return text.includes('Disconnecting idle stream') || text.includes('Timed out waiting for new targets');
+};
+
+console.warn = (...args: any[]) => {
+  if (isIdleStreamNotice(args)) return;
+  originalConsoleWarn.apply(console, args);
+};
+
+console.error = (...args: any[]) => {
+  if (isIdleStreamNotice(args)) return;
+  originalConsoleError.apply(console, args);
+};
 
 const app = express();
 const PORT = 3000;
@@ -263,13 +286,9 @@ async function syncStoriesFromFirestore(force = false): Promise<Story[]> {
   }
 }
 
-// Background sync job every 2 minutes (only in persistent node servers, never in serverless)
+// Initial background sync check on boot (only in persistent node servers, never in serverless)
 if (!isServerlessEnvironment) {
-  setInterval(() => {
-    syncStoriesFromFirestore(true).catch(() => {});
-  }, 120 * 1000);
-  // Kick off initial sync asynchronously
-  syncStoriesFromFirestore(true).catch(() => {});
+  syncStoriesFromFirestore(false).catch(() => {});
 }
 
 async function findStoryBySlugOrId(slugParam: string): Promise<Story | null> {

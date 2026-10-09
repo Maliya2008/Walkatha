@@ -78,7 +78,7 @@ export const AdminRoot: React.FC<AdminRootProps> = ({
 
   if (isCheckingAuth) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400 text-xs">
+      <div id="admin-workspace-root" className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400 text-xs">
         <div className="text-center space-y-3">
           <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto" />
           <p>Verifying secure admin session...</p>
@@ -90,61 +90,65 @@ export const AdminRoot: React.FC<AdminRootProps> = ({
   // If not authenticated, render the dedicated Login View
   if (!user) {
     return (
-      <AdminLogin
-        onSuccess={handleLoginSuccess}
-        onBackToSite={onBackToPublic}
-      />
+      <div id="admin-workspace-root">
+        <AdminLogin
+          onSuccess={handleLoginSuccess}
+          onBackToSite={onBackToPublic}
+        />
+      </div>
     );
   }
 
   // Render Protected Admin Workspace
   return (
-    <AdminLayout
-      user={user}
-      activeTab={activeTab}
-      onTabChange={(tab) => {
-        if (tab !== 'new-story') {
-          setStoryToEdit(null);
-        }
-        setActiveTab(tab);
-      }}
-      onLogout={handleLogout}
-      onViewPublicSite={onBackToPublic}
-    >
-      {activeTab === 'dashboard' && (
-        <AdminDashboard
-          onNavigate={(tab) => {
-            if (tab === 'new-story') setStoryToEdit(null);
-            setActiveTab(tab);
-          }}
-          onEditStory={handleEditStory}
-          onViewPublicStory={onViewStoryPublic}
-        />
-      )}
-
-      {activeTab === 'stories' && (
-        <AdminStoriesList
-          onNewStory={() => {
+    <div id="admin-workspace-root">
+      <AdminLayout
+        user={user}
+        activeTab={activeTab}
+        onTabChange={(tab) => {
+          if (tab !== 'new-story') {
             setStoryToEdit(null);
-            setActiveTab('new-story');
-          }}
-          onEditStory={handleEditStory}
-          onViewPublicStory={onViewStoryPublic}
-        />
-      )}
+          }
+          setActiveTab(tab);
+        }}
+        onLogout={handleLogout}
+        onViewPublicSite={onBackToPublic}
+      >
+        {activeTab === 'dashboard' && (
+          <AdminDashboard
+            onNavigate={(tab) => {
+              if (tab === 'new-story') setStoryToEdit(null);
+              setActiveTab(tab);
+            }}
+            onEditStory={handleEditStory}
+            onViewPublicStory={onViewStoryPublic}
+          />
+        )}
 
-      {activeTab === 'new-story' && (
-        <AdminStoryForm
-          storyToEdit={storyToEdit}
-          onSaved={handleStorySaved}
-          onCancel={handleCancelForm}
-          onViewPublic={onViewStoryPublic}
-        />
-      )}
+        {activeTab === 'stories' && (
+          <AdminStoriesList
+            onNewStory={() => {
+              setStoryToEdit(null);
+              setActiveTab('new-story');
+            }}
+            onEditStory={handleEditStory}
+            onViewPublicStory={onViewStoryPublic}
+          />
+        )}
 
-      {activeTab === 'categories' && <AdminCategories />}
+        {activeTab === 'new-story' && (
+          <AdminStoryForm
+            storyToEdit={storyToEdit}
+            onSaved={handleStorySaved}
+            onCancel={handleCancelForm}
+            onViewPublic={onViewStoryPublic}
+          />
+        )}
 
-      {activeTab === 'settings' && <AdminSettings />}
-    </AdminLayout>
+        {activeTab === 'categories' && <AdminCategories />}
+
+        {activeTab === 'settings' && <AdminSettings />}
+      </AdminLayout>
+    </div>
   );
 };

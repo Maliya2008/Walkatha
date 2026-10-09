@@ -260,6 +260,45 @@ export default function App() {
     } catch {}
   }, [theme, setTheme]);
 
+  // Ensure strict zero-ad state in Admin area
+  useEffect(() => {
+    if (isAdminView) {
+      document.documentElement.classList.add('is-admin-mode');
+      document.body.classList.add('is-admin-mode');
+
+      // Hide static 320x50 banner
+      const staticBanner = document.getElementById('ad-banner-320x50');
+      if (staticBanner) {
+        staticBanner.style.setProperty('display', 'none', 'important');
+      }
+
+      // Hide any injected floating ads/social bar
+      const hideAdElements = () => {
+        const adElements = document.querySelectorAll(
+          '#ad-banner-320x50, #popunder-ad-script, #socialbar-ad-script, iframe[src*="profitable"], iframe[src*="highperformance"], iframe[src*="highrevenue"], [id*="adsterra"], [class*="adsterra"], [id*="socialbar"], [id*="popunder"]'
+        );
+        adElements.forEach((el) => {
+          (el as HTMLElement).style.setProperty('display', 'none', 'important');
+        });
+      };
+
+      hideAdElements();
+      const t1 = setTimeout(hideAdElements, 100);
+      const t2 = setTimeout(hideAdElements, 600);
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+      };
+    } else {
+      document.documentElement.classList.remove('is-admin-mode');
+      document.body.classList.remove('is-admin-mode');
+      const staticBanner = document.getElementById('ad-banner-320x50');
+      if (staticBanner) {
+        staticBanner.style.removeProperty('display');
+      }
+    }
+  }, [isAdminView]);
+
   // Render Admin Workspace
   if (isAdminView) {
     return (

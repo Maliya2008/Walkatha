@@ -40,3 +40,37 @@ html.sepia #main-app-footer {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* Zero-Ad Policy for Admin Workspace */
+html.is-admin-mode #ad-banner-320x50,
+body.is-admin-mode #ad-banner-320x50,
+.is-admin-mode aside[aria-label*="Advertisement"],
+.is-admin-mode div[aria-label*="Advertisement"],
+.is-admin-mode iframe[title*="Advertisement"],
+.is-admin-mode iframe[src*="profitable"],
+.is-admin-mode iframe[src*="highperformance"],
+.is-admin-mode iframe[src*="highrevenue"],
+.is-admin-mode [id*="adsterra"],
+.is-admin-mode [class*="adsterra"],
+.is-admin-mode [id*="popunder"],
+.is-admin-mode [id*="socialbar"],
+body:has(#admin-workspace-root) #ad-banner-320x50,
+body:has(#admin-workspace-root) aside[aria-label*="Advertisement"],
+body:has(#admin-workspace-root) div[aria-label*="Advertisement"],
+body:has(#admin-workspace-root) iframe[title*="Advertisement"],
+body:has(#admin-workspace-root) iframe[src*="profitable"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  height: 0 !important;
+  width: 0 !important;
+  max-height: 0 !important;
+  max-width: 0 !important;
+  overflow: hidden !important;
+  position: absolute !important;
+  left: -9999px !important;
+  top: -9999px !important;
+  z-index: -9999 !important;
+}
+

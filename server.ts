@@ -7,7 +7,7 @@ import { SiteSettings } from './src/types/admin';
 import { INITIAL_STORIES, INITIAL_CATEGORIES } from './src/data/seedStories';
 import { normalizeCategorySlug, getCategoryDisplayName } from './src/utils/categoryTaxonomy';
 import { db } from './src/lib/firebase';
-import { collection, getDocs, doc, getDoc, query, where, limit, setLogLevel } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, query, where, limit, setLogLevel, onSnapshot } from 'firebase/firestore';
 import { normalizeFirestoreStory } from './src/services/storyService';
 
 // Process-level unhandled rejection and uncaught exception safeguards to prevent 5xx crashes
@@ -355,9 +355,53 @@ async function syncStoriesFromFirestore(force = false): Promise<Story[]> {
   }
 }
 
+// --- FIRESTORE REAL-TIME SNAPSHOT LISTENER ---
+let unsubscribeStoriesListener: (() => void) | null = null;
+
+function setupFirestoreRealtimeListener(): void {
+  if (isServerlessEnvironment || unsubscribeStoriesListener) {
+    return;
+  }
+
+  try {
+    const storiesCol = collection(db, 'stories');
+    unsubscribeStoriesListener = onSnapshot(
+      storiesCol,
+      (snapshot) => {
+        try {
+          if (!snapshot.empty) {
+            const liveStories: Story[] = [];
+            snapshot.forEach((docSnap) => {
+              liveStories.push(normalizeFirestoreStory(docSnap.id, docSnap.data()));
+            });
+
+            if (liveStories.length > 0) {
+              liveStories.sort((a, b) => new Date(b.uploadDate || 0).getTime() - new Date(a.uploadDate || 0).getTime());
+              memoryDatabase.stories = deduplicateStoriesBySlug(liveStories);
+              lastFirestoreSync = Date.now();
+              saveDatabase();
+              console.log(`[Firestore Realtime Listener] Updated ${memoryDatabase.stories.length} stories live.`);
+            }
+          }
+        } catch (procErr) {
+          console.warn('[Firestore Realtime Listener Process Notice]:', procErr);
+        }
+      },
+      (error) => {
+        if (error?.code !== 'permission-denied') {
+          console.warn('[Firestore Realtime Listener Notice]:', error?.message || error);
+        }
+      }
+    );
+  } catch (err) {
+    console.warn('[Firestore Realtime Listener Init Notice]:', err);
+  }
+}
+
 // Initial background sync check on boot (only in persistent node servers, never in serverless)
 if (!isServerlessEnvironment) {
   syncStoriesFromFirestore(false).catch(() => {});
+  setupFirestoreRealtimeListener();
 }
 
 async function findStoryBySlugOrId(slugParam: string): Promise<Story | null> {
@@ -927,11 +971,64 @@ function renderCategorySeo(template: string, categorySlug: string, page = 1): st
       ${paginationHtml}
     </main>`;
 
+  const schemaJson = {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'CollectionPage',
+        '@id': `${canonicalUrl}#collection`,
+        url: canonicalUrl,
+        name: title,
+        description,
+        inLanguage: 'si',
+        isPartOf: {
+          '@type': 'WebSite',
+          '@id': 'https://www.walkathawa.site/#website',
+          name: 'Walkathawa',
+          url: 'https://www.walkathawa.site/',
+        },
+      },
+      {
+        '@type': 'BreadcrumbList',
+        itemListElement: [
+          {
+            '@type': 'ListItem',
+            position: 1,
+            name: 'මුල් පිටුව (Home)',
+            item: 'https://www.walkathawa.site/',
+          },
+          {
+            '@type': 'ListItem',
+            position: 2,
+            name: 'කතා වර්ගීකරණ (Categories)',
+            item: 'https://www.walkathawa.site/categories',
+          },
+          {
+            '@type': 'ListItem',
+            position: 3,
+            name: catName,
+            item: `https://www.walkathawa.site/category/${encodeURIComponent(norm)}`,
+          },
+        ],
+      },
+      {
+        '@type': 'ItemList',
+        itemListElement: stories.map((s, index) => ({
+          '@type': 'ListItem',
+          position: startIndex + index + 1,
+          url: `https://www.walkathawa.site/story/${encodeURIComponent(s.slug)}`,
+          name: s.title,
+        })),
+      },
+    ],
+  };
+
   return injectSeoIntoHtml(template, {
     title,
     description,
     canonicalUrl,
     ogImage: 'https://www.walkathawa.site/icon.png',
+    schemaJson,
     bodyContent,
   });
 }
@@ -1533,8 +1630,25 @@ app.get('/story/:slug', async (req: Request, res: Response) => {
 app.get('/category/:slug', async (req: Request, res: Response) => {
   try {
     await syncStoriesFromFirestore(false);
+    const rawSlug = req.params.slug || '';
+    const norm = normalizeCategorySlug(rawSlug);
+    const pageNum = parseInt(String(req.query.page || '1'), 10) || 1;
+
+    // Check if category exists in database categories or has exact matching stories
+    const catExists =
+      norm === 'all' ||
+      memoryDatabase.categories.some((c) => c.slug.toLowerCase() === norm.toLowerCase()) ||
+      memoryDatabase.stories.some((s) => (s.category || '').toLowerCase() === norm.toLowerCase());
+
     const template = await getTransformedHtml(req.originalUrl);
-    const rendered = renderCategorySeo(template, req.params.slug);
+
+    if (!catExists) {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+      return res.status(404).send(renderNotFoundSeo(template, `https://www.walkathawa.site/category/${encodeURIComponent(rawSlug)}`));
+    }
+
+    const rendered = renderCategorySeo(template, norm, pageNum);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800');
     return res.status(200).send(rendered);

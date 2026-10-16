@@ -160,8 +160,38 @@ async function runTests() {
     assert(atomRes.headers['content-type']?.includes('xml'), '/atom.xml must be XML');
     console.log('✔ RSS & Atom feeds verified');
 
+    // 12. Category SSR 200 with self-referencing canonical and BreadcrumbList schema
+    console.log('Testing: Category SSR 200...');
+    const catRes = await request('/category/wife');
+    assert.strictEqual(catRes.statusCode, 200, 'Category page must return 200');
+    assert(catRes.body.includes('rel="canonical" href="https://www.walkathawa.site/category/wife"'), 'Category page must have self-referencing canonical');
+    assert(catRes.body.includes('CollectionPage') || catRes.body.includes('ItemList'), 'Category page must have CollectionPage/ItemList schema');
+    assert(catRes.body.includes('BreadcrumbList'), 'Category page must have BreadcrumbList schema');
+    console.log('✔ Category SSR verified');
+
+    // 13. Category Pagination SSR 200 with page self-referencing canonical
+    console.log('Testing: Category Pagination SSR 200...');
+    const catPageRes = await request('/category/all?page=2');
+    assert.strictEqual(catPageRes.statusCode, 200, 'Category pagination page must return 200');
+    assert(catPageRes.body.includes('rel="canonical" href="https://www.walkathawa.site/category/all?page=2"'), 'Category pagination must have page-specific self-referencing canonical');
+    console.log('✔ Category Pagination SSR verified');
+
+    // 14. Invalid Category returns 404
+    console.log('Testing: Invalid Category 404...');
+    const invalidCatRes = await request('/category/this-is-not-a-valid-category-99999');
+    assert.strictEqual(invalidCatRes.statusCode, 404, 'Invalid category should return 404');
+    assert(invalidCatRes.headers['x-robots-tag']?.includes('noindex'), 'Invalid category 404 must have noindex');
+    console.log('✔ Invalid Category 404 verified');
+
+    // 15. Categories Directory SSR 200
+    console.log('Testing: Categories Directory SSR 200...');
+    const catsDirRes = await request('/categories');
+    assert.strictEqual(catsDirRes.statusCode, 200, 'Categories directory page must return 200');
+    assert(catsDirRes.body.includes('rel="canonical" href="https://www.walkathawa.site/categories"'), 'Categories directory must have self-referencing canonical');
+    console.log('✔ Categories Directory SSR verified');
+
     console.log('\n=========================================');
-    console.log('ALL SEO AND INDEXING TESTS PASSED (11/11)');
+    console.log('ALL SEO AND INDEXING TESTS PASSED (15/15)');
     console.log('=========================================\n');
     server.close(() => {
       process.exit(0);

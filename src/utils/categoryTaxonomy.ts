@@ -245,9 +245,7 @@ export function normalizeCategorySlug(raw: string | null | undefined): string {
   if (clean.includes('අක්කා') || clean.includes('මල්ලි') || clean.includes('akka')) return 'akka-malli';
   if (clean.includes('නැන්දා') || clean.includes('ඇන්ටි') || clean.includes('nanda') || clean.includes('aunty')) return 'nanda';
   if (clean.includes('පාසල්') || clean.includes('කැම්පස්') || clean.includes('school') || clean.includes('campus')) return 'school';
-  if (clean.includes('ආදර') || clean.includes('romantic') || clean.includes('love')) return 'romantic';
-
-  return 'wife';
+  return clean;
 }
 
 export function isValidCategorySlug(slug: string): boolean {

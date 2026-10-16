@@ -211,18 +211,37 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
           aria-label="Story Pagination"
           className="flex items-center justify-center gap-1.5 pt-6 pb-4"
         >
-          <button
-            type="button"
-            disabled={currentPage <= 1}
-            onClick={() => {
-              onPageChange(currentPage - 1);
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-            className="flex items-center gap-1 min-h-[44px] px-3 rounded-lg text-xs sm:text-sm font-semibold border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-          >
-            <ChevronLeft className="w-4 h-4" />
-            <span className="hidden xs:inline">කලින්</span>
-          </button>
+          {currentPage > 1 ? (
+            <a
+              href={
+                selectedCategory && selectedCategory !== 'all'
+                  ? `/category/${encodeURIComponent(selectedCategory)}?page=${currentPage - 1}`
+                  : currentPage - 1 === 1
+                  ? '/'
+                  : `/?page=${currentPage - 1}`
+              }
+              onClick={(e) => {
+                if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
+                  e.preventDefault();
+                  onPageChange(currentPage - 1);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }
+              }}
+              className="flex items-center gap-1 min-h-[44px] px-3 rounded-lg text-xs sm:text-sm font-semibold border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              <span className="hidden xs:inline">කලින්</span>
+            </a>
+          ) : (
+            <button
+              type="button"
+              disabled
+              className="flex items-center gap-1 min-h-[44px] px-3 rounded-lg text-xs sm:text-sm font-semibold border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 opacity-40 cursor-not-allowed"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              <span className="hidden xs:inline">කලින්</span>
+            </button>
+          )}
 
           <div className="flex items-center gap-1">
             {getPaginationItems().map((item, idx) => {
@@ -238,13 +257,25 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
               }
               const p = item as number;
               const isActive = p === currentPage;
+              const pageUrl =
+                selectedCategory && selectedCategory !== 'all'
+                  ? p === 1
+                    ? `/category/${encodeURIComponent(selectedCategory)}`
+                    : `/category/${encodeURIComponent(selectedCategory)}?page=${p}`
+                  : p === 1
+                  ? '/'
+                  : `/?page=${p}`;
+
               return (
-                <button
+                <a
                   key={p}
-                  type="button"
-                  onClick={() => {
-                    onPageChange(p);
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  href={pageUrl}
+                  onClick={(e) => {
+                    if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
+                      e.preventDefault();
+                      onPageChange(p);
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }
                   }}
                   className={`min-w-[40px] min-h-[44px] px-2 rounded-lg text-xs sm:text-sm font-bold flex items-center justify-center transition-colors cursor-pointer ${
                     isActive
@@ -253,23 +284,40 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
                   }`}
                 >
                   {p}
-                </button>
+                </a>
               );
             })}
           </div>
 
-          <button
-            type="button"
-            disabled={currentPage >= totalPages}
-            onClick={() => {
-              onPageChange(currentPage + 1);
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-            className="flex items-center gap-1 min-h-[44px] px-3 rounded-lg text-xs sm:text-sm font-semibold border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-          >
-            <span className="hidden xs:inline">ඊළඟ</span>
-            <ChevronRight className="w-4 h-4" />
-          </button>
+          {currentPage < totalPages ? (
+            <a
+              href={
+                selectedCategory && selectedCategory !== 'all'
+                  ? `/category/${encodeURIComponent(selectedCategory)}?page=${currentPage + 1}`
+                  : `/?page=${currentPage + 1}`
+              }
+              onClick={(e) => {
+                if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
+                  e.preventDefault();
+                  onPageChange(currentPage + 1);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }
+              }}
+              className="flex items-center gap-1 min-h-[44px] px-3 rounded-lg text-xs sm:text-sm font-semibold border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              <span className="hidden xs:inline">ඊළඟ</span>
+              <ChevronRight className="w-4 h-4" />
+            </a>
+          ) : (
+            <button
+              type="button"
+              disabled
+              className="flex items-center gap-1 min-h-[44px] px-3 rounded-lg text-xs sm:text-sm font-semibold border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 opacity-40 cursor-not-allowed"
+            >
+              <span className="hidden xs:inline">ඊළඟ</span>
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          )}
         </nav>
       )}
     </div>

@@ -5,3 +5,4 @@ Disallow: /api/
 
 Sitemap: https://www.walkathawa.site/sitemap.xml
 Sitemap: https://www.walkathawa.site/sitemap-stories.xml
+Sitemap: https://www.walkathawa.site/sitemap-main.xml

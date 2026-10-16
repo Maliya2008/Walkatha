@@ -258,9 +258,14 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
         {/* Previous & Next Story Navigation */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {prevStory ? (
-            <button
-              type="button"
-              onClick={() => onSelectStory(prevStory.slug)}
+            <a
+              href={`/story/${encodeURIComponent(prevStory.slug)}`}
+              onClick={(e) => {
+                if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
+                  e.preventDefault();
+                  onSelectStory(prevStory.slug);
+                }
+              }}
               className="flex items-center gap-3 p-3.5 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 text-left hover:border-slate-300 dark:hover:border-slate-700 transition-colors cursor-pointer group shadow-xs"
             >
               <ChevronLeft className="w-5 h-5 text-slate-400 group-hover:text-rose-600 transition-colors shrink-0" />
@@ -272,13 +277,18 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
                   {prevStory.title}
                 </span>
               </div>
-            </button>
+            </a>
           ) : <div />}
 
           {nextStory ? (
-            <button
-              type="button"
-              onClick={() => onSelectStory(nextStory.slug)}
+            <a
+              href={`/story/${encodeURIComponent(nextStory.slug)}`}
+              onClick={(e) => {
+                if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
+                  e.preventDefault();
+                  onSelectStory(nextStory.slug);
+                }
+              }}
               className="flex items-center justify-between gap-3 p-3.5 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 text-right hover:border-slate-300 dark:hover:border-slate-700 transition-colors cursor-pointer group shadow-xs sm:col-start-2"
             >
               <div className="overflow-hidden text-right w-full">
@@ -290,7 +300,7 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
                 </span>
               </div>
               <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-rose-600 transition-colors shrink-0" />
-            </button>
+            </a>
           ) : null}
         </div>
 

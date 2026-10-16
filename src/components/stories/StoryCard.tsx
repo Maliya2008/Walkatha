@@ -49,47 +49,49 @@ export const StoryCard: React.FC<StoryCardProps> = ({
     >
       {/* 1. Gallery Cover / Header Area */}
       {hasCoverImage ? (
-        <a
-          href={storyUrl}
-          onClick={handleTitleOrCardClick}
-          className="relative block w-full aspect-16/10 overflow-hidden bg-slate-100 dark:bg-slate-800 cursor-pointer"
-          aria-label={story.title}
-        >
-          <img
-            src={story.coverImage}
-            alt={story.title}
-            loading={priority ? 'eager' : 'lazy'}
-            onError={() => setImgError(true)}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-          />
+        <div className="relative block w-full aspect-16/10 overflow-hidden bg-slate-100 dark:bg-slate-800">
+          <a
+            href={storyUrl}
+            onClick={handleTitleOrCardClick}
+            className="block w-full h-full cursor-pointer"
+            aria-label={story.title}
+          >
+            <img
+              src={story.coverImage}
+              alt={story.title}
+              loading={priority ? 'eager' : 'lazy'}
+              onError={() => setImgError(true)}
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            />
+          </a>
           <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 z-10">
-            <button
-              type="button"
+            <a
+              href={`/category/${encodeURIComponent(story.category || 'all')}`}
               onClick={handleCategoryClick}
               className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-white/95 dark:bg-slate-900/90 text-rose-600 dark:text-rose-400 backdrop-blur-xs shadow-xs border border-rose-200/60 dark:border-rose-900/50 hover:bg-rose-50 dark:hover:bg-rose-950 transition-colors cursor-pointer select-none"
             >
               {categoryName}
-            </button>
+            </a>
             {story.featured && (
               <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-amber-500 text-white shadow-xs uppercase tracking-wider">
                 විශේෂාංග
               </span>
             )}
           </div>
-        </a>
+        </div>
       ) : (
         <div className="relative w-full h-20 sm:h-24 bg-gradient-to-br from-rose-50 via-slate-50 to-rose-100/40 dark:from-rose-950/20 dark:via-slate-850 dark:to-slate-900 border-b border-slate-100 dark:border-slate-800/80 p-3 flex flex-col justify-between overflow-hidden">
           <div className="absolute -right-3 -bottom-3 opacity-10 dark:opacity-5 transform rotate-12 pointer-events-none">
             <BookOpen className="w-20 h-20 text-rose-600" />
           </div>
           <div className="flex items-center gap-1.5 z-10">
-            <button
-              type="button"
+            <a
+              href={`/category/${encodeURIComponent(story.category || 'all')}`}
               onClick={handleCategoryClick}
               className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-white dark:bg-slate-900 text-rose-600 dark:text-rose-400 shadow-2xs border border-rose-200/60 dark:border-rose-900/40 hover:bg-rose-50 dark:hover:bg-rose-950/60 transition-colors cursor-pointer select-none"
             >
               {categoryName}
-            </button>
+            </a>
             {story.featured && (
               <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-sm bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 uppercase tracking-wider">
                 විශේෂාංග

@@ -146,11 +146,14 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
 
               {/* 1. Home Redirection Option */}
-              <button
-                type="button"
-                onClick={() => {
-                  onHomeClick();
-                  setIsMenuOpen(false);
+              <a
+                href="/"
+                onClick={(e) => {
+                  if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
+                    e.preventDefault();
+                    onHomeClick();
+                    setIsMenuOpen(false);
+                  }
                 }}
                 className="w-full flex items-center gap-3 px-3.5 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 dark:hover:text-rose-400 transition-colors text-left cursor-pointer group"
               >
@@ -161,14 +164,17 @@ export const Header: React.FC<HeaderProps> = ({
                   <div className="font-semibold leading-tight">මුල් පිටුව</div>
                   <div className="text-xs text-slate-500 dark:text-slate-400">Home Page</div>
                 </div>
-              </button>
+              </a>
 
               {/* 2. Categories Redirection Option */}
-              <button
-                type="button"
-                onClick={() => {
-                  onOpenCategories();
-                  setIsMenuOpen(false);
+              <a
+                href="/categories"
+                onClick={(e) => {
+                  if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
+                    e.preventDefault();
+                    onOpenCategories();
+                    setIsMenuOpen(false);
+                  }
                 }}
                 className="w-full flex items-center gap-3 px-3.5 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 dark:hover:text-rose-400 transition-colors text-left cursor-pointer group"
               >
@@ -182,15 +188,18 @@ export const Header: React.FC<HeaderProps> = ({
                   </div>
                   <div className="text-xs text-slate-500 dark:text-slate-400">Categories (5x4 Grids)</div>
                 </div>
-              </button>
+              </a>
 
               {/* 3. Sitemap / Archives Option */}
               {onOpenSitemap && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onOpenSitemap();
-                    setIsMenuOpen(false);
+                <a
+                  href="/sitemap"
+                  onClick={(e) => {
+                    if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
+                      e.preventDefault();
+                      onOpenSitemap();
+                      setIsMenuOpen(false);
+                    }
                   }}
                   className="w-full flex items-center gap-3 px-3.5 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 dark:hover:text-rose-400 transition-colors text-left cursor-pointer group"
                 >
@@ -201,7 +210,7 @@ export const Header: React.FC<HeaderProps> = ({
                     <div className="font-semibold leading-tight">සියලු කතා සූචිය</div>
                     <div className="text-xs text-slate-500 dark:text-slate-400">Sitemap & Archives</div>
                   </div>
-                </button>
+                </a>
               )}
 
               {/* Divider & Quick Theme Toggle in Menu */}

@@ -161,10 +161,16 @@ export const CategoriesPage: React.FC<CategoriesPageProps> = ({
           const cleanName = cleanCategoryBadgeName(category.name);
 
           return (
-            <div
+            <a
               key={category.id || category.slug}
-              onClick={() => onSelectCategory(category.slug)}
-              className="group relative flex flex-col justify-between p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 hover:border-rose-500/50 dark:hover:border-rose-500/50 shadow-xs hover:shadow-md transition-all duration-200 cursor-pointer overflow-hidden"
+              href={`/category/${encodeURIComponent(category.slug)}`}
+              onClick={(e) => {
+                if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
+                  e.preventDefault();
+                  onSelectCategory(category.slug);
+                }
+              }}
+              className="group relative flex flex-col justify-between p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 hover:border-rose-500/50 dark:hover:border-rose-500/50 shadow-xs hover:shadow-md transition-all duration-200 cursor-pointer overflow-hidden text-left"
             >
               {/* Subtle accent hover background */}
               <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-rose-500/10 to-transparent rounded-bl-full pointer-events-none transition-transform duration-300 group-hover:scale-125" />
@@ -199,7 +205,7 @@ export const CategoriesPage: React.FC<CategoriesPageProps> = ({
                 <span>කතා බලන්න</span>
                 <span className="transition-transform group-hover:translate-x-1">→</span>
               </div>
-            </div>
+            </a>
           );
         })}
       </div>

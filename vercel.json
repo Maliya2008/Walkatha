@@ -2,6 +2,8 @@
   "version": 2,
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "cleanUrls": true,
+  "trailingSlash": false,
   "functions": {
     "api/index.ts": {
       "includeFiles": "data/**,dist/**,firebase-applet-config.json,index.html,public/**",
@@ -135,8 +137,28 @@
       "destination": "/api/index"
     },
     {
-      "source": "/(.*)",
-      "destination": "/index.html"
+      "source": "/sitemap.xml",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/sitemap-stories.xml",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/sitemap-main.xml",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/feed.xml",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/atom.xml",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/((?!assets/|favicon\\.svg|icon\\.png|icon\\.svg|apple-touch-icon\\.png|manifest\\.json|sw\\.js|robots\\.txt|sitemap\\.xml|sitemap-main\\.xml|sitemap-stories\\.xml|google[a-zA-Z0-9_-]+\\.html).*)",
+      "destination": "/api/index"
     }
   ]
 }

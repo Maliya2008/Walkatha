@@ -10,6 +10,14 @@ import { db } from './src/lib/firebase';
 import { collection, getDocs, doc, getDoc, query, where, limit, setLogLevel } from 'firebase/firestore';
 import { normalizeFirestoreStory } from './src/services/storyService';
 
+// Process-level unhandled rejection and uncaught exception safeguards to prevent 5xx crashes
+process.on('unhandledRejection', (reason) => {
+  console.warn('[Process Unhandled Rejection Safeguard]:', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[Process Uncaught Exception Safeguard]:', err);
+});
+
 // Ensure Firestore internal logging is silent to avoid idle gRPC stream cancellation notices in Node
 try {
   setLogLevel('silent');
@@ -33,7 +41,7 @@ console.error = (...args: any[]) => {
   originalConsoleError.apply(console, args);
 };
 
-const app = express();
+export const app = express();
 const PORT = 3000;
 
 function getHeaderString(val: string | string[] | undefined): string {
@@ -61,8 +69,7 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
     if (
       forwardedUri &&
       forwardedUri.startsWith('/') &&
-      !forwardedUri.startsWith('/api/index') &&
-      !forwardedUri.startsWith('/api/')
+      !forwardedUri.startsWith('/api/index')
     ) {
       req.url = forwardedUri;
       (req as any).originalUrl = forwardedUri;
@@ -81,7 +88,7 @@ app.use((_req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
-// Canonical Host Enforcement & Protocol Detection
+// Canonical Host Enforcement, Protocol Detection & Clean URL Normalization
 app.use((req: Request, res: Response, next: NextFunction) => {
   try {
     const forwardedHost = getHeaderString(req.headers['x-forwarded-host']);
@@ -105,16 +112,28 @@ app.use((req: Request, res: Response, next: NextFunction) => {
       return res.redirect(301, `https://www.walkathawa.site${cleanPath}`);
     }
 
-    // 2. HTTP to HTTPS redirect on production domain (only if strictly http)
+    // 2. HTTP to HTTPS redirect on production domain
     if (isCanonicalProd && proto === 'http') {
       return res.redirect(301, `https://www.walkathawa.site${cleanPath}`);
     }
 
-    // 3. Search Engine Indexing: Disallow /admin and /api paths, index all public content
+    // 3. Double-slash normalization: //story/abc -> /story/abc
+    if (req.method === 'GET' && cleanPath.includes('//')) {
+      const normalizedPath = cleanPath.replace(/\/+/g, '/');
+      return res.redirect(301, `https://www.walkathawa.site${normalizedPath}`);
+    }
+
+    // 4. Trailing slash normalization: /story/abc/ -> /story/abc (except root /)
+    const [pathOnly, queryPart] = cleanPath.split('?');
+    if (req.method === 'GET' && pathOnly.length > 1 && pathOnly.endsWith('/')) {
+      const strippedPath = pathOnly.replace(/\/+$/, '');
+      const querySuffix = queryPart ? `?${queryPart}` : '';
+      return res.redirect(301, `https://www.walkathawa.site${strippedPath}${querySuffix}`);
+    }
+
+    // 5. Search Engine Indexing Headers
     if (req.path && (req.path.startsWith('/admin') || req.path.startsWith('/api'))) {
       res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
-    } else {
-      res.setHeader('X-Robots-Tag', 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1');
     }
   } catch (err) {
     console.warn('[Host Middleware Notice]:', err);
@@ -189,6 +208,48 @@ let memoryDatabase: DatabaseSchema = {
   },
 };
 
+function deduplicateStoriesBySlug(stories: Story[]): Story[] {
+  const seenSlugs = new Set<string>();
+  const deduped: Story[] = [];
+  for (const s of stories) {
+    if (!s) continue;
+    const slugKey = (s.slug || s.id || '').trim().toLowerCase();
+    if (!slugKey || seenSlugs.has(slugKey)) {
+      continue;
+    }
+    seenSlugs.add(slugKey);
+    deduped.push(s);
+  }
+  return deduped;
+}
+
+function getValidIsoDate(dateVal: any, fallback?: string): string {
+  if (!dateVal) return fallback || '2026-09-01T00:00:00.000Z';
+  try {
+    const d = new Date(dateVal);
+    if (!isNaN(d.getTime())) {
+      return d.toISOString();
+    }
+  } catch {}
+  return fallback || '2026-09-01T00:00:00.000Z';
+}
+
+function getStoryDate(story: Story): string {
+  return getValidIsoDate(story.updatedDate || story.uploadDate || story.createdAt);
+}
+
+function getLatestStoryDate(stories: Story[]): string {
+  if (!stories || stories.length === 0) return '2026-09-01T00:00:00.000Z';
+  let latest = 0;
+  for (const s of stories) {
+    const time = new Date(getStoryDate(s)).getTime();
+    if (!isNaN(time) && time > latest) {
+      latest = time;
+    }
+  }
+  return latest > 0 ? new Date(latest).toISOString() : '2026-09-01T00:00:00.000Z';
+}
+
 function loadDatabase(): DatabaseSchema {
   try {
     const candidatePaths = [
@@ -202,7 +263,7 @@ function loadDatabase(): DatabaseSchema {
         const raw = fs.readFileSync(cp, 'utf8');
         const parsed = JSON.parse(raw);
         if (parsed && Array.isArray(parsed.stories) && parsed.stories.length > 0) {
-          memoryDatabase.stories = parsed.stories;
+          memoryDatabase.stories = deduplicateStoriesBySlug(parsed.stories);
         }
         if (parsed && Array.isArray(parsed.categories) && parsed.categories.length > 0) {
           memoryDatabase.categories = parsed.categories;
@@ -239,16 +300,19 @@ loadDatabase();
 
 // --- FIRESTORE CONTINUOUS SYNC & DISCOVERY LAYER ---
 let lastFirestoreSync = 0;
-const SYNC_COOLDOWN_MS = 45 * 1000; // 45s cache window for fresh indexing
+let isSyncInProgress = false;
+const SYNC_COOLDOWN_MS = 60 * 1000; // 60s cooldown to prevent redundant Firestore queries
 
 async function syncStoriesFromFirestore(force = false): Promise<Story[]> {
   const now = Date.now();
-  if (!force && now - lastFirestoreSync < SYNC_COOLDOWN_MS && memoryDatabase.stories.length > 0) {
+  if (!force && (now - lastFirestoreSync < SYNC_COOLDOWN_MS || isSyncInProgress) && memoryDatabase.stories.length > 0) {
     return memoryDatabase.stories;
   }
 
+  isSyncInProgress = true;
+
   try {
-    const fetchPromise = (async () => {
+    const fetchDocs = async (): Promise<Story[]> => {
       let snapshot = await getDocs(collection(db, 'stories'));
       if (snapshot.empty) {
         snapshot = await getDocs(collection(db, 'posts'));
@@ -262,27 +326,32 @@ async function syncStoriesFromFirestore(force = false): Promise<Story[]> {
 
         if (liveStories.length > 0) {
           liveStories.sort((a, b) => new Date(b.uploadDate || 0).getTime() - new Date(a.uploadDate || 0).getTime());
-          memoryDatabase.stories = liveStories;
+          memoryDatabase.stories = deduplicateStoriesBySlug(liveStories);
           lastFirestoreSync = Date.now();
           saveDatabase();
-          console.log(`[Firestore Sync] Synced ${liveStories.length} live stories from Firestore.`);
+          console.log(`[Firestore Sync] Synced ${memoryDatabase.stories.length} live stories from Firestore.`);
         }
       }
       return memoryDatabase.stories;
-    })();
+    };
 
-    // 2.0 second timeout safeguard so serverless invocation never hangs
-    const timeoutPromise = new Promise<Story[]>((resolve) => {
-      setTimeout(() => resolve(memoryDatabase.stories), 2000);
+    // Attach catch directly to the promise to prevent any unhandled rejection
+    const safePromise = fetchDocs().catch((err: any) => {
+      if (err?.code !== 'permission-denied') {
+        console.warn('[Firestore Sync] Non-fatal background sync notice:', err?.message || err);
+      }
+      return memoryDatabase.stories;
     });
 
-    return await Promise.race([fetchPromise, timeoutPromise]);
+    const timeoutPromise = new Promise<Story[]>((resolve) => {
+      setTimeout(() => resolve(memoryDatabase.stories), 1500);
+    });
+
+    return await Promise.race([safePromise, timeoutPromise]);
   } catch (err: any) {
-    // Only log unexpected errors; permission-denied in unauthenticated backend sync is expected when rules require auth
-    if (err?.code !== 'permission-denied') {
-      console.warn('[Firestore Sync] Non-fatal background sync notice:', err?.message || err);
-    }
     return memoryDatabase.stories;
+  } finally {
+    isSyncInProgress = false;
   }
 }
 
@@ -311,12 +380,12 @@ async function findStoryBySlugOrId(slugParam: string): Promise<Story | null> {
     );
   };
 
-  let found = memoryDatabase.stories.find(matches);
+  const found = memoryDatabase.stories.find(matches);
   if (found) return found;
 
-  // Direct Firestore document check by ID or slug with strict try-catch and 1.5s timeout
+  // Direct Firestore document check by ID or slug with strict try-catch and 1.2s timeout
   try {
-    const directFetch = async () => {
+    const directFetch = async (): Promise<Story | null> => {
       // Safe doc id lookup (avoid slashes or invalid doc paths)
       if (!slugParam.includes('/') && !slugParam.includes('..')) {
         try {
@@ -325,6 +394,7 @@ async function findStoryBySlugOrId(slugParam: string): Promise<Story | null> {
           if (docSnap.exists()) {
             const story = normalizeFirestoreStory(docSnap.id, docSnap.data());
             memoryDatabase.stories.unshift(story);
+            memoryDatabase.stories = deduplicateStoriesBySlug(memoryDatabase.stories);
             saveDatabase();
             return story;
           }
@@ -338,6 +408,7 @@ async function findStoryBySlugOrId(slugParam: string): Promise<Story | null> {
         if (!querySnap.empty) {
           const story = normalizeFirestoreStory(querySnap.docs[0].id, querySnap.docs[0].data());
           memoryDatabase.stories.unshift(story);
+          memoryDatabase.stories = deduplicateStoriesBySlug(memoryDatabase.stories);
           saveDatabase();
           return story;
         }
@@ -346,18 +417,17 @@ async function findStoryBySlugOrId(slugParam: string): Promise<Story | null> {
       return null;
     };
 
-    const timeoutPromise = new Promise<Story | null>((resolve) => setTimeout(() => resolve(null), 1500));
-    return await Promise.race([directFetch(), timeoutPromise]);
+    const safeFetch = directFetch().catch(() => null);
+    const timeoutPromise = new Promise<Story | null>((resolve) => setTimeout(() => resolve(null), 1200));
+    return await Promise.race([safeFetch, timeoutPromise]);
   } catch (err: any) {
-    if (err?.code !== 'permission-denied') {
-      console.warn('[FindStory] Direct query fallback error:', err?.message || err);
-    }
+    return null;
   }
-
-  return null;
 }
 
 // --- HTML TEMPLATE LOADER ---
+let cachedHtmlTemplate: string | null = null;
+
 function getHtmlTemplate(): string {
   const isServerless = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
   const isDev = process.env.NODE_ENV !== 'production' && !isServerless;
@@ -372,16 +442,23 @@ function getHtmlTemplate(): string {
     }
   }
 
+  if (cachedHtmlTemplate) {
+    return cachedHtmlTemplate;
+  }
+
   const prodPaths = [
     path.join(process.cwd(), 'dist', 'index.html'),
     path.join(currentDirname, 'dist', 'index.html'),
     path.join(process.cwd(), 'index.html'),
   ];
   for (const p of prodPaths) {
-    if (fs.existsSync(p)) return fs.readFileSync(p, 'utf8');
+    if (fs.existsSync(p)) {
+      cachedHtmlTemplate = fs.readFileSync(p, 'utf8');
+      return cachedHtmlTemplate;
+    }
   }
 
-  return `<!doctype html><html lang="si"><head><!-- Google tag (gtag.js) --><script async src="https://www.googletagmanager.com/gtag/js?id=G-EHBR2EWZCV"></script><script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-EHBR2EWZCV');</script><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Walkathawa (වල් කතාව)</title></head><body><div id="root"></div><script src="https://pl31237534.profitableratecpmnetwork.com/92/75/b7/9275b71384eefb562fbf9d9fd275cc5e.js"></script></body></html>`;
+  return `<!doctype html><html lang="si"><head><!-- Google tag (gtag.js) --><script async src="https://www.googletagmanager.com/gtag/js?id=G-EHBR2EWZCV"></script><script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-EHBR2EWZCV');</script><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Walkathawa (වල් කතාව)</title></head><body><div id="root"></div></body></html>`;
 }
 
 function escapeHtml(str: string): string {
@@ -404,6 +481,7 @@ function injectSeoIntoHtml(
     ogImage?: string;
     schemaJson?: any;
     bodyContent?: string;
+    noindex?: boolean;
   }
 ): string {
   let result = html;
@@ -444,6 +522,19 @@ function injectSeoIntoHtml(
     );
   }
 
+  // Robots meta tag: strictly synchronize with noindex flag
+  if (meta.noindex) {
+    result = result.replace(
+      /<meta name="robots" content=".*?"\s*\/?>/i,
+      '<meta name="robots" content="noindex, nofollow, noarchive" />'
+    );
+  } else {
+    result = result.replace(
+      /<meta name="robots" content=".*?"\s*\/?>/i,
+      '<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />'
+    );
+  }
+
   // Schema.org Structured Data
   if (meta.schemaJson) {
     const jsonStr = JSON.stringify(meta.schemaJson);
@@ -465,9 +556,53 @@ function injectSeoIntoHtml(
 }
 
 // --- SSR HELPERS FOR SPECIFIC ROUTES ---
-function renderHomeSeo(template: string): string {
-  const publishedStories = memoryDatabase.stories.filter((s) => s.published !== false);
-  const top20 = publishedStories.slice(0, 20);
+function renderNotFound(template: string, requestedPath = '', message = 'සොයන ලද කතාව හෝ පිටුව හමු නොවීය.'): string {
+  const notFoundBody = `
+    <main style="max-width: 800px; margin: 40px auto; padding: 24px; text-align: center; font-family: system-ui, -apple-system, sans-serif;">
+      <h1 style="font-size: 32px; color: #e11d48; margin-bottom: 12px;">404 - කතාව හමු නොවීය</h1>
+      <p style="font-size: 16px; color: #64748b; line-height: 1.6; margin-bottom: 24px;">
+        ${escapeHtml(message)} (The requested story or page does not exist or may have been removed.)
+      </p>
+      <div style="display: flex; justify-content: center; gap: 16px; flex-wrap: wrap;">
+        <a href="/" style="display: inline-block; padding: 10px 20px; background: #e11d48; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: bold;">මුල් පිටුවට (Home)</a>
+        <a href="/categories" style="display: inline-block; padding: 10px 20px; background: #f1f5f9; color: #334155; text-decoration: none; border-radius: 8px; font-weight: 500;">කතා වර්ගීකරණ (Categories)</a>
+        <a href="/sitemap" style="display: inline-block; padding: 10px 20px; background: #f1f5f9; color: #334155; text-decoration: none; border-radius: 8px; font-weight: 500;">සියලු කතා සූචිය (Directory)</a>
+      </div>
+    </main>`;
+
+  let result = injectSeoIntoHtml(template, {
+    title: 'කතාව හමු නොවීය (404 Not Found) | Walkathawa (වල් කතාව)',
+    description: 'සොයන ලද කතාව හෝ පිටුව හමු නොවීය. Walkathawa හි ඇති වෙනත් රසවත් සිංහල කතා කියවීමට පිවිසෙන්න.',
+    canonicalUrl: 'https://www.walkathawa.site/',
+    ogImage: 'https://www.walkathawa.site/icon.png',
+    bodyContent: notFoundBody,
+  });
+
+  result = result.replace(
+    /<meta name="robots" content=".*?"\s*\/?>/i,
+    '<meta name="robots" content="noindex, nofollow" />'
+  );
+
+  return result;
+}
+
+function renderHomeSeo(template: string, page = 1): string {
+  const publishedStories = deduplicateStoriesBySlug(
+    memoryDatabase.stories.filter((s) => s.published !== false)
+  );
+  const pageSize = 20;
+  const totalPages = Math.ceil(publishedStories.length / pageSize) || 1;
+  const currentPage = Math.max(1, Math.min(page, totalPages));
+  const startIndex = (currentPage - 1) * pageSize;
+  const pageStories = publishedStories.slice(startIndex, startIndex + pageSize);
+
+  const canonicalUrl = currentPage > 1 ? `https://www.walkathawa.site/?page=${currentPage}` : 'https://www.walkathawa.site/';
+  const title = currentPage > 1
+    ? `Walkathawa (වල් කතාව) - පිටුව ${currentPage} | Sinhala Stories Online`
+    : 'Walkathawa (වල් කතාව) | Sinhala Stories Online';
+  const description = currentPage > 1
+    ? `Walkathawa (වල් කතාව) පිටුව ${currentPage}. නවතම සිංහල කතා, ආදර කතා, සහ රසවත් කෙටිකතා එකතුව දිනපතා අලුත් වේ.`
+    : (memoryDatabase.settings.metaDescription || 'Walkathawa (වල් කතාව) is a place to read Sinhala stories online. Discover new Sinhala katha, romantic stories, fictional stories, and interesting short stories updated regularly.');
 
   // Schema.org ItemList of top stories for Google Rich Snippets
   const schemaJson = {
@@ -490,9 +625,9 @@ function renderHomeSeo(template: string): string {
       },
       {
         '@type': 'ItemList',
-        itemListElement: top20.map((s, index) => ({
+        itemListElement: pageStories.map((s, index) => ({
           '@type': 'ListItem',
-          position: index + 1,
+          position: startIndex + index + 1,
           url: `https://www.walkathawa.site/story/${encodeURIComponent(s.slug)}`,
           name: s.title,
         })),
@@ -501,34 +636,79 @@ function renderHomeSeo(template: string): string {
   };
 
   // SSR HTML fallback for search engines
-  const storiesHtml = top20
+  const storiesHtml = pageStories
     .map(
       (s) => `
-      <article style="margin-bottom: 24px;">
-        <h2><a href="/story/${encodeURIComponent(s.slug)}">${escapeHtml(s.title)}</a></h2>
-        <p>${escapeHtml(s.shortDescription || s.description || '')}</p>
-        <small>වර්ගීකරණය: ${escapeHtml(getCategoryDisplayName(s.category))}</small>
+      <article style="margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid #f1f5f9;">
+        <h2><a href="/story/${encodeURIComponent(s.slug)}" style="color: #0f172a; text-decoration: none;">${escapeHtml(s.title)}</a></h2>
+        <p style="color: #475569; font-size: 14px; line-height: 1.6;">${escapeHtml(s.shortDescription || s.description || '')}</p>
+        <small style="color: #64748b;">වර්ගීකරණය: <a href="/category/${encodeURIComponent(s.category || 'all')}" style="color: #e11d48; text-decoration: none;">${escapeHtml(getCategoryDisplayName(s.category))}</a></small>
       </article>`
     )
     .join('\n');
 
+  // Pagination crawlable links
+  let paginationHtml = '';
+  if (totalPages > 1) {
+    const pageLinks = [];
+    for (let p = 1; p <= totalPages; p++) {
+      const pUrl = p === 1 ? '/' : `/?page=${p}`;
+      const isCurr = p === currentPage;
+      pageLinks.push(
+        `<a href="${pUrl}" style="display: inline-block; padding: 6px 12px; margin: 0 4px; border-radius: 6px; text-decoration: none; font-weight: bold; ${
+          isCurr ? 'background: #e11d48; color: #ffffff;' : 'background: #f1f5f9; color: #334155;'
+        }">${p}</a>`
+      );
+    }
+    paginationHtml = `
+      <nav aria-label="Pagination" style="margin: 30px 0; text-align: center;">
+        <span style="margin-right: 8px; color: #64748b; font-size: 14px;">පිටු (Pages):</span>
+        ${pageLinks.join('\n')}
+      </nav>`;
+  }
+
   const bodyContent = `
     <main style="max-width: 1200px; margin: 0 auto; padding: 20px;">
       <h1>Walkathawa (වල් කතාව) | Sinhala Stories Online</h1>
-      <p>නවතම සිංහල කතා, ආදර කතා, සහ රසවත් කෙටිකතා එකතුව දිනපතා අලුත් වේ.</p>
+      <p style="color: #64748b;">නවතම සිංහල කතා, ආදර කතා, සහ රසවත් කෙටිකතා එකතුව දිනපතා අලුත් වේ.</p>
       <div style="margin-top: 30px;">
         ${storiesHtml}
+      </div>
+      ${paginationHtml}
+    </main>`;
+
+  return injectSeoIntoHtml(template, {
+    title,
+    description,
+    canonicalUrl,
+    ogImage: 'https://www.walkathawa.site/icon.png',
+    schemaJson,
+    bodyContent,
+  });
+}
+
+function renderNotFoundSeo(template: string, requestedUrl = ''): string {
+  const title = 'පිටුව හමු නොවීය (Page Not Found - 404) | Walkathawa (වල් කතාව)';
+  const description = 'ඔබ සොයන කතාව හෝ පිටුව අප සතුව සොයාගත නොහැකි විය. වෙනත් රසවත් සිංහල කතා කියවීමට මුල් පිටුවට පිවිසෙන්න.';
+  const bodyContent = `
+    <main style="max-width: 800px; margin: 40px auto; padding: 24px; text-align: center;">
+      <h1 style="font-size: 32px; color: #e11d48; margin-bottom: 16px;">404 - පිටුව හමු නොවීය</h1>
+      <p style="color: #64748b; font-size: 16px; margin-bottom: 24px;">ඔබ සොයන කතාව ඉවත් කර හෝ වෙනත් ලිපිනයකට මාරු කර ඇත.</p>
+      <div style="margin-top: 24px;">
+        <a href="/" style="display: inline-block; background: #e11d48; color: #ffffff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold;">← මුල් පිටුවට යන්න (Go to Home)</a>
+      </div>
+      <div style="margin-top: 16px;">
+        <a href="/sitemap" style="color: #4f46e5; text-decoration: underline; font-size: 14px;">සියලු කතා නාමාවලිය (Story Directory)</a>
       </div>
     </main>`;
 
   return injectSeoIntoHtml(template, {
-    title: 'Walkathawa (වල් කතාව) | Sinhala Stories Online',
-    description:
-      'Walkathawa (වල් කතාව) is a place to read Sinhala stories online. Discover new Sinhala katha, romantic stories, fictional stories, and interesting short stories updated regularly.',
-    canonicalUrl: 'https://www.walkathawa.site/',
+    title,
+    description,
+    canonicalUrl: requestedUrl || 'https://www.walkathawa.site/404',
     ogImage: 'https://www.walkathawa.site/icon.png',
-    schemaJson,
     bodyContent,
+    noindex: true,
   });
 }
 
@@ -536,8 +716,8 @@ function renderStorySeo(template: string, story: Story): string {
   const storyUrl = `https://www.walkathawa.site/story/${encodeURIComponent(story.slug)}`;
   const title = `${story.title} | Walkathawa (වල් කතාව)`;
   const description = story.shortDescription || story.description || story.title;
-  const publishedDate = story.uploadDate || story.createdAt || new Date().toISOString();
-  const modifiedDate = story.updatedDate || story.updatedAt || publishedDate;
+  const publishedDate = getStoryDate(story);
+  const modifiedDate = getValidIsoDate(story.updatedDate || story.updatedAt, publishedDate);
   const catName = getCategoryDisplayName(story.category);
   const catUrl = `https://www.walkathawa.site/category/${encodeURIComponent(story.category || 'all')}`;
 
@@ -613,9 +793,16 @@ function renderStorySeo(template: string, story: Story): string {
     .map((p) => `<p style="margin-bottom: 16px; line-height: 1.8;">${escapeHtml(p.trim())}</p>`)
     .join('\n');
 
-  // Internal link graph: top 6 other stories for search crawler link discovery
-  const relatedStories = memoryDatabase.stories
-    .filter((s) => s.published !== false && s.id !== story.id)
+  // Internal link graph: previous, next, and related stories
+  const allStories = deduplicateStoriesBySlug(
+    memoryDatabase.stories.filter((s) => s.published !== false)
+  );
+  const currentIndex = allStories.findIndex((s) => s.id === story.id || s.slug === story.slug);
+  const prevStory = currentIndex > 0 ? allStories[currentIndex - 1] : null;
+  const nextStory = currentIndex >= 0 && currentIndex < allStories.length - 1 ? allStories[currentIndex + 1] : null;
+
+  const relatedStories = allStories
+    .filter((s) => s.id !== story.id && s.slug !== story.slug)
     .slice(0, 6);
 
   const relatedHtml = relatedStories
@@ -624,6 +811,20 @@ function renderStorySeo(template: string, story: Story): string {
         `<li style="margin-bottom: 12px;"><a href="/story/${encodeURIComponent(r.slug)}" style="color: #2563eb; text-decoration: none; font-weight: 500;">${escapeHtml(r.title)}</a> <span style="color: #64748b; font-size: 13px;">(${escapeHtml(getCategoryDisplayName(r.category))})</span></li>`
     )
     .join('\n');
+
+  const prevNextHtml = `
+    <nav aria-label="Story Navigation" style="margin-top: 32px; padding: 16px 0; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+      ${
+        prevStory
+          ? `<a href="/story/${encodeURIComponent(prevStory.slug)}" style="color: #2563eb; text-decoration: none; font-weight: bold;">← ${escapeHtml(prevStory.title)} (කලින් කතාව)</a>`
+          : '<span></span>'
+      }
+      ${
+        nextStory
+          ? `<a href="/story/${encodeURIComponent(nextStory.slug)}" style="color: #2563eb; text-decoration: none; font-weight: bold;">${escapeHtml(nextStory.title)} (ඊළඟ කතාව) →</a>`
+          : '<span></span>'
+      }
+    </nav>`;
 
   const bodyContent = `
     <main style="max-width: 800px; margin: 0 auto; padding: 20px;">
@@ -643,6 +844,8 @@ function renderStorySeo(template: string, story: Story): string {
           ${paragraphs}
         </div>
       </article>
+
+      ${prevNextHtml}
 
       <section style="margin-top: 48px; padding-top: 24px; border-top: 1px solid #e2e8f0;">
         <h3 style="font-size: 20px; margin-bottom: 16px;">තවත් රසවත් සිංහල කතා (More Sinhala Stories)</h3>
@@ -665,41 +868,69 @@ function renderStorySeo(template: string, story: Story): string {
   });
 }
 
-function renderCategorySeo(template: string, categorySlug: string): string {
+function renderCategorySeo(template: string, categorySlug: string, page = 1): string {
   const norm = normalizeCategorySlug(categorySlug);
   const catName = getCategoryDisplayName(norm);
-  const catUrl = `https://www.walkathawa.site/category/${encodeURIComponent(norm)}`;
-  const title = `${catName} | Walkathawa (වල් කතාව)`;
+  const canonicalUrl = page > 1 ? `https://www.walkathawa.site/category/${encodeURIComponent(norm)}?page=${page}` : `https://www.walkathawa.site/category/${encodeURIComponent(norm)}`;
+  const title = page > 1 ? `${catName} - පිටුව ${page} | Walkathawa (වල් කතාව)` : `${catName} | Walkathawa (වල් කතාව)`;
   const description = `${catName} යටතේ ඇති නවතම සිංහල කතා එකතුව කියවන්න.`;
 
-  const stories = memoryDatabase.stories.filter(
-    (s) => s.published !== false && (s.category || '').toLowerCase().includes(norm.toLowerCase())
+  const allCatStories = deduplicateStoriesBySlug(
+    memoryDatabase.stories.filter(
+      (s) => s.published !== false && (s.category || '').toLowerCase().includes(norm.toLowerCase())
+    )
   );
+
+  const pageSize = 20;
+  const totalPages = Math.ceil(allCatStories.length / pageSize) || 1;
+  const currentPage = Math.max(1, Math.min(page, totalPages));
+  const startIndex = (currentPage - 1) * pageSize;
+  const stories = allCatStories.slice(startIndex, startIndex + pageSize);
 
   const storiesHtml = stories
     .map(
       (s) => `
-      <article style="margin-bottom: 20px;">
-        <h2><a href="/story/${encodeURIComponent(s.slug)}">${escapeHtml(s.title)}</a></h2>
-        <p>${escapeHtml(s.shortDescription || '')}</p>
+      <article style="margin-bottom: 20px; padding-bottom: 12px; border-bottom: 1px solid #f1f5f9;">
+        <h2><a href="/story/${encodeURIComponent(s.slug)}" style="color: #0f172a; text-decoration: none;">${escapeHtml(s.title)}</a></h2>
+        <p style="color: #475569; font-size: 14px;">${escapeHtml(s.shortDescription || '')}</p>
       </article>`
     )
     .join('\n');
 
+  let paginationHtml = '';
+  if (totalPages > 1) {
+    const pageLinks = [];
+    for (let p = 1; p <= totalPages; p++) {
+      const pUrl = p === 1 ? `/category/${encodeURIComponent(norm)}` : `/category/${encodeURIComponent(norm)}?page=${p}`;
+      const isCurr = p === currentPage;
+      pageLinks.push(
+        `<a href="${pUrl}" style="display: inline-block; padding: 6px 12px; margin: 0 4px; border-radius: 6px; text-decoration: none; font-weight: bold; ${
+          isCurr ? 'background: #e11d48; color: #ffffff;' : 'background: #f1f5f9; color: #334155;'
+        }">${p}</a>`
+      );
+    }
+    paginationHtml = `
+      <nav aria-label="Pagination" style="margin: 30px 0; text-align: center;">
+        <span style="margin-right: 8px; color: #64748b; font-size: 14px;">පිටු (Pages):</span>
+        ${pageLinks.join('\n')}
+      </nav>`;
+  }
+
   const bodyContent = `
     <main style="max-width: 1200px; margin: 0 auto; padding: 20px;">
-      <nav><a href="/">← සියලුම කතා</a></nav>
+      <nav style="margin-bottom: 16px;"><a href="/" style="color: #2563eb; text-decoration: none;">← සියලුම කතා (All Stories)</a></nav>
       <h1>${escapeHtml(catName)}</h1>
-      <p>${escapeHtml(description)}</p>
+      <p style="color: #64748b;">${escapeHtml(description)}</p>
       <div style="margin-top: 30px;">
-        ${storiesHtml}
+        ${storiesHtml.length > 0 ? storiesHtml : '<p>මෙම වර්ගීකරණය යටතේ දැනට කතා නොමැත.</p>'}
       </div>
+      ${paginationHtml}
     </main>`;
 
   return injectSeoIntoHtml(template, {
     title,
     description,
-    canonicalUrl: catUrl,
+    canonicalUrl,
     ogImage: 'https://www.walkathawa.site/icon.png',
     bodyContent,
   });
@@ -770,63 +1001,85 @@ function renderPageSeo(
 
 // --- DYNAMIC SITEMAP, ROBOTS, AND RSS/ATOM FEEDS ---
 
-// 1. Master Sitemap XML
+// 1. Master Sitemap Index XML
 app.get('/sitemap.xml', async (_req: Request, res: Response) => {
   const baseUrl = 'https://www.walkathawa.site';
   const stories = await syncStoriesFromFirestore(false);
-  const publishedStories = stories.filter((s) => s.published !== false);
-  const categories = memoryDatabase.categories.filter((c) => c.slug !== 'all');
-  const nowIso = new Date().toISOString();
+  const publishedStories = deduplicateStoriesBySlug(stories.filter((s) => s.published !== false));
+  const latestStoryMod = getLatestStoryDate(publishedStories);
 
   let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
-  xml += `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n`;
+  xml += `<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
+  xml += `  <sitemap>\n`;
+  xml += `    <loc>${baseUrl}/sitemap-main.xml</loc>\n`;
+  xml += `    <lastmod>${latestStoryMod}</lastmod>\n`;
+  xml += `  </sitemap>\n`;
+  xml += `  <sitemap>\n`;
+  xml += `    <loc>${baseUrl}/sitemap-stories.xml</loc>\n`;
+  xml += `    <lastmod>${latestStoryMod}</lastmod>\n`;
+  xml += `  </sitemap>\n`;
+  xml += `</sitemapindex>`;
+
+  res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=600, s-maxage=1800');
+  res.setHeader('X-Robots-Tag', 'all');
+  res.status(200).send(xml);
+});
+
+// 2. Main Structural & Category Sitemap XML
+app.get('/sitemap-main.xml', async (_req: Request, res: Response) => {
+  const baseUrl = 'https://www.walkathawa.site';
+  const stories = await syncStoriesFromFirestore(false);
+  const publishedStories = deduplicateStoriesBySlug(stories.filter((s) => s.published !== false));
+  const categories = memoryDatabase.categories.filter((c) => c.slug !== 'all');
+  const latestOverallDate = getLatestStoryDate(publishedStories);
+
+  let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+  xml += `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
 
   // 1. Homepage
-  xml += `  <url>\n    <loc>${baseUrl}/</loc>\n    <lastmod>${nowIso}</lastmod>\n    <changefreq>hourly</changefreq>\n    <priority>1.0</priority>\n  </url>\n`;
+  xml += `  <url>\n    <loc>${baseUrl}/</loc>\n    <lastmod>${latestOverallDate}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>\n`;
 
   // 2. Categories Special Directory Page
-  xml += `  <url>\n    <loc>${baseUrl}/categories</loc>\n    <lastmod>${nowIso}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>0.9</priority>\n  </url>\n`;
+  xml += `  <url>\n    <loc>${baseUrl}/categories</loc>\n    <lastmod>${latestOverallDate}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.9</priority>\n  </url>\n`;
 
   // 3. Sitemap / Archives Page
-  xml += `  <url>\n    <loc>${baseUrl}/sitemap</loc>\n    <lastmod>${nowIso}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>0.85</priority>\n  </url>\n`;
+  xml += `  <url>\n    <loc>${baseUrl}/sitemap</loc>\n    <lastmod>${latestOverallDate}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.85</priority>\n  </url>\n`;
 
-  // 3. Category Pages
-  for (const cat of categories) {
-    xml += `  <url>\n    <loc>${baseUrl}/category/${encodeURIComponent(cat.slug)}</loc>\n    <lastmod>${nowIso}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>0.85</priority>\n  </url>\n`;
+  // 4. Policy Pages
+  const staticPages = ['/privacy', '/terms', '/dmca', '/about'];
+  for (const pagePath of staticPages) {
+    xml += `  <url>\n    <loc>${baseUrl}${pagePath}</loc>\n    <lastmod>${latestOverallDate}</lastmod>\n    <changefreq>monthly</changefreq>\n    <priority>0.5</priority>\n  </url>\n`;
   }
 
-  // 4. All Individual Stories
-  for (const story of publishedStories) {
-    const storyUrl = `${baseUrl}/story/${encodeURIComponent(story.slug)}`;
-    const lastMod = story.updatedDate || story.uploadDate || nowIso;
-    xml += `  <url>\n    <loc>${storyUrl}</loc>\n    <lastmod>${lastMod}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>0.9</priority>\n`;
-    if (story.coverImage && story.coverImage.startsWith('http')) {
-      xml += `    <image:image>\n      <image:loc>${escapeHtml(story.coverImage)}</image:loc>\n      <image:title>${escapeHtml(story.title)}</image:title>\n    </image:image>\n`;
-    }
-    xml += `  </url>\n`;
+  // 5. Category Pages with accurate content-derived lastmod
+  for (const cat of categories) {
+    const catStories = publishedStories.filter((s) => (s.category || '').toLowerCase().includes(cat.slug.toLowerCase()));
+    const catLastMod = catStories.length > 0 ? getLatestStoryDate(catStories) : latestOverallDate;
+    xml += `  <url>\n    <loc>${baseUrl}/category/${encodeURIComponent(cat.slug)}</loc>\n    <lastmod>${catLastMod}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>0.85</priority>\n  </url>\n`;
   }
 
   xml += `</urlset>`;
 
   res.setHeader('Content-Type', 'application/xml; charset=utf-8');
   res.setHeader('Cache-Control', 'public, max-age=600, s-maxage=1800');
+  res.setHeader('X-Robots-Tag', 'all');
   res.status(200).send(xml);
 });
 
-// 2. Dedicated Stories Sitemap XML
+// 3. Dedicated Stories Sitemap XML (Zero Duplication with Main Sitemap)
 app.get('/sitemap-stories.xml', async (_req: Request, res: Response) => {
   const baseUrl = 'https://www.walkathawa.site';
   const stories = await syncStoriesFromFirestore(false);
-  const publishedStories = stories.filter((s) => s.published !== false);
-  const nowIso = new Date().toISOString();
+  const publishedStories = deduplicateStoriesBySlug(stories.filter((s) => s.published !== false));
 
   let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
   xml += `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">\n`;
 
   for (const story of publishedStories) {
     const storyUrl = `${baseUrl}/story/${encodeURIComponent(story.slug)}`;
-    const lastMod = story.updatedDate || story.uploadDate || nowIso;
-    xml += `  <url>\n    <loc>${storyUrl}</loc>\n    <lastmod>${lastMod}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>0.9</priority>\n`;
+    const lastMod = getStoryDate(story);
+    xml += `  <url>\n    <loc>${storyUrl}</loc>\n    <lastmod>${lastMod}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.9</priority>\n`;
     if (story.coverImage && story.coverImage.startsWith('http')) {
       xml += `    <image:image>\n      <image:loc>${escapeHtml(story.coverImage)}</image:loc>\n      <image:title>${escapeHtml(story.title)}</image:title>\n    </image:image>\n`;
     }
@@ -837,10 +1090,11 @@ app.get('/sitemap-stories.xml', async (_req: Request, res: Response) => {
 
   res.setHeader('Content-Type', 'application/xml; charset=utf-8');
   res.setHeader('Cache-Control', 'public, max-age=600, s-maxage=1800');
+  res.setHeader('X-Robots-Tag', 'all');
   res.status(200).send(xml);
 });
 
-// 3. Robots.txt
+// 4. Robots.txt
 app.get('/robots.txt', (_req: Request, res: Response) => {
   const robots = `User-agent: *
 Allow: /
@@ -849,6 +1103,7 @@ Disallow: /api/
 
 Sitemap: https://www.walkathawa.site/sitemap.xml
 Sitemap: https://www.walkathawa.site/sitemap-stories.xml
+Sitemap: https://www.walkathawa.site/sitemap-main.xml
 `;
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
   res.setHeader('Cache-Control', 'public, max-age=3600');
@@ -1116,7 +1371,26 @@ app.put('/api/admin/stories/:id', (req: Request, res: Response) => {
   const index = memoryDatabase.stories.findIndex((s) => s.id === id);
 
   if (index === -1) {
-    return res.status(404).json({ error: 'Story not found' });
+    const newStory: Story = {
+      id,
+      slug: req.body.slug || id,
+      title: req.body.title || '',
+      category: req.body.category || 'all',
+      content: req.body.content || req.body.fullContent || '',
+      fullContent: req.body.fullContent || req.body.content || '',
+      shortDescription: req.body.shortDescription || req.body.description || '',
+      description: req.body.description || req.body.shortDescription || '',
+      uploadDate: req.body.uploadDate || new Date().toISOString(),
+      updatedDate: new Date().toISOString(),
+      published: req.body.published !== false,
+      featured: !!req.body.featured,
+      views: req.body.views || 0,
+      ...req.body,
+    };
+    memoryDatabase.stories.unshift(newStory);
+    memoryDatabase.stories = deduplicateStoriesBySlug(memoryDatabase.stories);
+    saveDatabase();
+    return res.status(200).json(newStory);
   }
 
   const updated: Story = {
@@ -1126,6 +1400,7 @@ app.put('/api/admin/stories/:id', (req: Request, res: Response) => {
   };
 
   memoryDatabase.stories[index] = updated;
+  memoryDatabase.stories = deduplicateStoriesBySlug(memoryDatabase.stories);
   saveDatabase();
 
   res.json(updated);
@@ -1168,31 +1443,35 @@ app.put('/api/admin/settings', (req: Request, res: Response) => {
 // --- 301 PERMANENT REDIRECTS FOR LEGACY / MIGRATED PATHS ---
 app.get(['/posts/:story/episodes/:episode', '/posts/:story/episodes'], (req: Request, res: Response) => {
   const story = req.params.story;
-  return res.redirect(301, `/story/${encodeURIComponent(story)}`);
+  return res.redirect(301, `https://www.walkathawa.site/story/${encodeURIComponent(story)}`);
 });
 
 app.get(['/posts/:story', '/katha/:story'], (req: Request, res: Response) => {
-  return res.redirect(301, `/story/${encodeURIComponent(req.params.story)}`);
+  return res.redirect(301, `https://www.walkathawa.site/story/${encodeURIComponent(req.params.story)}`);
 });
 
 // --- STATIC ASSETS & SSR ROUTING ---
+const isServerless = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+const isDev = process.env.NODE_ENV !== 'production' && !isServerless;
 const distPath = path.join(process.cwd(), 'dist');
 
-if (fs.existsSync(path.join(distPath, 'assets'))) {
-  app.use(
-    '/assets',
-    express.static(path.join(distPath, 'assets'), {
-      maxAge: '1y',
-      immutable: true,
-    })
-  );
-}
-if (fs.existsSync(distPath)) {
-  app.use(
-    express.static(distPath, {
-      maxAge: '1h',
-    })
-  );
+if (!isDev) {
+  if (fs.existsSync(path.join(distPath, 'assets'))) {
+    app.use(
+      '/assets',
+      express.static(path.join(distPath, 'assets'), {
+        maxAge: '1y',
+        immutable: true,
+      })
+    );
+  }
+  if (fs.existsSync(distPath)) {
+    app.use(
+      express.static(distPath, {
+        maxAge: '1h',
+      })
+    );
+  }
 }
 
 let viteInstance: any = null;
@@ -1233,7 +1512,9 @@ app.get('/story/:slug', async (req: Request, res: Response) => {
     const template = await getTransformedHtml(req.originalUrl);
 
     if (!story) {
-      return res.status(404).send(renderHomeSeo(template));
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+      return res.status(404).send(renderNotFoundSeo(template, `https://www.walkathawa.site/story/${encodeURIComponent(req.params.slug)}`));
     }
 
     const rendered = renderStorySeo(template, story);

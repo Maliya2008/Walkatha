@@ -1354,7 +1354,8 @@ app.all('/api/ping-indexing', async (_req: Request, res: Response) => {
 // --- REST API ENDPOINTS ---
 
 // GET /api/stories (Paginated, filtered, sorted)
-app.get('/api/stories', (req: Request, res: Response) => {
+app.get('/api/stories', async (req: Request, res: Response) => {
+  await syncStoriesFromFirestore(false);
   const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
   const limit = Math.max(1, parseInt(req.query.limit as string, 10) || 20); // 20 posts per view
   const category = (req.query.category as string) || 'all';
@@ -1401,6 +1402,7 @@ app.get('/api/stories', (req: Request, res: Response) => {
 
 // GET /api/stories/:slug
 app.get('/api/stories/:slug', async (req: Request, res: Response) => {
+  await syncStoriesFromFirestore(false);
   const story = await findStoryBySlugOrId(req.params.slug);
 
   if (!story) {
@@ -1412,6 +1414,7 @@ app.get('/api/stories/:slug', async (req: Request, res: Response) => {
 
 // GET /api/stories/:slug/related
 app.get('/api/stories/:slug/related', async (req: Request, res: Response) => {
+  await syncStoriesFromFirestore(false);
   const current = await findStoryBySlugOrId(req.params.slug);
   const limit = parseInt(req.query.limit as string, 10) || 4;
   const all = memoryDatabase.stories.filter((s) => s.published !== false && s.id !== current?.id);
@@ -1659,6 +1662,7 @@ app.get('/', async (req: Request, res: Response) => {
 // 2. Story Detail SSR
 app.get('/story/:slug', async (req: Request, res: Response) => {
   try {
+    await syncStoriesFromFirestore(false);
     const isBot = isSearchEngineCrawler(req.headers['user-agent'] as string);
     const story = await findStoryBySlugOrId(req.params.slug);
     const template = await getTransformedHtml(req.originalUrl);

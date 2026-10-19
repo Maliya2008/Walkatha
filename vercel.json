@@ -50,7 +50,7 @@
         },
         {
           "key": "Cache-Control",
-          "value": "public, max-age=600, s-maxage=1800"
+          "value": "public, max-age=600, s-maxage=1800, stale-while-revalidate=86400"
         },
         {
           "key": "X-Robots-Tag",
@@ -67,7 +67,24 @@
         },
         {
           "key": "Cache-Control",
-          "value": "public, max-age=600, s-maxage=1800"
+          "value": "public, max-age=600, s-maxage=1800, stale-while-revalidate=86400"
+        },
+        {
+          "key": "X-Robots-Tag",
+          "value": "all"
+        }
+      ]
+    },
+    {
+      "source": "/sitemap-main.xml",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/xml; charset=utf-8"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=600, s-maxage=1800, stale-while-revalidate=86400"
         },
         {
           "key": "X-Robots-Tag",

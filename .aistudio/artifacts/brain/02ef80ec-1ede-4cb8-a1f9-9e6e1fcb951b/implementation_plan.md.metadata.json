@@ -1,6 +1,6 @@
 {
-  "summary": "Comprehensive Search Console indexing and real-time Firestore sync plan. Establishes live onSnapshot synchronization for automatic story updates, self-referencing canonical URLs on all category archive pages, dynamic multi-sitemap indexing with accurate lastmod timestamps, resilient SSR fallbacks to eliminate 5xx errors, and structured data hierarchy for optimal search ranking.",
-  "updatedAt": "2026-10-16T03:31:56.385798021Z",
+  "summary": "Production-ready Technical SEO, Crawl Rate & Search Console Optimization Plan. Eliminates search crawler penalties by blocking intrusive popunder and ad network scripts for Googlebot, optimizes Sinhala story metadata and semantic keyword targeting for organic ranking, enhances Article/Breadcrumb/WebSite JSON-LD structured data with genre and wordCount, implements deep contextual internal linking between related stories, and fine-tunes server caching and Core Web Vitals to maximize crawl frequency and impressions.",
+  "updatedAt": "2026-10-19T11:36:19.386334451Z",
   "requestFeedback": true,
   "userFacing": true
 }

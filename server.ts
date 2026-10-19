@@ -515,6 +515,34 @@ function escapeHtml(str: string): string {
     .replace(/'/g, '&#39;');
 }
 
+// --- SEARCH ENGINE CRAWLER & AD ISOLATION HELPERS ---
+export function isSearchEngineCrawler(userAgent?: string): boolean {
+  if (!userAgent) return false;
+  const botPattern = /googlebot|bingbot|google-inspectiontool|chrome-lighthouse|yandexbot|duckduckbot|slurp|baiduspider|feedfetcher-google|mediapartners-google/i;
+  return botPattern.test(userAgent);
+}
+
+export function stripAdScriptsForCrawlers(html: string): string {
+  let cleaned = html;
+  // Safely strip third-party CPM ad scripts without ever spanning across other scripts
+  cleaned = cleaned.replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gi, (match) => {
+    if (
+      match.includes('profitableratecpmnetwork') ||
+      match.includes('highperformanceformat')
+    ) {
+      return '<!-- [Ad Script Disabled for Search Engine Crawler] -->';
+    }
+    return match;
+  });
+
+  // Hide 320x50 container to eliminate CLS and crawler confusion
+  cleaned = cleaned.replace(
+    /<div id="ad-banner-320x50"[\s\S]*?<\/div>/gi,
+    '<div id="ad-banner-320x50" style="display:none;" aria-hidden="true"></div>'
+  );
+  return cleaned;
+}
+
 // --- SEO & METADATA INJECTION HELPERS ---
 function injectSeoIntoHtml(
   html: string,
@@ -526,6 +554,7 @@ function injectSeoIntoHtml(
     schemaJson?: any;
     bodyContent?: string;
     noindex?: boolean;
+    isBot?: boolean;
   }
 ): string {
   let result = html;
@@ -596,6 +625,11 @@ function injectSeoIntoHtml(
     );
   }
 
+  // Strip third-party ads and popunders when serving to search engine crawlers
+  if (meta.isBot) {
+    result = stripAdScriptsForCrawlers(result);
+  }
+
   return result;
 }
 
@@ -630,7 +664,7 @@ function renderNotFound(template: string, requestedPath = '', message = 'සො�
   return result;
 }
 
-function renderHomeSeo(template: string, page = 1): string {
+function renderHomeSeo(template: string, page = 1, isBot = false): string {
   const publishedStories = deduplicateStoriesBySlug(
     memoryDatabase.stories.filter((s) => s.published !== false)
   );
@@ -728,10 +762,11 @@ function renderHomeSeo(template: string, page = 1): string {
     ogImage: 'https://www.walkathawa.site/icon.png',
     schemaJson,
     bodyContent,
+    isBot,
   });
 }
 
-function renderNotFoundSeo(template: string, requestedUrl = ''): string {
+function renderNotFoundSeo(template: string, requestedUrl = '', isBot = false): string {
   const title = 'පිටුව හමු නොවීය (Page Not Found - 404) | Walkathawa (වල් කතාව)';
   const description = 'ඔබ සොයන කතාව හෝ පිටුව අප සතුව සොයාගත නොහැකි විය. වෙනත් රසවත් සිංහල කතා කියවීමට මුල් පිටුවට පිවිසෙන්න.';
   const bodyContent = `
@@ -753,10 +788,11 @@ function renderNotFoundSeo(template: string, requestedUrl = ''): string {
     ogImage: 'https://www.walkathawa.site/icon.png',
     bodyContent,
     noindex: true,
+    isBot,
   });
 }
 
-function renderStorySeo(template: string, story: Story): string {
+function renderStorySeo(template: string, story: Story, isBot = false): string {
   const storyUrl = `https://www.walkathawa.site/story/${encodeURIComponent(story.slug)}`;
   const title = `${story.title} | Walkathawa (වල් කතාව)`;
   const description = story.shortDescription || story.description || story.title;
@@ -764,6 +800,10 @@ function renderStorySeo(template: string, story: Story): string {
   const modifiedDate = getValidIsoDate(story.updatedDate || story.updatedAt, publishedDate);
   const catName = getCategoryDisplayName(story.category);
   const catUrl = `https://www.walkathawa.site/category/${encodeURIComponent(story.category || 'all')}`;
+
+  const storyText = (story.fullContent || story.content || '').trim();
+  const wordCount = storyText ? storyText.split(/\s+/).filter(Boolean).length : 250;
+  const readingTimeMinutes = Math.max(1, Math.ceil(wordCount / 180));
 
   const schemaJson = {
     '@context': 'https://schema.org',
@@ -784,6 +824,10 @@ function renderStorySeo(template: string, story: Story): string {
         datePublished: publishedDate,
         dateModified: modifiedDate,
         inLanguage: 'si',
+        wordCount,
+        timeRequired: `PT${readingTimeMinutes}M`,
+        keywords: `${story.title}, ${catName}, සිංහල කතා, walkathawa, sinhala katha, sinhala stories, wal katha, aluth katha`,
+        genre: 'Sinhala Stories / Fiction / Romance',
         mainEntityOfPage: {
           '@type': 'WebPage',
           '@id': storyUrl,
@@ -837,7 +881,7 @@ function renderStorySeo(template: string, story: Story): string {
     .map((p) => `<p style="margin-bottom: 16px; line-height: 1.8;">${escapeHtml(p.trim())}</p>`)
     .join('\n');
 
-  // Internal link graph: previous, next, and related stories
+  // Internal link graph: previous, next, and same-category contextual related stories
   const allStories = deduplicateStoriesBySlug(
     memoryDatabase.stories.filter((s) => s.published !== false)
   );
@@ -845,9 +889,14 @@ function renderStorySeo(template: string, story: Story): string {
   const prevStory = currentIndex > 0 ? allStories[currentIndex - 1] : null;
   const nextStory = currentIndex >= 0 && currentIndex < allStories.length - 1 ? allStories[currentIndex + 1] : null;
 
-  const relatedStories = allStories
-    .filter((s) => s.id !== story.id && s.slug !== story.slug)
-    .slice(0, 6);
+  // Prioritize related stories in the exact same category, backfilled by other categories
+  const sameCategoryStories = allStories.filter(
+    (s) => s.id !== story.id && s.slug !== story.slug && normalizeCategorySlug(s.category) === normalizeCategorySlug(story.category)
+  );
+  const otherStories = allStories.filter(
+    (s) => s.id !== story.id && s.slug !== story.slug && normalizeCategorySlug(s.category) !== normalizeCategorySlug(story.category)
+  );
+  const relatedStories = [...sameCategoryStories, ...otherStories].slice(0, 6);
 
   const relatedHtml = relatedStories
     .map(
@@ -909,10 +958,11 @@ function renderStorySeo(template: string, story: Story): string {
     ogImage: story.coverImage || 'https://www.walkathawa.site/icon.png',
     schemaJson,
     bodyContent,
+    isBot,
   });
 }
 
-function renderCategorySeo(template: string, categorySlug: string, page = 1): string {
+function renderCategorySeo(template: string, categorySlug: string, page = 1, isBot = false): string {
   const norm = normalizeCategorySlug(categorySlug);
   const catName = getCategoryDisplayName(norm);
   const canonicalUrl = page > 1 ? `https://www.walkathawa.site/category/${encodeURIComponent(norm)}?page=${page}` : `https://www.walkathawa.site/category/${encodeURIComponent(norm)}`;
@@ -1030,10 +1080,11 @@ function renderCategorySeo(template: string, categorySlug: string, page = 1): st
     ogImage: 'https://www.walkathawa.site/icon.png',
     schemaJson,
     bodyContent,
+    isBot,
   });
 }
 
-function renderCategoriesListSeo(template: string): string {
+function renderCategoriesListSeo(template: string, isBot = false): string {
   const catUrl = 'https://www.walkathawa.site/categories';
   const title = 'කතා වර්ගීකරණ (Story Categories) | Walkathawa (වල් කතාව)';
   const description = 'Walkathawa හි ඇති සියලුම සිංහල කතා වර්ගීකරණයන් තෝරා රසවත් කතා පහසුවෙන් කියවන්න.';
@@ -1064,6 +1115,7 @@ function renderCategoriesListSeo(template: string): string {
     canonicalUrl: catUrl,
     ogImage: 'https://www.walkathawa.site/icon.png',
     bodyContent,
+    isBot,
   });
 }
 
@@ -1589,10 +1641,12 @@ async function getTransformedHtml(url: string): Promise<string> {
 app.get('/', async (req: Request, res: Response) => {
   try {
     await syncStoriesFromFirestore(false);
+    const isBot = isSearchEngineCrawler(req.headers['user-agent'] as string);
+    const pageNum = parseInt(String(req.query.page || '1'), 10) || 1;
     const template = await getTransformedHtml(req.originalUrl || '/');
-    const rendered = renderHomeSeo(template);
+    const rendered = renderHomeSeo(template, pageNum, isBot);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800');
+    res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800, stale-while-revalidate=86400');
     return res.status(200).send(rendered);
   } catch (err) {
     console.error('[SSR / error]:', err);
@@ -1605,18 +1659,19 @@ app.get('/', async (req: Request, res: Response) => {
 // 2. Story Detail SSR
 app.get('/story/:slug', async (req: Request, res: Response) => {
   try {
+    const isBot = isSearchEngineCrawler(req.headers['user-agent'] as string);
     const story = await findStoryBySlugOrId(req.params.slug);
     const template = await getTransformedHtml(req.originalUrl);
 
     if (!story) {
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
-      return res.status(404).send(renderNotFoundSeo(template, `https://www.walkathawa.site/story/${encodeURIComponent(req.params.slug)}`));
+      return res.status(404).send(renderNotFoundSeo(template, `https://www.walkathawa.site/story/${encodeURIComponent(req.params.slug)}`, isBot));
     }
 
-    const rendered = renderStorySeo(template, story);
+    const rendered = renderStorySeo(template, story, isBot);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800');
+    res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800, stale-while-revalidate=86400');
     return res.status(200).send(rendered);
   } catch (err) {
     console.error('[SSR /story error]:', err);
@@ -1630,6 +1685,7 @@ app.get('/story/:slug', async (req: Request, res: Response) => {
 app.get('/category/:slug', async (req: Request, res: Response) => {
   try {
     await syncStoriesFromFirestore(false);
+    const isBot = isSearchEngineCrawler(req.headers['user-agent'] as string);
     const rawSlug = req.params.slug || '';
     const norm = normalizeCategorySlug(rawSlug);
     const pageNum = parseInt(String(req.query.page || '1'), 10) || 1;
@@ -1645,12 +1701,12 @@ app.get('/category/:slug', async (req: Request, res: Response) => {
     if (!catExists) {
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
-      return res.status(404).send(renderNotFoundSeo(template, `https://www.walkathawa.site/category/${encodeURIComponent(rawSlug)}`));
+      return res.status(404).send(renderNotFoundSeo(template, `https://www.walkathawa.site/category/${encodeURIComponent(rawSlug)}`, isBot));
     }
 
-    const rendered = renderCategorySeo(template, norm, pageNum);
+    const rendered = renderCategorySeo(template, norm, pageNum, isBot);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800');
+    res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800, stale-while-revalidate=86400');
     return res.status(200).send(rendered);
   } catch (err) {
     console.error('[SSR /category error]:', err);
@@ -1664,10 +1720,11 @@ app.get('/category/:slug', async (req: Request, res: Response) => {
 app.get('/categories', async (req: Request, res: Response) => {
   try {
     await syncStoriesFromFirestore(false);
+    const isBot = isSearchEngineCrawler(req.headers['user-agent'] as string);
     const template = await getTransformedHtml(req.originalUrl);
-    const rendered = renderCategoriesListSeo(template);
+    const rendered = renderCategoriesListSeo(template, isBot);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800');
+    res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800, stale-while-revalidate=86400');
     return res.status(200).send(rendered);
   } catch (err) {
     console.error('[SSR /categories error]:', err);
@@ -1681,6 +1738,7 @@ app.get('/categories', async (req: Request, res: Response) => {
 app.get(['/sitemap', '/archives'], async (req: Request, res: Response) => {
   try {
     await syncStoriesFromFirestore(false);
+    const isBot = isSearchEngineCrawler(req.headers['user-agent'] as string);
     const template = await getTransformedHtml(req.originalUrl);
 
     const allStoriesList = memoryDatabase.stories
@@ -1706,9 +1764,10 @@ app.get(['/sitemap', '/archives'], async (req: Request, res: Response) => {
       description: 'Google Indexing සහ පාඨක පහසුව සඳහා සියලුම සිංහල කතා සහ වර්ගීකරණ නාමාවලිය.',
       canonicalUrl: 'https://www.walkathawa.site/sitemap',
       bodyContent: archiveBody,
+      isBot,
     });
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800');
+    res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800, stale-while-revalidate=86400');
     return res.status(200).send(rendered);
   } catch (err) {
     console.error('[SSR /sitemap error]:', err);

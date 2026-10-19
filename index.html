@@ -117,16 +117,18 @@
       })();
     </script>
 
-    <!-- Popunder Ad Network Script (Single head placement, public pages only) -->
+    <!-- Popunder Ad Network Script (Single head placement, public pages only, blocked for search engine crawlers) -->
     <script>
       (function() {
         try {
+          var ua = (navigator.userAgent || '').toLowerCase();
+          var isBot = /googlebot|bingbot|google-inspectiontool|chrome-lighthouse|yandexbot|duckduckbot|slurp|baiduspider|feedfetcher/i.test(ua);
           var path = window.location.pathname.toLowerCase();
           var hash = window.location.hash.toLowerCase();
           var isAdmin = path.startsWith('/admin') || hash.includes('admin') || window.location.search.toLowerCase().includes('admin');
           if (isAdmin) {
             document.documentElement.classList.add('is-admin-mode');
-          } else {
+          } else if (!isBot) {
             var s = document.createElement('script');
             s.id = 'popunder-ad-script';
             s.src = 'https://pl31237534.profitableratecpmnetwork.com/92/75/b7/9275b71384eefb562fbf9d9fd275cc5e.js';
@@ -140,14 +142,16 @@
   <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased font-sans transition-colors duration-200">
     <div id="root"></div>
 
-    <!-- 320x50 Ad Placement in Page Body (Public pages only, never in Admin) -->
+    <!-- 320x50 Ad Placement in Page Body (Public pages only, never in Admin, blocked for search engine crawlers) -->
     <div id="ad-banner-320x50" class="flex justify-center items-center my-3 mx-auto w-full max-w-[320px] min-h-[50px] overflow-hidden text-center">
       <script type="text/javascript">
         (function() {
           try {
+            var ua = (navigator.userAgent || '').toLowerCase();
+            var isBot = /googlebot|bingbot|google-inspectiontool|chrome-lighthouse|yandexbot|duckduckbot|slurp|baiduspider|feedfetcher/i.test(ua);
             var path = window.location.pathname.toLowerCase();
             var hash = window.location.hash.toLowerCase();
-            if (path.startsWith('/admin') || hash.includes('admin')) {
+            if (path.startsWith('/admin') || hash.includes('admin') || isBot) {
               var el = document.getElementById('ad-banner-320x50');
               if (el) el.style.display = 'none';
               return;
@@ -168,14 +172,16 @@
       </script>
     </div>
 
-    <!-- Social Bar Ad Network Script (Public pages only, never in Admin) -->
+    <!-- Social Bar Ad Network Script (Public pages only, never in Admin, blocked for search engine crawlers) -->
     <script>
       (function() {
         try {
+          var ua = (navigator.userAgent || '').toLowerCase();
+          var isBot = /googlebot|bingbot|google-inspectiontool|chrome-lighthouse|yandexbot|duckduckbot|slurp|baiduspider|feedfetcher/i.test(ua);
           var path = window.location.pathname.toLowerCase();
           var hash = window.location.hash.toLowerCase();
           var isAdmin = path.startsWith('/admin') || hash.includes('admin') || window.location.search.toLowerCase().includes('admin');
-          if (!isAdmin) {
+          if (!isAdmin && !isBot) {
             var s = document.createElement('script');
             s.id = 'socialbar-ad-script';
             s.src = 'https://pl31237536.profitableratecpmnetwork.com/c0/5a/c7/c05ac7bd55736617f6c7021ffa7f49da.js';

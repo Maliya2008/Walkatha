@@ -190,8 +190,28 @@ async function runTests() {
     assert(catsDirRes.body.includes('rel="canonical" href="https://www.walkathawa.site/categories"'), 'Categories directory must have self-referencing canonical');
     console.log('✔ Categories Directory SSR verified');
 
+    // 16. Googlebot Ad Isolation
+    console.log('Testing: Search Engine Bot Ad Isolation (Googlebot)...');
+    const botRes = await request('/', { 'user-agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' });
+    assert.strictEqual(botRes.statusCode, 200, 'Googlebot homepage request must return 200');
+    assert(!botRes.body.includes('pl31237534.profitableratecpmnetwork.com'), 'Googlebot must NOT receive popunder ad scripts');
+    assert(!botRes.body.includes('highperformanceformat.com'), 'Googlebot must NOT receive 320x50 ad script');
+    assert(botRes.body.includes('[Ad Script Disabled for Search Engine Crawler]'), 'Googlebot must receive crawler-safe sanitized HTML');
+    console.log('✔ Googlebot Ad Isolation verified');
+
+    // 17. Rich Article Schema & Contextual Related Stories
+    console.log('Testing: Rich Article Schema & Contextual Related Stories...');
+    const richStoryRes = await request(`/story/${testSlug}`, { 'user-agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' });
+    assert.strictEqual(richStoryRes.statusCode, 200, 'Googlebot story request must return 200');
+    assert(richStoryRes.body.includes('wordCount'), 'Story schema must include wordCount');
+    assert(richStoryRes.body.includes('timeRequired'), 'Story schema must include timeRequired');
+    assert(richStoryRes.body.includes('keywords'), 'Story schema must include keywords');
+    assert(richStoryRes.body.includes('තවත් රසවත් සිංහල කතා'), 'Story page must render related stories section');
+    assert(richStoryRes.headers['cache-control']?.includes('stale-while-revalidate'), 'Must include stale-while-revalidate header');
+    console.log('✔ Rich Article Schema & Related Stories verified');
+
     console.log('\n=========================================');
-    console.log('ALL SEO AND INDEXING TESTS PASSED (15/15)');
+    console.log('ALL SEO AND INDEXING TESTS PASSED (17/17)');
     console.log('=========================================\n');
     server.close(() => {
       process.exit(0);

@@ -14,7 +14,7 @@ import {
 import { Story, ReadingTheme, FontSize } from '../../types/story';
 import { StoryCard } from './StoryCard';
 import { AdBanner320x50 } from '../common/AdBanner320x50';
-import { getCategoryDisplayName } from '../../utils/categoryTaxonomy';
+import { getCategoryDisplayName, getStoryCanonicalCategory } from '../../utils/categoryTaxonomy';
 import {
   formatSinhalaDate,
   formatSinhalaTimeAgo,
@@ -29,6 +29,7 @@ interface StoryReaderProps {
   nextStory?: Story | null;
   onBack: () => void;
   onSelectStory: (slug: string) => void;
+  onSelectCategory?: (categorySlug: string) => void;
   theme: ReadingTheme;
   onThemeChange?: (theme: ReadingTheme) => void;
   fontSize: FontSize;
@@ -42,6 +43,7 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
   nextStory,
   onBack,
   onSelectStory,
+  onSelectCategory,
   fontSize,
   onFontSizeChange,
 }) => {
@@ -74,7 +76,8 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
   const dateFormatted = formatSinhalaDate(story.uploadDate || story.uploadedDate || story.createdAt);
   const readingTime = story.readingTime || Math.max(3, Math.ceil((story.fullContent || story.content || '').length / 450));
   const viewsDisplay = formatViewsCount(story.views);
-  const categoryName = cleanCategoryBadgeName(story.categoryName || getCategoryDisplayName(story.category));
+  const canonicalCategorySlug = getStoryCanonicalCategory(story);
+  const categoryName = cleanCategoryBadgeName(story.categoryName || getCategoryDisplayName(canonicalCategorySlug));
 
   const handleCopyLink = () => {
     try {
@@ -163,13 +166,53 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
 
         {/* Story Article Container */}
         <article className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-xl p-5 sm:p-7 shadow-xs">
+          {/* Breadcrumbs for Discoverability & Internal Linking */}
+          <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 mb-3 flex-wrap">
+            <a
+              href="/"
+              onClick={(e) => {
+                if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
+                  e.preventDefault();
+                  onBack();
+                }
+              }}
+              className="hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer"
+            >
+              මුල් පිටුව
+            </a>
+            <span>/</span>
+            <a
+              href={`/category/${canonicalCategorySlug}`}
+              onClick={(e) => {
+                if (!e.ctrlKey && !e.metaKey && !e.shiftKey && onSelectCategory) {
+                  e.preventDefault();
+                  onSelectCategory(canonicalCategorySlug);
+                }
+              }}
+              className="hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer"
+            >
+              {categoryName}
+            </a>
+            <span>/</span>
+            <span className="text-slate-700 dark:text-slate-300 font-medium truncate max-w-[200px] sm:max-w-xs">{story.title}</span>
+          </nav>
+
           {/* Header Metadata */}
           <header className="border-b border-slate-100 dark:border-slate-800/80 pb-5 space-y-3">
             {/* 1. Category */}
             <div>
-              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 border border-rose-200/50 dark:border-rose-900/40 inline-block">
+              <a
+                href={`/category/${canonicalCategorySlug}`}
+                onClick={(e) => {
+                  if (!e.ctrlKey && !e.metaKey && !e.shiftKey && onSelectCategory) {
+                    e.preventDefault();
+                    onSelectCategory(canonicalCategorySlug);
+                  }
+                }}
+                className="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 border border-rose-200/50 dark:border-rose-900/40 inline-block hover:bg-rose-100 dark:hover:bg-rose-900/60 transition-colors cursor-pointer"
+              >
                 {categoryName}
-              </span>
+              </a>
             </div>
 
             {/* 2. Story Title */}

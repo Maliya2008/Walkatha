@@ -5,7 +5,12 @@ import fs from 'fs';
 import { Story, Category } from './src/types/story';
 import { SiteSettings } from './src/types/admin';
 import { INITIAL_STORIES, INITIAL_CATEGORIES } from './src/data/seedStories';
-import { normalizeCategorySlug, getCategoryDisplayName } from './src/utils/categoryTaxonomy';
+import {
+  normalizeCategorySlug,
+  getCategoryDisplayName,
+  getStoryCanonicalCategory,
+  isValidCategorySlug,
+} from './src/utils/categoryTaxonomy';
 import { db } from './src/lib/firebase';
 import { collection, getDocs, doc, getDoc, query, where, limit, setLogLevel, onSnapshot } from 'firebase/firestore';
 import { normalizeFirestoreStory } from './src/services/storyService';
@@ -344,7 +349,7 @@ async function syncStoriesFromFirestore(force = false): Promise<Story[]> {
     });
 
     const timeoutPromise = new Promise<Story[]>((resolve) => {
-      setTimeout(() => resolve(memoryDatabase.stories), 1500);
+      setTimeout(() => resolve(memoryDatabase.stories), 3500);
     });
 
     return await Promise.race([safePromise, timeoutPromise]);
@@ -427,42 +432,50 @@ async function findStoryBySlugOrId(slugParam: string): Promise<Story | null> {
   const found = memoryDatabase.stories.find(matches);
   if (found) return found;
 
-  // Direct Firestore document check by ID or slug with strict try-catch and 1.2s timeout
+  // Direct Firestore document check by ID or slug with strict try-catch and 3.5s timeout
   try {
     const directFetch = async (): Promise<Story | null> => {
-      // Safe doc id lookup (avoid slashes or invalid doc paths)
+      // 1. Safe doc id lookup in stories and posts
       if (!slugParam.includes('/') && !slugParam.includes('..')) {
-        try {
-          const docRef = doc(db, 'stories', slugParam.trim());
-          const docSnap = await getDoc(docRef);
-          if (docSnap.exists()) {
-            const story = normalizeFirestoreStory(docSnap.id, docSnap.data());
-            memoryDatabase.stories.unshift(story);
-            memoryDatabase.stories = deduplicateStoriesBySlug(memoryDatabase.stories);
-            saveDatabase();
-            return story;
-          }
-        } catch (e) {}
+        const cleanId = slugParam.trim();
+        for (const col of ['stories', 'posts']) {
+          try {
+            const docRef = doc(db, col, cleanId);
+            const docSnap = await getDoc(docRef);
+            if (docSnap.exists()) {
+              const story = normalizeFirestoreStory(docSnap.id, docSnap.data());
+              memoryDatabase.stories.unshift(story);
+              memoryDatabase.stories = deduplicateStoriesBySlug(memoryDatabase.stories);
+              saveDatabase();
+              return story;
+            }
+          } catch (e) {}
+        }
       }
 
-      // Direct Firestore query by slug field
-      try {
-        const q = query(collection(db, 'stories'), where('slug', '==', decodedParam), limit(1));
-        const querySnap = await getDocs(q);
-        if (!querySnap.empty) {
-          const story = normalizeFirestoreStory(querySnap.docs[0].id, querySnap.docs[0].data());
-          memoryDatabase.stories.unshift(story);
-          memoryDatabase.stories = deduplicateStoriesBySlug(memoryDatabase.stories);
-          saveDatabase();
-          return story;
+      // 2. Direct Firestore query by slug field in stories and posts
+      const slugQueries = decodedParam !== rawParam ? [decodedParam, rawParam] : [decodedParam];
+      for (const col of ['stories', 'posts']) {
+        for (const targetSlug of slugQueries) {
+          try {
+            const q = query(collection(db, col), where('slug', '==', targetSlug), limit(1));
+            const querySnap = await getDocs(q);
+            if (!querySnap.empty) {
+              const story = normalizeFirestoreStory(querySnap.docs[0].id, querySnap.docs[0].data());
+              memoryDatabase.stories.unshift(story);
+              memoryDatabase.stories = deduplicateStoriesBySlug(memoryDatabase.stories);
+              saveDatabase();
+              return story;
+            }
+          } catch (e) {}
         }
-      } catch (e) {}
+      }
 
       return null;
     };
 
     const safeFetch = directFetch().catch(() => null);
-    const timeoutPromise = new Promise<Story | null>((resolve) => setTimeout(() => resolve(null), 1200));
+    const timeoutPromise = new Promise<Story | null>((resolve) => setTimeout(() => resolve(null), 3500));
     return await Promise.race([safeFetch, timeoutPromise]);
   } catch (err: any) {
     return null;
@@ -553,6 +566,7 @@ function injectSeoIntoHtml(
     ogImage?: string;
     schemaJson?: any;
     bodyContent?: string;
+    initialDataScript?: string;
     noindex?: boolean;
     isBot?: boolean;
   }
@@ -715,14 +729,15 @@ function renderHomeSeo(template: string, page = 1, isBot = false): string {
 
   // SSR HTML fallback for search engines
   const storiesHtml = pageStories
-    .map(
-      (s) => `
+    .map((s) => {
+      const sCatSlug = getStoryCanonicalCategory(s);
+      return `
       <article style="margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid #f1f5f9;">
         <h2><a href="/story/${encodeURIComponent(s.slug)}" style="color: #0f172a; text-decoration: none;">${escapeHtml(s.title)}</a></h2>
         <p style="color: #475569; font-size: 14px; line-height: 1.6;">${escapeHtml(s.shortDescription || s.description || '')}</p>
-        <small style="color: #64748b;">වර්ගීකරණය: <a href="/category/${encodeURIComponent(s.category || 'all')}" style="color: #e11d48; text-decoration: none;">${escapeHtml(getCategoryDisplayName(s.category))}</a></small>
-      </article>`
-    )
+        <small style="color: #64748b;">වර්ගීකරණය: <a href="/category/${sCatSlug}" style="color: #e11d48; text-decoration: none;">${escapeHtml(getCategoryDisplayName(sCatSlug))}</a></small>
+      </article>`;
+    })
     .join('\n');
 
   // Pagination crawlable links
@@ -798,8 +813,9 @@ function renderStorySeo(template: string, story: Story, isBot = false): string {
   const description = story.shortDescription || story.description || story.title;
   const publishedDate = getStoryDate(story);
   const modifiedDate = getValidIsoDate(story.updatedDate || story.updatedAt, publishedDate);
-  const catName = getCategoryDisplayName(story.category);
-  const catUrl = `https://www.walkathawa.site/category/${encodeURIComponent(story.category || 'all')}`;
+  const canonicalCat = getStoryCanonicalCategory(story);
+  const catName = getCategoryDisplayName(canonicalCat);
+  const catUrl = `https://www.walkathawa.site/category/${canonicalCat}`;
 
   const storyText = (story.fullContent || story.content || '').trim();
   const wordCount = storyText ? storyText.split(/\s+/).filter(Boolean).length : 250;
@@ -891,10 +907,10 @@ function renderStorySeo(template: string, story: Story, isBot = false): string {
 
   // Prioritize related stories in the exact same category, backfilled by other categories
   const sameCategoryStories = allStories.filter(
-    (s) => s.id !== story.id && s.slug !== story.slug && normalizeCategorySlug(s.category) === normalizeCategorySlug(story.category)
+    (s) => s.id !== story.id && s.slug !== story.slug && normalizeCategorySlug(s.category) === canonicalCat
   );
   const otherStories = allStories.filter(
-    (s) => s.id !== story.id && s.slug !== story.slug && normalizeCategorySlug(s.category) !== normalizeCategorySlug(story.category)
+    (s) => s.id !== story.id && s.slug !== story.slug && normalizeCategorySlug(s.category) !== canonicalCat
   );
   const relatedStories = [...sameCategoryStories, ...otherStories].slice(0, 6);
 
@@ -923,7 +939,7 @@ function renderStorySeo(template: string, story: Story, isBot = false): string {
     <main style="max-width: 800px; margin: 0 auto; padding: 20px;">
       <nav style="margin-bottom: 20px; font-size: 14px; color: #64748b;">
         <a href="/" style="color: #2563eb; text-decoration: none;">මුල් පිටුව</a> &gt; 
-        <a href="/category/${encodeURIComponent(story.category || 'all')}" style="color: #2563eb; text-decoration: none;">${escapeHtml(catName)}</a> &gt; 
+        <a href="/category/${canonicalCat}" style="color: #2563eb; text-decoration: none;">${escapeHtml(catName)}</a> &gt; 
         <span>${escapeHtml(story.title)}</span>
       </nav>
       <article>
@@ -951,6 +967,8 @@ function renderStorySeo(template: string, story: Story, isBot = false): string {
       </section>
     </main>`;
 
+  const initialDataScript = `<script>window.__INITIAL_STORY__ = ${JSON.stringify(story).replace(/</g, '\\u003c')};</script>`;
+
   return injectSeoIntoHtml(template, {
     title,
     description,
@@ -958,6 +976,7 @@ function renderStorySeo(template: string, story: Story, isBot = false): string {
     ogImage: story.coverImage || 'https://www.walkathawa.site/icon.png',
     schemaJson,
     bodyContent,
+    initialDataScript,
     isBot,
   });
 }
@@ -965,13 +984,13 @@ function renderStorySeo(template: string, story: Story, isBot = false): string {
 function renderCategorySeo(template: string, categorySlug: string, page = 1, isBot = false): string {
   const norm = normalizeCategorySlug(categorySlug);
   const catName = getCategoryDisplayName(norm);
-  const canonicalUrl = page > 1 ? `https://www.walkathawa.site/category/${encodeURIComponent(norm)}?page=${page}` : `https://www.walkathawa.site/category/${encodeURIComponent(norm)}`;
+  const canonicalUrl = page > 1 ? `https://www.walkathawa.site/category/${norm}?page=${page}` : `https://www.walkathawa.site/category/${norm}`;
   const title = page > 1 ? `${catName} - පිටුව ${page} | Walkathawa (වල් කතාව)` : `${catName} | Walkathawa (වල් කතාව)`;
   const description = `${catName} යටතේ ඇති නවතම සිංහල කතා එකතුව කියවන්න.`;
 
   const allCatStories = deduplicateStoriesBySlug(
     memoryDatabase.stories.filter(
-      (s) => s.published !== false && (s.category || '').toLowerCase().includes(norm.toLowerCase())
+      (s) => s.published !== false && normalizeCategorySlug(s.category) === norm
     )
   );
 
@@ -995,7 +1014,7 @@ function renderCategorySeo(template: string, categorySlug: string, page = 1, isB
   if (totalPages > 1) {
     const pageLinks = [];
     for (let p = 1; p <= totalPages; p++) {
-      const pUrl = p === 1 ? `/category/${encodeURIComponent(norm)}` : `/category/${encodeURIComponent(norm)}?page=${p}`;
+      const pUrl = p === 1 ? `/category/${norm}` : `/category/${norm}?page=${p}`;
       const isCurr = p === currentPage;
       pageLinks.push(
         `<a href="${pUrl}" style="display: inline-block; padding: 6px 12px; margin: 0 4px; border-radius: 6px; text-decoration: none; font-weight: bold; ${
@@ -1057,7 +1076,7 @@ function renderCategorySeo(template: string, categorySlug: string, page = 1, isB
             '@type': 'ListItem',
             position: 3,
             name: catName,
-            item: `https://www.walkathawa.site/category/${encodeURIComponent(norm)}`,
+            item: `https://www.walkathawa.site/category/${norm}`,
           },
         ],
       },
@@ -1080,6 +1099,7 @@ function renderCategorySeo(template: string, categorySlug: string, page = 1, isB
     ogImage: 'https://www.walkathawa.site/icon.png',
     schemaJson,
     bodyContent,
+    noindex: page > 1,
     isBot,
   });
 }
@@ -1201,11 +1221,12 @@ app.get('/sitemap-main.xml', async (_req: Request, res: Response) => {
     xml += `  <url>\n    <loc>${baseUrl}${pagePath}</loc>\n    <lastmod>${latestOverallDate}</lastmod>\n    <changefreq>monthly</changefreq>\n    <priority>0.5</priority>\n  </url>\n`;
   }
 
-  // 5. Category Pages with accurate content-derived lastmod
+  // 5. Category Pages with accurate content-derived lastmod (only valid non-empty categories)
   for (const cat of categories) {
-    const catStories = publishedStories.filter((s) => (s.category || '').toLowerCase().includes(cat.slug.toLowerCase()));
-    const catLastMod = catStories.length > 0 ? getLatestStoryDate(catStories) : latestOverallDate;
-    xml += `  <url>\n    <loc>${baseUrl}/category/${encodeURIComponent(cat.slug)}</loc>\n    <lastmod>${catLastMod}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>0.85</priority>\n  </url>\n`;
+    const catStories = publishedStories.filter((s) => normalizeCategorySlug(s.category) === cat.slug);
+    if (catStories.length === 0) continue;
+    const catLastMod = getLatestStoryDate(catStories);
+    xml += `  <url>\n    <loc>${baseUrl}/category/${cat.slug}</loc>\n    <lastmod>${catLastMod}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>0.85</priority>\n  </url>\n`;
   }
 
   xml += `</urlset>`;
@@ -1248,7 +1269,8 @@ app.get('/robots.txt', (_req: Request, res: Response) => {
   const robots = `User-agent: *
 Allow: /
 Disallow: /admin
-Disallow: /api/
+Disallow: /api/admin
+Disallow: /api/auth
 
 Sitemap: https://www.walkathawa.site/sitemap.xml
 Sitemap: https://www.walkathawa.site/sitemap-stories.xml
@@ -1694,20 +1716,27 @@ app.get('/category/:slug', async (req: Request, res: Response) => {
     const norm = normalizeCategorySlug(rawSlug);
     const pageNum = parseInt(String(req.query.page || '1'), 10) || 1;
 
-    // Check if category exists in database categories or has exact matching stories
+    // Check if category exists in canonical taxonomy, database categories, or has matching stories
     const catExists =
       norm === 'all' ||
+      isValidCategorySlug(norm) ||
       memoryDatabase.categories.some((c) => c.slug.toLowerCase() === norm.toLowerCase()) ||
-      memoryDatabase.stories.some((s) => (s.category || '').toLowerCase() === norm.toLowerCase());
-
-    const template = await getTransformedHtml(req.originalUrl);
+      memoryDatabase.stories.some((s) => normalizeCategorySlug(s.category) === norm);
 
     if (!catExists) {
+      const template = await getTransformedHtml(req.originalUrl);
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
       return res.status(404).send(renderNotFoundSeo(template, `https://www.walkathawa.site/category/${encodeURIComponent(rawSlug)}`, isBot));
     }
 
+    // 301 Permanent Redirect non-canonical category alias URLs (e.g., Sinhala aliases like /category/පාසල්-කතා -> /category/school)
+    if (rawSlug !== norm && isValidCategorySlug(norm)) {
+      const targetQuery = req.query.page ? `?page=${encodeURIComponent(String(req.query.page))}` : '';
+      return res.redirect(301, `/category/${norm}${targetQuery}`);
+    }
+
+    const template = await getTransformedHtml(req.originalUrl);
     const rendered = renderCategorySeo(template, norm, pageNum, isBot);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800, stale-while-revalidate=86400');

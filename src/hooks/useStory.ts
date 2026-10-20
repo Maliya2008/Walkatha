@@ -7,6 +7,17 @@ export function useStory(slug: string | null) {
   const [story, setStory] = useState<Story | null>(() => {
     if (!slug) return null;
     const clean = decodeURIComponent(slug).toLowerCase().trim();
+    if (typeof window !== 'undefined' && (window as any).__INITIAL_STORY__) {
+      const init = (window as any).__INITIAL_STORY__;
+      if (
+        init &&
+        (init.slug === clean ||
+          init.id === clean ||
+          decodeURIComponent(init.slug || '').toLowerCase().trim() === clean)
+      ) {
+        return init;
+      }
+    }
     return INITIAL_STORIES.find((s) => s.slug === clean || s.id === clean) || null;
   });
   const [relatedStories, setRelatedStories] = useState<Story[]>([]);

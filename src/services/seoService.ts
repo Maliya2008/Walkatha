@@ -1,7 +1,7 @@
 import { Story } from '../types/story';
 import { SiteSettings } from '../types/admin';
 import { Series, detectSeriesInfo } from '../utils/seriesTaxonomy';
-import { getStoryCanonicalCategory, getCategoryDisplayName } from '../utils/categoryTaxonomy';
+import { getStoryCanonicalCategory, getCategoryDisplayName, normalizeCategorySlug } from '../utils/categoryTaxonomy';
 
 export const CANONICAL_SITE_URL = 'https://www.walkathawa.site';
 
@@ -160,7 +160,7 @@ export class SEOService {
     if (seo.ogType === 'article' && seo.articleData) {
       // Hierarchical Breadcrumbs: Home > Category > Story/Series > Episode
       const section = seo.articleData.section;
-      const sectionSlug = encodeURIComponent(section.toLowerCase());
+      const sectionSlug = normalizeCategorySlug(section);
       const hasSeries = Boolean(seo.articleData.seriesSlug);
       const seriesSlug = seo.articleData.seriesSlug || 'story';
       const seriesTitle = seo.articleData.seriesTitle || seo.title;
@@ -238,7 +238,8 @@ export class SEOService {
       script.textContent = JSON.stringify(articleGraph, null, 2);
     } else if (seo.seriesData) {
       // Series Hub Schema: CollectionPage + BreadcrumbList + CreativeWorkSeries
-      const { seriesSlug, seriesTitle, categorySlug, categoryName } = seo.seriesData;
+      const { seriesSlug, seriesTitle, categoryName } = seo.seriesData;
+      const categorySlug = normalizeCategorySlug(seo.seriesData.categorySlug);
       const seriesGraph = {
         '@context': 'https://schema.org',
         '@graph': [
@@ -379,14 +380,14 @@ export class SEOService {
       rawTitle: series.title,
       description: cleanDesc,
       keywords: `${series.title}, ${series.categoryName}, sinhala series, wal katha series, walkathawa`,
-      canonicalUrl: `${CANONICAL_SITE_URL}/category/${encodeURIComponent(series.category || 'all')}`,
+      canonicalUrl: `${CANONICAL_SITE_URL}/category/${normalizeCategorySlug(series.category || 'all')}`,
       ogImage: series.coverImage || this.DEFAULT_IMAGE,
       ogType: 'website',
       seriesData: {
         seriesSlug: series.slug,
         seriesTitle: series.title,
         totalEpisodes: series.totalEpisodes,
-        categorySlug: series.category,
+        categorySlug: normalizeCategorySlug(series.category || 'all'),
         categoryName: series.categoryName,
       },
     };
@@ -461,13 +462,14 @@ export class SEOService {
     }
 
     if (activeCategorySlug && activeCategorySlug !== 'all') {
-      const displayName = activeCategoryName || getCategoryDisplayName(activeCategorySlug);
+      const normCat = normalizeCategorySlug(activeCategorySlug);
+      const displayName = activeCategoryName || getCategoryDisplayName(normCat);
       return {
         title: `${displayName} Stories (සිංහල කතා)`,
         description: `Read the latest ${displayName} Sinhala stories, wal katha, and romantic tales on Walkathawa (වල් කතාව). Updated regularly with new collections.`,
-        canonicalUrl: `${CANONICAL_SITE_URL}/category/${encodeURIComponent(activeCategorySlug)}`,
+        canonicalUrl: `${CANONICAL_SITE_URL}/category/${normCat}`,
         ogType: 'website',
-        categorySlug: activeCategorySlug,
+        categorySlug: normCat,
         categoryName: displayName,
       };
     }

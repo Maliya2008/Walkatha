@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Clock, Eye, ArrowRight, BookOpen } from 'lucide-react';
 import { Story } from '../../types/story';
-import { getCategoryDisplayName } from '../../utils/categoryTaxonomy';
+import { getCategoryDisplayName, getStoryCanonicalCategory } from '../../utils/categoryTaxonomy';
 import { formatSinhalaTimeAgo, formatViewsCount, cleanCategoryBadgeName } from '../../utils/formatters';
 
 interface StoryCardProps {
@@ -22,7 +22,8 @@ export const StoryCard: React.FC<StoryCardProps> = ({
   const timeAgo = formatSinhalaTimeAgo(story.uploadDate || story.uploadedDate || story.createdAt);
   const viewsDisplay = formatViewsCount(story.views);
   const storyUrl = `/story/${encodeURIComponent(story.slug)}`;
-  const categoryName = cleanCategoryBadgeName(story.categoryName || getCategoryDisplayName(story.category));
+  const canonicalCategorySlug = getStoryCanonicalCategory(story);
+  const categoryName = cleanCategoryBadgeName(story.categoryName || getCategoryDisplayName(canonicalCategorySlug));
 
   const handleTitleOrCardClick = (e: React.MouseEvent) => {
     if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
@@ -33,9 +34,9 @@ export const StoryCard: React.FC<StoryCardProps> = ({
 
   const handleCategoryClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (onSelectCategory && story.category) {
+    if (onSelectCategory) {
       e.preventDefault();
-      onSelectCategory(story.category);
+      onSelectCategory(canonicalCategorySlug);
     }
   };
 
@@ -66,7 +67,7 @@ export const StoryCard: React.FC<StoryCardProps> = ({
           </a>
           <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 z-10">
             <a
-              href={`/category/${encodeURIComponent(story.category || 'all')}`}
+              href={`/category/${canonicalCategorySlug}`}
               onClick={handleCategoryClick}
               className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-white/95 dark:bg-slate-900/90 text-rose-600 dark:text-rose-400 backdrop-blur-xs shadow-xs border border-rose-200/60 dark:border-rose-900/50 hover:bg-rose-50 dark:hover:bg-rose-950 transition-colors cursor-pointer select-none"
             >
@@ -86,7 +87,7 @@ export const StoryCard: React.FC<StoryCardProps> = ({
           </div>
           <div className="flex items-center gap-1.5 z-10">
             <a
-              href={`/category/${encodeURIComponent(story.category || 'all')}`}
+              href={`/category/${canonicalCategorySlug}`}
               onClick={handleCategoryClick}
               className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-white dark:bg-slate-900 text-rose-600 dark:text-rose-400 shadow-2xs border border-rose-200/60 dark:border-rose-900/40 hover:bg-rose-50 dark:hover:bg-rose-950/60 transition-colors cursor-pointer select-none"
             >

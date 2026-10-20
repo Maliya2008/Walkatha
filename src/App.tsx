@@ -368,6 +368,7 @@ export default function App() {
                 nextStory={nextStory}
                 onBack={handleHomeClick}
                 onSelectStory={handleReadStory}
+                onSelectCategory={handleSelectCategory}
                 theme={theme}
                 onThemeChange={setTheme}
                 fontSize={fontSize}

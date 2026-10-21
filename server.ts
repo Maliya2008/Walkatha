@@ -310,6 +310,9 @@ const SYNC_COOLDOWN_MS = 60 * 1000; // 60s cooldown to prevent redundant Firesto
 
 async function syncStoriesFromFirestore(force = false): Promise<Story[]> {
   const now = Date.now();
+  if (isServerlessEnvironment && memoryDatabase.stories.length > 0 && !force) {
+    return memoryDatabase.stories;
+  }
   if (!force && (now - lastFirestoreSync < SYNC_COOLDOWN_MS || isSyncInProgress) && memoryDatabase.stories.length > 0) {
     return memoryDatabase.stories;
   }

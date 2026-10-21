@@ -6,7 +6,7 @@
   "trailingSlash": false,
   "functions": {
     "api/index.ts": {
-      "includeFiles": "data/**,dist/**,firebase-applet-config.json,index.html,public/**",
+      "includeFiles": "build/**,data/**,dist/**,firebase-applet-config.json,index.html,public/**",
       "maxDuration": 15
     }
   },
@@ -174,7 +174,7 @@
       "destination": "/api/index"
     },
     {
-      "source": "/((?!assets/|favicon\\.svg|icon\\.png|icon\\.svg|icon\\.jpg|apple-touch-icon\\.png|manifest\\.json|sw\\.js|robots\\.txt|sitemap\\.xml|sitemap-main\\.xml|sitemap-stories\\.xml|sitemap\\.xsl|google[a-zA-Z0-9_-]+\\.html).*)",
+      "source": "/((?!assets/|favicon\\.ico|favicon\\.svg|icon\\.png|icon\\.svg|icon\\.jpg|apple-touch-icon\\.png|manifest\\.json|sw\\.js|robots\\.txt|sitemap\\.xml|sitemap-main\\.xml|sitemap-stories\\.xml|sitemap\\.xsl|google[a-zA-Z0-9_-]+\\.html).*)",
       "destination": "/api/index?__vercel_url=/$1"
     }
   ]

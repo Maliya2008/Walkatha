@@ -1,4 +1,36 @@
-import app from '../server';
+import serverBundle from '../build/server.cjs';
+import { createRequire } from 'module';
+import path from 'path';
+
+// Extract the Express application instance supporting both ESM and CJS bundle shapes
+let resolvedApp: any = (serverBundle && (serverBundle.default || (serverBundle as any).app)) || serverBundle;
+
+function getExpressApp(): any {
+  if (resolvedApp && typeof resolvedApp === 'function') {
+    return resolvedApp;
+  }
+  try {
+    const req = createRequire(import.meta.url);
+    const candidatePaths = [
+      path.join(process.cwd(), 'build', 'server.cjs'),
+      path.resolve(process.cwd(), 'build/server.cjs'),
+      '/var/task/build/server.cjs',
+    ];
+    for (const p of candidatePaths) {
+      try {
+        const mod = req(p);
+        const app = mod.default || mod.app || mod;
+        if (typeof app === 'function') {
+          resolvedApp = app;
+          return resolvedApp;
+        }
+      } catch {}
+    }
+  } catch (err) {
+    console.warn('[Vite/Vercel Server Resolver Notice]:', err);
+  }
+  return resolvedApp;
+}
 
 // Standard Vercel Serverless Function handler
 export default function handler(req: any, res: any) {
@@ -7,5 +39,13 @@ export default function handler(req: any, res: any) {
   if (req?.context) {
     req.context.callbackWaitsForEmptyEventLoop = false;
   }
-  return app(req, res);
+  const app = getExpressApp();
+  if (typeof app === 'function') {
+    return app(req, res);
+  }
+  res.statusCode = 500;
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.end('Server initialization error: Express application could not be resolved from build/server.cjs');
 }
+
+export { resolvedApp as app };

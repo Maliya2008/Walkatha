@@ -43,7 +43,8 @@ class AuthService {
   private token: string | null = null;
 
   constructor() {
-    onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
+    if (typeof window !== 'undefined' && auth && typeof onAuthStateChanged === 'function') {
+      onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
       if (firebaseUser) {
         let role = 'admin';
         let createdAt = new Date().toISOString();
@@ -76,6 +77,9 @@ class AuthService {
       this.sessionChecked = true;
       this.notify();
     });
+    } else {
+      this.sessionChecked = true;
+    }
   }
 
   public subscribe(listener: AuthListener): () => void {

@@ -24,9 +24,11 @@ export const firebaseConfig = {
 
 // Initialize Firebase safely
 export const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
-export const auth = getAuth(app);
 export const db = getFirestore(app);
-export const storage = getStorage(app);
+
+// Initialize client-only services safely to prevent serverless Node runtime crashes
+export const auth: any = typeof window !== 'undefined' ? getAuth(app) : ({} as any);
+export const storage: any = typeof window !== 'undefined' ? getStorage(app) : ({} as any);
 
 // Initialize Analytics if supported in browser environment
 export let analytics: any = null;

@@ -1,8 +1,7 @@
 User-agent: *
 Allow: /
 Disallow: /admin
-Disallow: /api/admin
-Disallow: /api/auth
+Disallow: /api/
 
 Sitemap: https://www.walkathawa.site/sitemap.xml
 Sitemap: https://www.walkathawa.site/sitemap-stories.xml

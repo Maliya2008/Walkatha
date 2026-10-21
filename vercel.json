@@ -174,8 +174,8 @@
       "destination": "/api/index"
     },
     {
-      "source": "/((?!assets/|favicon\\.svg|icon\\.png|icon\\.svg|apple-touch-icon\\.png|manifest\\.json|sw\\.js|robots\\.txt|sitemap\\.xml|sitemap-main\\.xml|sitemap-stories\\.xml|google[a-zA-Z0-9_-]+\\.html).*)",
-      "destination": "/api/index"
+      "source": "/((?!assets/|favicon\\.svg|icon\\.png|icon\\.svg|icon\\.jpg|apple-touch-icon\\.png|manifest\\.json|sw\\.js|robots\\.txt|sitemap\\.xml|sitemap-main\\.xml|sitemap-stories\\.xml|sitemap\\.xsl|google[a-zA-Z0-9_-]+\\.html).*)",
+      "destination": "/api/index?__vercel_url=/$1"
     }
   ]
 }

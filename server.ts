@@ -61,23 +61,40 @@ app.set('trust proxy', true);
 // URL and Header Normalization for serverless rewrites (Vercel, AWS Lambda, Cloud Run)
 app.use((req: Request, _res: Response, next: NextFunction) => {
   try {
-    const rawUri =
-      req.headers['x-forwarded-uri'] ||
-      req.headers['x-vercel-sc-path'] ||
-      req.headers['x-original-url'] ||
-      req.headers['x-rewrite-url'] ||
-      req.headers['x-invoke-path'] ||
-      req.headers['x-matched-path'];
+    let targetPath = '';
 
-    const forwardedUri = getHeaderString(rawUri);
+    // 1. Direct query parameter forwarded from vercel.json rewrite
+    if (typeof req.query.__vercel_url === 'string' && req.query.__vercel_url.trim()) {
+      targetPath = req.query.__vercel_url.trim();
+      delete req.query.__vercel_url; // Clean up query param
+    } else {
+      // 2. Fallback to serverless routing headers
+      const rawUri =
+        req.headers['x-forwarded-uri'] ||
+        req.headers['x-now-route-matches'] ||
+        req.headers['x-vercel-sc-path'] ||
+        req.headers['x-original-url'] ||
+        req.headers['x-rewrite-url'] ||
+        req.headers['x-invoke-path'] ||
+        req.headers['x-matched-path'];
 
-    if (
-      forwardedUri &&
-      forwardedUri.startsWith('/') &&
-      !forwardedUri.startsWith('/api/index')
-    ) {
-      req.url = forwardedUri;
-      (req as any).originalUrl = forwardedUri;
+      const forwardedUri = getHeaderString(rawUri);
+
+      if (
+        forwardedUri &&
+        forwardedUri.startsWith('/') &&
+        !forwardedUri.startsWith('/api/index')
+      ) {
+        targetPath = forwardedUri;
+      }
+    }
+
+    if (targetPath) {
+      if (!targetPath.startsWith('/')) {
+        targetPath = '/' + targetPath;
+      }
+      req.url = targetPath;
+      (req as any).originalUrl = targetPath;
     }
   } catch (e) {
     console.warn('[URL Normalization Notice]:', e);
@@ -151,7 +168,13 @@ app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
 // --- DATABASE PERSISTENCE LAYER ---
-const isServerlessEnvironment = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+const isServerlessEnvironment = Boolean(
+  process.env.VERCEL ||
+  process.env.AWS_LAMBDA_FUNCTION_NAME ||
+  process.env.VERCEL_ENV ||
+  process.env.NOW_REGION ||
+  process.env.LAMBDA_TASK_ROOT
+);
 const currentDirname = typeof __dirname !== 'undefined' ? __dirname : process.cwd();
 
 function safeDecode(str: string): string {
@@ -351,11 +374,14 @@ async function syncStoriesFromFirestore(force = false): Promise<Story[]> {
       return memoryDatabase.stories;
     });
 
+    let timerId: any = null;
     const timeoutPromise = new Promise<Story[]>((resolve) => {
-      setTimeout(() => resolve(memoryDatabase.stories), 3500);
+      timerId = setTimeout(() => resolve(memoryDatabase.stories), 2000);
     });
 
-    return await Promise.race([safePromise, timeoutPromise]);
+    const result = await Promise.race([safePromise, timeoutPromise]);
+    if (timerId) clearTimeout(timerId);
+    return result;
   } catch (err: any) {
     return memoryDatabase.stories;
   } finally {
@@ -477,9 +503,14 @@ async function findStoryBySlugOrId(slugParam: string): Promise<Story | null> {
       return null;
     };
 
+    let timerId: any = null;
     const safeFetch = directFetch().catch(() => null);
-    const timeoutPromise = new Promise<Story | null>((resolve) => setTimeout(() => resolve(null), 3500));
-    return await Promise.race([safeFetch, timeoutPromise]);
+    const timeoutPromise = new Promise<Story | null>((resolve) => {
+      timerId = setTimeout(() => resolve(null), 1500);
+    });
+    const result = await Promise.race([safeFetch, timeoutPromise]);
+    if (timerId) clearTimeout(timerId);
+    return result;
   } catch (err: any) {
     return null;
   }
@@ -489,7 +520,7 @@ async function findStoryBySlugOrId(slugParam: string): Promise<Story | null> {
 let cachedHtmlTemplate: string | null = null;
 
 function getHtmlTemplate(): string {
-  const isServerless = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+  const isServerless = isServerlessEnvironment;
   const isDev = process.env.NODE_ENV !== 'production' && !isServerless;
 
   if (isDev) {
@@ -509,13 +540,27 @@ function getHtmlTemplate(): string {
   const prodPaths = [
     path.join(process.cwd(), 'dist', 'index.html'),
     path.join(currentDirname, 'dist', 'index.html'),
+    path.join(currentDirname, '..', 'dist', 'index.html'),
     path.join(process.cwd(), 'index.html'),
   ];
   for (const p of prodPaths) {
-    if (fs.existsSync(p)) {
-      cachedHtmlTemplate = fs.readFileSync(p, 'utf8');
-      return cachedHtmlTemplate;
+    try {
+      if (fs.existsSync(p)) {
+        const content = fs.readFileSync(p, 'utf8');
+        // Prefer production build containing bundled /assets/
+        if (content.includes('/assets/')) {
+          cachedHtmlTemplate = content;
+          return content;
+        } else if (!cachedHtmlTemplate) {
+          cachedHtmlTemplate = content;
+        }
+      }
+    } catch (e) {
+      console.warn('[HTML Loader Notice]:', p, e);
     }
+  }
+  if (cachedHtmlTemplate) {
+    return cachedHtmlTemplate;
   }
 
   return `<!doctype html><html lang="si"><head><!-- Google tag (gtag.js) --><script async src="https://www.googletagmanager.com/gtag/js?id=G-EHBR2EWZCV"></script><script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-EHBR2EWZCV');</script><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Walkathawa (වල් කතාව)</title></head><body><div id="root"></div></body></html>`;
@@ -952,7 +997,7 @@ function renderStorySeo(template: string, story: Story, isBot = false): string {
           <time datetime="${escapeHtml(publishedDate)}" style="color: #64748b; font-size: 14px;">${escapeHtml(new Date(publishedDate).toLocaleDateString('si-LK'))}</time>
         </header>
         ${story.coverImage ? `<img src="${escapeHtml(story.coverImage)}" alt="${escapeHtml(story.title)}" style="max-width: 100%; border-radius: 12px; margin-bottom: 20px;" />` : ''}
-        <div style="font-size: 18px;">
+        <div class="story-content" itemprop="articleBody" style="font-size: 18px;">
           ${paragraphs}
         </div>
       </article>
@@ -1645,6 +1690,7 @@ if (!isDev) {
   if (fs.existsSync(distPath)) {
     app.use(
       express.static(distPath, {
+        index: false,
         maxAge: '1h',
       })
     );
@@ -1931,9 +1977,17 @@ app.get(['/popular', '/latest'], async (req: Request, res: Response) => {
 
 // 11. Admin SPA routes
 app.get(['/admin', '/admin/*'], async (req: Request, res: Response) => {
-  const template = await getTransformedHtml(req.originalUrl);
-  res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  return res.status(200).send(template);
+  try {
+    const template = await getTransformedHtml(req.originalUrl);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+    return res.status(200).send(template);
+  } catch (err: any) {
+    console.error('[Admin Route SSR Error]:', err?.stack || err);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+    return res.status(200).send(getHtmlTemplate());
+  }
 });
 
 // 7. Serverless destination fallback /api/index
@@ -1945,9 +1999,15 @@ app.all(['/api/index', '/api/index.ts'], (_req: Request, res: Response) => {
 
 // 8. Fallback SPA catch-all
 app.get('*', async (req: Request, res: Response) => {
-  const template = await getTransformedHtml(req.originalUrl);
-  res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  return res.status(200).send(template);
+  try {
+    const template = await getTransformedHtml(req.originalUrl);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.status(200).send(template);
+  } catch (err: any) {
+    console.error('[Fallback Route Error]:', err?.stack || err);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.status(200).send(getHtmlTemplate());
+  }
 });
 
 // Global Error Handler

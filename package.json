@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "node scripts/generate-sitemap.js && vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=build/server.cjs",
+    "build": "node scripts/generate-sitemap.js && vite build && node scripts/generate-production-template.js && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=build/server.cjs",
     "start": "node build/server.cjs",
     "sync:firestore": "tsx scripts/sync-firestore.ts",
     "preview": "vite preview",

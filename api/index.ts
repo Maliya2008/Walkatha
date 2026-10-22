@@ -34,18 +34,27 @@ function getExpressApp(): any {
 
 // Standard Vercel Serverless Function handler
 export default function handler(req: any, res: any) {
-  // If running in AWS Lambda / Vercel Serverless runtime:
-  // prevent lambda from hanging waiting for open background event loop handles (like Firestore connections)
-  if (req?.context) {
-    req.context.callbackWaitsForEmptyEventLoop = false;
+  try {
+    // If running in AWS Lambda / Vercel Serverless runtime:
+    // prevent lambda from hanging waiting for open background event loop handles (like Firestore connections)
+    if (req?.context) {
+      req.context.callbackWaitsForEmptyEventLoop = false;
+    }
+    const app = getExpressApp();
+    if (typeof app === 'function') {
+      return app(req, res);
+    }
+    res.statusCode = 500;
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.end('Server initialization error: Express application could not be resolved from build/server.cjs');
+  } catch (err: any) {
+    console.error('[Vercel Serverless Top-Level Handler Error]:', err);
+    if (!res.headersSent) {
+      res.statusCode = 500;
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      res.end('Server Execution Error: ' + (err?.message || 'Unknown error'));
+    }
   }
-  const app = getExpressApp();
-  if (typeof app === 'function') {
-    return app(req, res);
-  }
-  res.statusCode = 500;
-  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-  res.end('Server initialization error: Express application could not be resolved from build/server.cjs');
 }
 
 export { resolvedApp as app };

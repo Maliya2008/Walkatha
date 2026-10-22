@@ -14,6 +14,7 @@ import {
 import { db } from './src/lib/firebase';
 import { collection, getDocs, doc, getDoc, query, where, limit, setLogLevel, onSnapshot } from 'firebase/firestore';
 import { normalizeFirestoreStory } from './src/services/storyService';
+import { PRODUCTION_HTML_TEMPLATE } from './src/generated/productionTemplate';
 
 // Process-level unhandled rejection and uncaught exception safeguards to prevent 5xx crashes
 process.on('unhandledRejection', (reason) => {
@@ -55,6 +56,37 @@ function getHeaderString(val: string | string[] | undefined): string {
   return String(val);
 }
 
+function safeDecode(str: string): string {
+  if (!str) return '';
+  try {
+    return decodeURIComponent(str);
+  } catch (e) {
+    return str;
+  }
+}
+
+function safeEncodeUrlPath(inputPath: string): string {
+  try {
+    const [pathname, search] = inputPath.split('?');
+    const cleanSegments = pathname
+      .split('/')
+      .map((seg) => encodeURIComponent(safeDecode(seg)))
+      .join('/');
+    return cleanSegments + (search ? `?${search}` : '');
+  } catch {
+    return encodeURI(inputPath);
+  }
+}
+
+function safeRedirect(res: Response, statusCode: number, targetUrl: string) {
+  try {
+    const safeUrl = encodeURI(targetUrl);
+    return res.redirect(statusCode, safeUrl);
+  } catch (e) {
+    console.warn('[Redirect Error Safeguard]:', e);
+  }
+}
+
 // Enable trust proxy for serverless environments (Vercel, Cloud Run)
 app.set('trust proxy', true);
 
@@ -93,8 +125,9 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
       if (!targetPath.startsWith('/')) {
         targetPath = '/' + targetPath;
       }
-      req.url = targetPath;
-      (req as any).originalUrl = targetPath;
+      const safePath = safeEncodeUrlPath(targetPath);
+      req.url = safePath;
+      (req as any).originalUrl = safePath;
     }
   } catch (e) {
     console.warn('[URL Normalization Notice]:', e);
@@ -131,18 +164,19 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
     // 1. Apex to canonical redirect: walkathawa.site -> www.walkathawa.site
     if (isApexProd) {
-      return res.redirect(301, `https://www.walkathawa.site${cleanPath}`);
+      return safeRedirect(res, 301, `https://www.walkathawa.site${cleanPath}`);
     }
 
     // 2. HTTP to HTTPS redirect on production domain
     if (isCanonicalProd && proto === 'http') {
-      return res.redirect(301, `https://www.walkathawa.site${cleanPath}`);
+      return safeRedirect(res, 301, `https://www.walkathawa.site${cleanPath}`);
     }
 
     // 3. Double-slash normalization: //story/abc -> /story/abc
     if (req.method === 'GET' && cleanPath.includes('//')) {
       const normalizedPath = cleanPath.replace(/\/+/g, '/');
-      return res.redirect(301, `https://www.walkathawa.site${normalizedPath}`);
+      const baseDomain = isCanonicalProd || isApexProd ? 'https://www.walkathawa.site' : '';
+      return safeRedirect(res, 301, `${baseDomain}${normalizedPath}`);
     }
 
     // 4. Trailing slash normalization: /story/abc/ -> /story/abc (except root /)
@@ -150,7 +184,8 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     if (req.method === 'GET' && pathOnly.length > 1 && pathOnly.endsWith('/')) {
       const strippedPath = pathOnly.replace(/\/+$/, '');
       const querySuffix = queryPart ? `?${queryPart}` : '';
-      return res.redirect(301, `https://www.walkathawa.site${strippedPath}${querySuffix}`);
+      const baseDomain = isCanonicalProd || isApexProd ? 'https://www.walkathawa.site' : '';
+      return safeRedirect(res, 301, `${baseDomain}${strippedPath}${querySuffix}`);
     }
 
     // 5. Search Engine Indexing Headers
@@ -176,15 +211,6 @@ const isServerlessEnvironment = Boolean(
   process.env.LAMBDA_TASK_ROOT
 );
 const currentDirname = typeof __dirname !== 'undefined' ? __dirname : process.cwd();
-
-function safeDecode(str: string): string {
-  if (!str) return '';
-  try {
-    return decodeURIComponent(str);
-  } catch (e) {
-    return str;
-  }
-}
 
 function getDatabaseFilePath(): string {
   if (isServerlessEnvironment) {
@@ -537,7 +563,21 @@ function getHtmlTemplate(): string {
     return cachedHtmlTemplate;
   }
 
+  // 1. Primary priority in production/serverless: the compiled template inlined at build time
+  if (
+    typeof PRODUCTION_HTML_TEMPLATE === 'string' &&
+    PRODUCTION_HTML_TEMPLATE.includes('/assets/') &&
+    PRODUCTION_HTML_TEMPLATE.includes('id="root"')
+  ) {
+    cachedHtmlTemplate = PRODUCTION_HTML_TEMPLATE;
+    return cachedHtmlTemplate;
+  }
+
+  // 2. Second priority: search runtime filesystem paths
   const prodPaths = [
+    path.join(__dirname, 'index.html'),
+    path.join(currentDirname, 'index.html'),
+    path.join(process.cwd(), 'build', 'index.html'),
     path.join(process.cwd(), 'dist', 'index.html'),
     path.join(currentDirname, 'dist', 'index.html'),
     path.join(currentDirname, '..', 'dist', 'index.html'),
@@ -559,11 +599,18 @@ function getHtmlTemplate(): string {
       console.warn('[HTML Loader Notice]:', p, e);
     }
   }
+
   if (cachedHtmlTemplate) {
     return cachedHtmlTemplate;
   }
 
-  return `<!doctype html><html lang="si"><head><!-- Google tag (gtag.js) --><script async src="https://www.googletagmanager.com/gtag/js?id=G-EHBR2EWZCV"></script><script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-EHBR2EWZCV');</script><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Walkathawa (වල් කතාව)</title></head><body><div id="root"></div></body></html>`;
+  // 3. Fallback to PRODUCTION_HTML_TEMPLATE if present
+  if (typeof PRODUCTION_HTML_TEMPLATE === 'string' && PRODUCTION_HTML_TEMPLATE.length > 50) {
+    cachedHtmlTemplate = PRODUCTION_HTML_TEMPLATE;
+    return cachedHtmlTemplate;
+  }
+
+  throw new Error('[Critical Server Error]: Production HTML template not found. Ensure "npm run build" has completed.');
 }
 
 function escapeHtml(str: string): string {
@@ -1970,6 +2017,20 @@ app.get(['/popular', '/latest'], async (req: Request, res: Response) => {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     return res.status(200).send(rendered);
   } catch (err) {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.status(200).send(getHtmlTemplate());
+  }
+});
+
+// 10.1 Search Route SPA
+app.get('/search', async (req: Request, res: Response) => {
+  try {
+    const template = await getTransformedHtml(req.originalUrl || '/search');
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=1800, stale-while-revalidate=86400');
+    return res.status(200).send(template);
+  } catch (err: any) {
+    console.error('[Search Route Error]:', err?.stack || err);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     return res.status(200).send(getHtmlTemplate());
   }

@@ -1,17 +1,7 @@
-import { initializeApp } from 'firebase/app';
-import { getFirestore, doc, setDoc, writeBatch } from 'firebase/firestore';
+import { doc, setDoc, writeBatch } from 'firebase/firestore';
 import fs from 'fs';
 import path from 'path';
-
-const firebaseConfig = {
-  apiKey: 'AIzaSyDWIC_GSMIOliCrhHKPgZgNUAZKUZ96nh4',
-  authDomain: 'walkathawa-93f80.firebaseapp.com',
-  projectId: 'walkathawa-93f80',
-  storageBucket: 'walkathawa-93f80.firebasestorage.app',
-  messagingSenderId: '575596307575',
-  appId: '1:575596307575:web:daf2ef013ba17b53745272',
-  measurementId: 'G-E0YMRGV1SK',
-};
+import { db, firebaseConfig } from '../src/lib/firebase';
 
 const DEFAULT_CATEGORIES: Array<{ id: string; name: string; slug: string; description: string; storyCount: number }> = [
   { id: 'all', name: 'සියලුම කතා (All Stories)', slug: 'all', description: 'සියලුම අලුත් සිංහල කතා සහ රසවත් කතා එකතුව', storyCount: 19 },
@@ -20,9 +10,6 @@ const DEFAULT_CATEGORIES: Array<{ id: string; name: string; slug: string; descri
   { id: 'akka-malli', name: 'අක්කා - මල්ලි (Akka Malli)', slug: 'akka-malli', description: 'අක්කා මල්ලි සහ අසල්වැසි සබඳතා පිළිබඳ රසවත් කතා', storyCount: 2 },
   { id: 'romantic', name: 'ආදර කතා (Romantic Stories)', slug: 'romantic', description: 'ආදරය, හැඟීම්බර සහ ආශාවන් පිරි කෙටිකතා', storyCount: 2 },
 ];
-
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
 
 async function syncAllToFirestore() {
   console.log('🚀 Starting synchronization to Firestore project:', firebaseConfig.projectId);

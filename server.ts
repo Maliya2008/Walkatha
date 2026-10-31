@@ -12,7 +12,7 @@ import {
   isValidCategorySlug,
 } from './src/utils/categoryTaxonomy';
 import { db } from './src/lib/firebase';
-import { collection, getDocs, doc, getDoc, query, where, limit, setLogLevel, onSnapshot } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, setDoc, deleteDoc, query, where, limit, setLogLevel, onSnapshot } from 'firebase/firestore';
 import { normalizeFirestoreStory } from './src/services/storyService';
 import { PRODUCTION_HTML_TEMPLATE } from './src/generated/productionTemplate';
 
@@ -359,9 +359,6 @@ const SYNC_COOLDOWN_MS = 60 * 1000; // 60s cooldown to prevent redundant Firesto
 
 async function syncStoriesFromFirestore(force = false): Promise<Story[]> {
   const now = Date.now();
-  if (isServerlessEnvironment && memoryDatabase.stories.length > 0 && !force) {
-    return memoryDatabase.stories;
-  }
   if (!force && (now - lastFirestoreSync < SYNC_COOLDOWN_MS || isSyncInProgress) && memoryDatabase.stories.length > 0) {
     return memoryDatabase.stories;
   }
@@ -1632,6 +1629,10 @@ app.post('/api/admin/stories', (req: Request, res: Response) => {
   memoryDatabase.stories.unshift(newStory);
   saveDatabase();
 
+  setDoc(doc(db, 'stories', id), newStory, { merge: true }).catch((err) => {
+    console.warn('[Server Firestore sync notice]:', err?.message || err);
+  });
+
   res.status(201).json(newStory);
 });
 
@@ -1659,6 +1660,11 @@ app.put('/api/admin/stories/:id', (req: Request, res: Response) => {
     memoryDatabase.stories.unshift(newStory);
     memoryDatabase.stories = deduplicateStoriesBySlug(memoryDatabase.stories);
     saveDatabase();
+
+    setDoc(doc(db, 'stories', id), newStory, { merge: true }).catch((err) => {
+      console.warn('[Server Firestore sync notice]:', err?.message || err);
+    });
+
     return res.status(200).json(newStory);
   }
 
@@ -1672,6 +1678,10 @@ app.put('/api/admin/stories/:id', (req: Request, res: Response) => {
   memoryDatabase.stories = deduplicateStoriesBySlug(memoryDatabase.stories);
   saveDatabase();
 
+  setDoc(doc(db, 'stories', id), updated, { merge: true }).catch((err) => {
+    console.warn('[Server Firestore sync notice]:', err?.message || err);
+  });
+
   res.json(updated);
 });
 
@@ -1679,6 +1689,10 @@ app.delete('/api/admin/stories/:id', (req: Request, res: Response) => {
   const id = req.params.id;
   memoryDatabase.stories = memoryDatabase.stories.filter((s) => s.id !== id);
   saveDatabase();
+
+  deleteDoc(doc(db, 'stories', id)).catch((err) => {
+    console.warn('[Server Firestore delete notice]:', err?.message || err);
+  });
 
   res.json({ success: true });
 });

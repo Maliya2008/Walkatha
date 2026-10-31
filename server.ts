@@ -1710,13 +1710,20 @@ app.put('/api/admin/settings', (req: Request, res: Response) => {
 });
 
 // --- 301 PERMANENT REDIRECTS FOR LEGACY / MIGRATED PATHS ---
+app.get(['/posts', '/katha'], (_req: Request, res: Response) => {
+  return safeRedirect(res, 301, '/');
+});
+
 app.get(['/posts/:story/episodes/:episode', '/posts/:story/episodes'], (req: Request, res: Response) => {
-  const story = req.params.story;
-  return res.redirect(301, `https://www.walkathawa.site/story/${encodeURIComponent(story)}`);
+  const story = req.params.story || '';
+  const safeSlug = encodeURIComponent(safeDecode(story));
+  return safeRedirect(res, 301, `/story/${safeSlug}`);
 });
 
 app.get(['/posts/:story', '/katha/:story'], (req: Request, res: Response) => {
-  return res.redirect(301, `https://www.walkathawa.site/story/${encodeURIComponent(req.params.story)}`);
+  const story = req.params.story || '';
+  const safeSlug = encodeURIComponent(safeDecode(story));
+  return safeRedirect(res, 301, `/story/${safeSlug}`);
 });
 
 // --- STATIC ASSETS & SSR ROUTING ---
@@ -1829,7 +1836,7 @@ app.get('/category/:slug', async (req: Request, res: Response) => {
     // 301 Permanent Redirect non-canonical category alias URLs (e.g., Sinhala aliases like /category/පාසල්-කතා -> /category/school)
     if (rawSlug !== norm && isValidCategorySlug(norm)) {
       const targetQuery = req.query.page ? `?page=${encodeURIComponent(String(req.query.page))}` : '';
-      return res.redirect(301, `/category/${norm}${targetQuery}`);
+      return safeRedirect(res, 301, `/category/${norm}${targetQuery}`);
     }
 
     const template = await getTransformedHtml(req.originalUrl);

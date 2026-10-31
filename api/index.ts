@@ -1,9 +1,10 @@
 import serverBundle from '../build/server.cjs';
 import { createRequire } from 'module';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
 // Extract the Express application instance supporting both ESM and CJS bundle shapes
-let resolvedApp: any = (serverBundle && (serverBundle.default || (serverBundle as any).app)) || serverBundle;
+let resolvedApp: any = (serverBundle && ((serverBundle as any).default || (serverBundle as any).app)) || serverBundle;
 
 function getExpressApp(): any {
   if (resolvedApp && typeof resolvedApp === 'function') {
@@ -11,9 +12,11 @@ function getExpressApp(): any {
   }
   try {
     const req = createRequire(import.meta.url);
+    const dirname = typeof __dirname !== 'undefined' ? __dirname : path.dirname(fileURLToPath(import.meta.url));
     const candidatePaths = [
       path.join(process.cwd(), 'build', 'server.cjs'),
       path.resolve(process.cwd(), 'build/server.cjs'),
+      path.join(dirname, '..', 'build', 'server.cjs'),
       '/var/task/build/server.cjs',
     ];
     for (const p of candidatePaths) {

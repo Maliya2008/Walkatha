@@ -191,8 +191,36 @@ async function runVercelRouteTests() {
     assert(!serverFileRes.headers['content-type']?.includes('javascript'), 'server.cjs must NOT be served as a JS file');
     console.log('✔ Private server bundle isolation verified (no source leakage)');
 
+    // 16. Legacy /posts and /katha direct navigation / refresh
+    console.log('16. Testing GET /posts (Legacy direct navigation / refresh)...');
+    const postsRes = await testRequest('/posts');
+    assert.strictEqual(postsRes.statusCode, 301, '/posts must return 301 redirect');
+    assert.strictEqual(postsRes.headers.location, '/', '/posts must redirect to /');
+    console.log('✔ GET /posts 301 redirect passed');
+
+    console.log('17. Testing GET /posts/example (Legacy post slug redirect)...');
+    const postExampleRes = await testRequest('/posts/example');
+    assert.strictEqual(postExampleRes.statusCode, 301, '/posts/example must return 301 redirect');
+    assert.strictEqual(postExampleRes.headers.location, '/story/example', '/posts/example must redirect to /story/example');
+    console.log('✔ GET /posts/example 301 redirect passed');
+
+    console.log('18. Testing GET /posts/දිනිතිගෙ-චැට්-එ-ක-1-sinhala-wala (Sinhala slug redirect without ERR_INVALID_CHAR)...');
+    const postSinhalaRes = await testRequest(`/posts/${encodeURIComponent('දිනිතිගෙ-චැට්-එ-ක-1-sinhala-wala')}`);
+    assert.strictEqual(postSinhalaRes.statusCode, 301, 'Sinhala post redirect must return 301');
+    assert(postSinhalaRes.headers.location?.startsWith('/story/'), 'Location must point to /story/...');
+    console.log('✔ Sinhala post redirect passed without header errors');
+
+    console.log('19. Testing GET /katha and /katha/test-story...');
+    const kathaRes = await testRequest('/katha');
+    assert.strictEqual(kathaRes.statusCode, 301, '/katha must return 301');
+    assert.strictEqual(kathaRes.headers.location, '/', '/katha must redirect to /');
+    const kathaStoryRes = await testRequest('/katha/test-story');
+    assert.strictEqual(kathaStoryRes.statusCode, 301, '/katha/test-story must return 301');
+    assert.strictEqual(kathaStoryRes.headers.location, '/story/test-story', '/katha/test-story must redirect to /story/test-story');
+    console.log('✔ Legacy /katha redirects passed');
+
     console.log('\n========================================================================');
-    console.log('ALL PRODUCTION DIRECT-URL, REFRESH, ADMIN & SEO CHECKS PASSED (15/15)!');
+    console.log('ALL PRODUCTION DIRECT-URL, REFRESH, ADMIN & SEO CHECKS PASSED (19/19)!');
     console.log('========================================================================\n');
 
     server.close(() => process.exit(0));

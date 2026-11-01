@@ -11,6 +11,8 @@ import {
   Clock,
   BookOpen,
   AlertTriangle,
+  CloudUpload,
+  RefreshCw,
 } from 'lucide-react';
 import { Category, Story } from '../../types/story';
 import { adminService } from '../../services/adminService';
@@ -34,6 +36,8 @@ export const AdminStoriesList: React.FC<AdminStoriesListProps> = ({
   const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft'>('all');
   const [storyToDelete, setStoryToDelete] = useState<Story | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<string | null>(null);
 
   useEffect(() => {
     adminService.getCategories().then((cats) => {
@@ -88,6 +92,24 @@ export const AdminStoriesList: React.FC<AdminStoriesListProps> = ({
     }
   };
 
+  const handleSyncAll = async () => {
+    try {
+      setIsSyncing(true);
+      setSyncStatus('Syncing stories to Firestore...');
+      const res = await adminService.syncAllStoriesToFirestore((synced, total) => {
+        setSyncStatus(`Uploaded ${synced}/${total}...`);
+      });
+      setSyncStatus(res.message);
+      await fetchStories();
+      setTimeout(() => setSyncStatus(null), 5000);
+    } catch (err: any) {
+      setSyncStatus(err.message || 'Sync failed');
+      setTimeout(() => setSyncStatus(null), 7000);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Top Header & Search Bar */}
@@ -102,13 +124,29 @@ export const AdminStoriesList: React.FC<AdminStoriesListProps> = ({
           </p>
         </div>
 
-        <button
-          onClick={onNewStory}
-          className="flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-600/30 transition-all cursor-pointer shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Post New Story</span>
-        </button>
+        <div className="flex items-center gap-3 shrink-0">
+          <button
+            onClick={handleSyncAll}
+            disabled={isSyncing}
+            className={`flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+              isSyncing
+                ? 'bg-slate-800 border-slate-700 text-slate-400 cursor-not-allowed'
+                : 'bg-slate-800/80 hover:bg-slate-800 border-indigo-500/30 text-indigo-300 hover:text-white'
+            }`}
+            title="Push all stories from local repository into Firestore cloud"
+          >
+            <CloudUpload className={`w-4 h-4 ${isSyncing ? 'animate-bounce' : ''}`} />
+            <span>{isSyncing ? (syncStatus || 'Syncing...') : 'Sync to Firestore'}</span>
+          </button>
+
+          <button
+            onClick={onNewStory}
+            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-600/30 transition-all cursor-pointer shrink-0"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Post New Story</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter and Search Bar */}

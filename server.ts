@@ -379,11 +379,25 @@ async function syncStoriesFromFirestore(force = false): Promise<Story[]> {
         });
 
         if (liveStories.length > 0) {
-          liveStories.sort((a, b) => new Date(b.uploadDate || 0).getTime() - new Date(a.uploadDate || 0).getTime());
-          memoryDatabase.stories = deduplicateStoriesBySlug(liveStories);
+          const mergedMap = new Map<string, Story>();
+          for (const s of INITIAL_STORIES) {
+            const key = (s.slug || s.id || '').trim().toLowerCase();
+            if (key) mergedMap.set(key, s);
+          }
+          for (const s of memoryDatabase.stories) {
+            const key = (s.slug || s.id || '').trim().toLowerCase();
+            if (key) mergedMap.set(key, s);
+          }
+          for (const s of liveStories) {
+            const key = (s.slug || s.id || '').trim().toLowerCase();
+            if (key) mergedMap.set(key, s);
+          }
+          const merged = Array.from(mergedMap.values());
+          merged.sort((a, b) => new Date(b.uploadDate || 0).getTime() - new Date(a.uploadDate || 0).getTime());
+          memoryDatabase.stories = deduplicateStoriesBySlug(merged);
           lastFirestoreSync = Date.now();
           saveDatabase();
-          console.log(`[Firestore Sync] Synced ${memoryDatabase.stories.length} live stories from Firestore.`);
+          console.log(`[Firestore Sync] Synced ${memoryDatabase.stories.length} total stories (${liveStories.length} from Firestore).`);
         }
       }
       return memoryDatabase.stories;
@@ -433,11 +447,25 @@ function setupFirestoreRealtimeListener(): void {
             });
 
             if (liveStories.length > 0) {
-              liveStories.sort((a, b) => new Date(b.uploadDate || 0).getTime() - new Date(a.uploadDate || 0).getTime());
-              memoryDatabase.stories = deduplicateStoriesBySlug(liveStories);
+              const mergedMap = new Map<string, Story>();
+              for (const s of INITIAL_STORIES) {
+                const key = (s.slug || s.id || '').trim().toLowerCase();
+                if (key) mergedMap.set(key, s);
+              }
+              for (const s of memoryDatabase.stories) {
+                const key = (s.slug || s.id || '').trim().toLowerCase();
+                if (key) mergedMap.set(key, s);
+              }
+              for (const s of liveStories) {
+                const key = (s.slug || s.id || '').trim().toLowerCase();
+                if (key) mergedMap.set(key, s);
+              }
+              const merged = Array.from(mergedMap.values());
+              merged.sort((a, b) => new Date(b.uploadDate || 0).getTime() - new Date(a.uploadDate || 0).getTime());
+              memoryDatabase.stories = deduplicateStoriesBySlug(merged);
               lastFirestoreSync = Date.now();
               saveDatabase();
-              console.log(`[Firestore Realtime Listener] Updated ${memoryDatabase.stories.length} stories live.`);
+              console.log(`[Firestore Realtime Listener] Updated ${memoryDatabase.stories.length} total stories live.`);
             }
           }
         } catch (procErr) {

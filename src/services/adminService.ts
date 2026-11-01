@@ -11,6 +11,7 @@ import {
   setDoc,
   deleteDoc,
   serverTimestamp,
+  writeBatch,
 } from 'firebase/firestore';
 
 class AdminService {
@@ -323,6 +324,107 @@ class AdminService {
 
   public async updateSiteSettings(settings: Partial<SiteSettings>): Promise<SiteSettings> {
     return this.saveSiteSettings(settings);
+  }
+
+  /**
+   * Pushes all stories from the master library into Firestore in batches
+   * using the authenticated admin's session credentials.
+   */
+  public async syncAllStoriesToFirestore(
+    onProgress?: (synced: number, total: number, message: string) => void
+  ): Promise<{ success: boolean; total: number; message: string }> {
+    this.requireAuth();
+
+    let allStories: Story[] = [];
+    try {
+      const res = await fetch('/api/stories?limit=1000');
+      if (res.ok) {
+        const json = await res.json();
+        allStories = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);
+      }
+    } catch {
+      // Fallback to memory
+    }
+
+    if (allStories.length === 0) {
+      allStories = await StoryService.fetchAllLiveStories();
+    }
+
+    if (allStories.length === 0) {
+      throw new Error('No stories found to synchronize.');
+    }
+
+    const total = allStories.length;
+    if (onProgress) onProgress(0, total, `Found ${total} stories to sync...`);
+
+    const batchSize = 25;
+    let synced = 0;
+
+    for (let i = 0; i < total; i += batchSize) {
+      const chunk = allStories.slice(i, i + batchSize);
+      const batch = writeBatch(db);
+
+      for (const story of chunk) {
+        const storyId = story.id || story.slug;
+        const storyRef = doc(db, 'stories', storyId);
+        const payload: any = {
+          id: storyId,
+          title: story.title || 'Untitled',
+          slug: story.slug || storyId,
+          coverImage: story.coverImage || '',
+          shortDescription: story.shortDescription || story.description || '',
+          description: story.shortDescription || story.description || '',
+          fullContent: story.fullContent || story.content || '',
+          content: story.fullContent || story.content || '',
+          category: story.category || 'all',
+          categoryName: story.categoryName || '',
+          categoryId: story.categoryId || story.category || 'all',
+          tags: Array.isArray(story.tags) ? story.tags : [],
+          uploadDate: story.uploadDate || new Date().toISOString(),
+          uploadedDate: story.uploadDate || new Date().toISOString(),
+          updatedDate: story.updatedDate || new Date().toISOString(),
+          featured: Boolean(story.featured),
+          published: story.published !== false,
+          views: Number(story.views || 0),
+          readingTime: story.readingTime || Math.max(3, Math.ceil((story.fullContent || '').length / 450)),
+        };
+        batch.set(storyRef, payload, { merge: true });
+      }
+
+      await batch.commit();
+      synced = Math.min(i + batchSize, total);
+      if (onProgress) {
+        onProgress(synced, total, `Uploaded ${synced} of ${total} stories to Firestore...`);
+      }
+    }
+
+    if (onProgress) {
+      onProgress(total, total, `Successfully synced all ${total} stories to Firestore!`);
+    }
+
+    return {
+      success: true,
+      total,
+      message: `Successfully synchronized ${total} stories to Firestore.`,
+    };
+  }
+
+  /**
+   * Pushes all categories to Firestore in batches
+   */
+  public async syncAllCategoriesToFirestore(): Promise<{ success: boolean; count: number }> {
+    this.requireAuth();
+    const categories = await this.getCategories();
+    const batch = writeBatch(db);
+    for (const cat of categories) {
+      const catRef = doc(db, 'categories', cat.id || cat.slug);
+      batch.set(catRef, {
+        ...cat,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+    }
+    await batch.commit();
+    return { success: true, count: categories.length };
   }
 }
 

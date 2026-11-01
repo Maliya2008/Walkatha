@@ -98,9 +98,20 @@ export class StoryService {
           firestoreStories.push(normalizeFirestoreStory(docSnap.id, docSnap.data()));
         });
         if (firestoreStories.length > 0) {
-          this.memoryStories = firestoreStories;
+          const mergedMap = new Map<string, Story>();
+          for (const s of INITIAL_STORIES) {
+            const key = (s.slug || s.id || '').trim().toLowerCase();
+            if (key) mergedMap.set(key, s);
+          }
+          for (const s of firestoreStories) {
+            const key = (s.slug || s.id || '').trim().toLowerCase();
+            if (key) mergedMap.set(key, s);
+          }
+          const merged = Array.from(mergedMap.values());
+          merged.sort((a, b) => new Date(b.uploadDate || 0).getTime() - new Date(a.uploadDate || 0).getTime());
+          this.memoryStories = merged;
           this.firestoreLoaded = true;
-          return firestoreStories;
+          return merged;
         }
       }
     } catch (err) {
@@ -109,12 +120,23 @@ export class StoryService {
 
     // Fallback to local database endpoint
     try {
-      const res = await fetch('/api/stories?limit=200');
+      const res = await fetch('/api/stories?limit=1000');
       if (res.ok) {
         const json = await res.json();
         if (json && Array.isArray(json.data) && json.data.length > 0) {
-          this.memoryStories = json.data;
-          return json.data;
+          const mergedMap = new Map<string, Story>();
+          for (const s of INITIAL_STORIES) {
+            const key = (s.slug || s.id || '').trim().toLowerCase();
+            if (key) mergedMap.set(key, s);
+          }
+          for (const s of json.data) {
+            const key = (s.slug || s.id || '').trim().toLowerCase();
+            if (key) mergedMap.set(key, s);
+          }
+          const merged = Array.from(mergedMap.values());
+          merged.sort((a, b) => new Date(b.uploadDate || 0).getTime() - new Date(a.uploadDate || 0).getTime());
+          this.memoryStories = merged;
+          return merged;
         }
       }
     } catch {

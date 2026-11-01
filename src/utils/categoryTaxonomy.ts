@@ -245,6 +245,12 @@ export function normalizeCategorySlug(raw: string | null | undefined): string {
   if (clean.includes('අක්කා') || clean.includes('මල්ලි') || clean.includes('akka')) return 'akka-malli';
   if (clean.includes('නැන්දා') || clean.includes('ඇන්ටි') || clean.includes('nanda') || clean.includes('aunty')) return 'nanda';
   if (clean.includes('පාසල්') || clean.includes('කැම්පස්') || clean.includes('school') || clean.includes('campus')) return 'school';
+  if (clean.includes('ආදර') || clean.includes('romantic') || clean.includes('ප්‍රේම') || clean.includes('love') || clean.includes('lesbian') || clean.includes('වටේ')) return 'romantic';
+  if (clean.includes('ට්‍රිප්') || clean.includes('travel') || clean.includes('චාරිකා')) return 'travel';
+  if (clean.includes('අම්මා') || clean.includes('පවුලේ') || clean.includes('family')) return 'family';
+  if (clean.includes('කාර්යාල') || clean.includes('office') || clean.includes('රැකියා')) return 'office';
+  if (clean.includes('අසල්වැසි') || clean.includes('neighbour') || clean.includes('ගම්බද')) return 'neighbour';
+  if (clean.includes('වෙනත්') || clean.includes('other')) return 'romantic';
   return clean;
 }
 

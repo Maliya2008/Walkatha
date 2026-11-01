@@ -1,5 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { BookOpen, CheckCircle, FileText, Megaphone, Plus, ArrowUpRight, Sparkles, Layers } from 'lucide-react';
+import {
+  BookOpen,
+  CheckCircle,
+  FileText,
+  Megaphone,
+  Plus,
+  ArrowUpRight,
+  Sparkles,
+  Layers,
+  CloudUpload,
+  RefreshCw,
+  CheckCircle2,
+  AlertCircle,
+  Database,
+} from 'lucide-react';
 import { adminService } from '../../services/adminService';
 import { DashboardStats } from '../../types/admin';
 
@@ -17,6 +31,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncProgress, setSyncProgress] = useState<{ synced: number; total: number; message: string } | null>(null);
+  const [syncSuccess, setSyncSuccess] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
   const fetchStats = async () => {
     try {
@@ -28,6 +46,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setError(err.message || 'Failed to load metrics');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSyncToFirestore = async () => {
+    try {
+      setIsSyncing(true);
+      setSyncError(null);
+      setSyncSuccess(null);
+      setSyncProgress({ synced: 0, total: stats?.totalStories || 613, message: 'Initiating Firestore connection...' });
+
+      const res = await adminService.syncAllStoriesToFirestore((synced, total, message) => {
+        setSyncProgress({ synced, total, message });
+      });
+
+      setSyncSuccess(res.message);
+      await fetchStats();
+    } catch (err: any) {
+      setSyncError(err.message || 'Failed to sync stories to Firestore. Please check your admin permissions.');
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -147,6 +185,66 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <span className="text-[10px] text-amber-400">Unpublished</span>
           </div>
           <div className="mt-2 text-[11px] text-slate-500">Work in progress</div>
+        </div>
+      </div>
+
+      {/* Firestore Cloud Sync & Migration Card */}
+      <div className="bg-gradient-to-br from-slate-900 via-indigo-950/20 to-slate-900 rounded-3xl border border-indigo-500/20 p-6 shadow-xl relative overflow-hidden">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="space-y-2 max-w-xl">
+            <div className="flex items-center gap-2">
+              <span className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400">
+                <CloudUpload className="w-5 h-5" />
+              </span>
+              <h2 className="text-lg font-bold text-white">Firestore Cloud Database Sync</h2>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                Live Ready
+              </span>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Push all <strong>{stats.totalStories} stories</strong> from the local repository directly into your live Firebase Firestore collection (<code>stories</code>). This ensures all web readers and cloud queries have real-time access to the complete library.
+            </p>
+            {syncProgress && (
+              <div className="space-y-1.5 pt-2">
+                <div className="flex justify-between text-[11px] text-slate-400">
+                  <span>{syncProgress.message}</span>
+                  <span className="font-mono text-indigo-400">{Math.round((syncProgress.synced / syncProgress.total) * 100)}%</span>
+                </div>
+                <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden border border-slate-700">
+                  <div
+                    className="bg-indigo-500 h-2 rounded-full transition-all duration-300 ease-out"
+                    style={{ width: `${Math.round((syncProgress.synced / syncProgress.total) * 100)}%` }}
+                  />
+                </div>
+              </div>
+            )}
+            {syncSuccess && (
+              <div className="flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 rounded-xl">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>{syncSuccess}</span>
+              </div>
+            )}
+            {syncError && (
+              <div className="flex items-center gap-2 text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 px-3 py-2 rounded-xl">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{syncError}</span>
+              </div>
+            )}
+          </div>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
+            <button
+              onClick={handleSyncToFirestore}
+              disabled={isSyncing}
+              className={`flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-xs font-bold transition-all shadow-lg ${
+                isSyncing
+                  ? 'bg-slate-800 text-slate-400 cursor-not-allowed'
+                  : 'bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white shadow-indigo-600/30 cursor-pointer'
+              }`}
+            >
+              <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+              <span>{isSyncing ? 'Pushing to Firestore...' : 'Push All Stories to Firestore'}</span>
+            </button>
+          </div>
         </div>
       </div>
 

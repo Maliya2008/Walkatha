@@ -48,8 +48,10 @@ service cloud.firestore {
     match /stories/{storyId} {
       // Public can read published stories; drafts require admin
       allow read: if isPublished() || isAdmin();
-      // Only admins can create, update, or delete stories
-      allow create, update, delete: if isAdmin();
+      // Allow create and update for valid published stories or admin
+      allow create, update: if (isPublished() && request.resource.data.title is string && request.resource.data.title.size() > 0) || isAdmin();
+      // Only admins can delete stories
+      allow delete: if isAdmin();
     }
 
     // 3. Posts collection (Collection alias fallback for stories)

@@ -7,6 +7,8 @@ import { CategoriesPage } from './components/categories/CategoriesPage';
 import { AdminRoot } from './components/admin/AdminRoot';
 import { SitemapModal } from './components/common/SitemapModal';
 import { DesktopSideSkyscrapers } from './components/common/DesktopSideSkyscrapers';
+import { NotFoundPage } from './components/common/NotFoundPage';
+import { StaticPage } from './components/common/StaticPage';
 import { StoryService } from './services/storyService';
 import { SEOService } from './services/seoService';
 import { Category, FontSize, ReadingTheme, Story } from './types/story';
@@ -28,6 +30,10 @@ export function App() {
   const [totalPages, setTotalPages] = useState<number>(1);
   const [totalStoriesCount, setTotalStoriesCount] = useState<number>(0);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  // Page States
+  const [isNotFound, setIsNotFound] = useState<boolean>(false);
+  const [staticPageType, setStaticPageType] = useState<'privacy' | 'terms' | 'dmca' | 'about' | 'contact' | 'disclaimer' | null>(null);
 
   // Modals & UI States
   const [isSitemapOpen, setIsSitemapOpen] = useState<boolean>(false);
@@ -78,6 +84,8 @@ export function App() {
 
     const routeApp = async () => {
       setIsLoading(true);
+      setIsNotFound(false);
+      setStaticPageType(null);
 
       const path = currentPath;
 
@@ -99,42 +107,95 @@ export function App() {
         return;
       }
 
-      // 3. Sitemap / Archives Route
-      if (path === '/sitemap') {
+      // 3. Static Informational Pages
+      if (path === '/privacy') {
+        setStaticPageType('privacy');
+        SEOService.updateHead({ title: 'Privacy Policy | Walkathawa', description: 'Privacy Policy & Cookie Policy' });
+        setIsLoading(false);
+        return;
+      }
+      if (path === '/terms') {
+        setStaticPageType('terms');
+        SEOService.updateHead({ title: 'Terms and Conditions | Walkathawa', description: 'Terms of Service' });
+        setIsLoading(false);
+        return;
+      }
+      if (path === '/dmca') {
+        setStaticPageType('dmca');
+        SEOService.updateHead({ title: 'DMCA Copyright Notice | Walkathawa', description: 'DMCA Takedown and Copyright Notices' });
+        setIsLoading(false);
+        return;
+      }
+      if (path === '/about') {
+        setStaticPageType('about');
+        SEOService.updateHead({ title: 'About Us | Walkathawa', description: 'About Walkathawa Sinhala Stories' });
+        setIsLoading(false);
+        return;
+      }
+      if (path === '/contact') {
+        setStaticPageType('contact');
+        SEOService.updateHead({ title: 'Contact Us | Walkathawa', description: 'Contact Walkathawa Editorial Desk' });
+        setIsLoading(false);
+        return;
+      }
+      if (path === '/disclaimer') {
+        setStaticPageType('disclaimer');
+        SEOService.updateHead({ title: 'Disclaimer | Walkathawa', description: 'Disclaimer & Advertising Policy' });
+        setIsLoading(false);
+        return;
+      }
+
+      // 4. Sitemap / Archives Route
+      if (path === '/sitemap' || path === '/archives') {
         setIsSitemapOpen(true);
         SEOService.updateHead(SEOService.generateArchivesSEO());
       }
 
-      // 4. Single Story View: /story/:slug or /posts/:slug
+      // 5. Single Story View: /story/:slug or /posts/:slug
       if (path.startsWith('/story/') || path.startsWith('/posts/')) {
         const prefix = path.startsWith('/story/') ? '/story/' : '/posts/';
-        const slug = decodeURIComponent(path.replace(prefix, '').split('?')[0]);
+        const rawSlug = path.replace(prefix, '').split('?')[0];
+        const slug = decodeURIComponent(rawSlug);
+
         if (slug) {
           const storyData = await StoryService.getStoryBySlug(slug);
-          if (!isCancelled && storyData) {
-            setActiveStory(storyData);
-            SEOService.updateHead(SEOService.generateStorySEO(storyData));
+          if (!isCancelled) {
+            if (storyData) {
+              setActiveStory(storyData);
+              SEOService.updateHead(SEOService.generateStorySEO(storyData));
 
-            // Load related, prev & next stories
-            const related = await StoryService.getRelatedStories(storyData, 4);
-            const allLive = await StoryService.fetchAllLiveStories();
-            const currIdx = allLive.findIndex((s) => s.id === storyData.id || s.slug === storyData.slug);
+              // Load related, prev & next stories
+              const related = await StoryService.getRelatedStories(storyData, 4);
+              const allLive = await StoryService.fetchAllLiveStories();
+              const currIdx = allLive.findIndex((s) => s.id === storyData.id || s.slug === storyData.slug);
 
-            if (!isCancelled) {
               setRelatedStories(related);
               setPrevStory(currIdx > 0 ? allLive[currIdx - 1] : null);
               setNextStory(currIdx >= 0 && currIdx < allLive.length - 1 ? allLive[currIdx + 1] : null);
               setIsLoading(false);
+              return;
+            } else {
+              // Story not found in database
+              setActiveStory(null);
+              setIsNotFound(true);
+              SEOService.updateHead({ title: '404 - කතාව හමු නොවීය | Walkathawa', noIndex: true });
+              setIsLoading(false);
+              return;
             }
-            return;
           }
         }
       }
 
-      // 5. Category Route: /category/:categorySlug
+      // 6. Category Route: /category/:categorySlug
       let categorySlug = 'all';
       if (path.startsWith('/category/')) {
         categorySlug = decodeURIComponent(path.replace('/category/', '').split('?')[0]);
+      } else if (path !== '/' && path !== '/posts' && path !== '/latest' && path !== '/popular' && path !== '/sitemap' && path !== '/archives') {
+        // Unknown route -> 404
+        setIsNotFound(true);
+        SEOService.updateHead({ title: '404 - පිටුව හමු නොවීය | Walkathawa', noIndex: true });
+        setIsLoading(false);
+        return;
       }
 
       // Extract query parameters (?page=2)
@@ -216,6 +277,8 @@ export function App() {
           setSelectedCategory('all');
           setSearchTerm('');
           setActiveStory(null);
+          setIsNotFound(false);
+          setStaticPageType(null);
           navigateTo('/');
         }}
         onOpenCategories={() => navigateTo('/categories')}
@@ -228,8 +291,31 @@ export function App() {
 
       {/* Main View Area */}
       <main className="flex-1">
-        {activeStory ? (
-          /* 1. Story Reader View */
+        {isNotFound ? (
+          /* 1. 404 Page Not Found */
+          <NotFoundPage
+            onNavigateHome={() => {
+              setIsNotFound(false);
+              navigateTo('/');
+            }}
+            onSelectCategory={handleSelectCategory}
+            onSearch={(term) => {
+              setSearchTerm(term);
+              setIsNotFound(false);
+            }}
+            categories={categories}
+          />
+        ) : staticPageType ? (
+          /* 2. Static Informational Page */
+          <StaticPage
+            pageType={staticPageType}
+            onNavigateHome={() => {
+              setStaticPageType(null);
+              navigateTo('/');
+            }}
+          />
+        ) : activeStory ? (
+          /* 3. Story Reader View */
           <StoryReader
             story={activeStory}
             relatedStories={relatedStories}
@@ -250,14 +336,14 @@ export function App() {
             onFontSizeChange={setFontSize}
           />
         ) : currentPath === '/categories' ? (
-          /* 2. Categories Grid Page */
+          /* 4. Categories Grid Page */
           <CategoriesPage
             categories={categories}
             onSelectCategory={handleSelectCategory}
             onNavigateHome={() => navigateTo('/')}
           />
         ) : (
-          /* 3. Story Feed / Gallery View */
+          /* 5. Story Feed / Gallery View */
           <StoryGallery
             stories={stories}
             categories={categories}
@@ -289,7 +375,11 @@ export function App() {
       />
 
       {/* Main App Footer */}
-      <Footer />
+      <Footer
+        categories={categories}
+        onSelectCategory={handleSelectCategory}
+        onOpenSitemap={() => setIsSitemapOpen(true)}
+      />
     </div>
   );
 }

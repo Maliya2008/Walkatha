@@ -271,7 +271,7 @@ export function groupStoriesIntoSeries(stories: Story[]): Series[] {
         latestEpisodeNumber: info.episodeNumber,
         updatedDate: story.updatedDate || story.uploadDate || story.uploadedDate || new Date().toISOString(),
         views: 0,
-        authorName: story.author?.name || 'Walkathawa',
+        authorName: typeof story.author === 'string' ? story.author : story.author?.name || 'Walkathawa',
         url: getSeriesCanonicalUrl(info.seriesSlug),
       };
       seriesMap.set(info.seriesSlug, series);

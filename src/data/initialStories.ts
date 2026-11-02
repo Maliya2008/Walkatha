@@ -3,6 +3,7 @@ import { Story, StoryCategory } from '../types/story';
 export const CATEGORIES: StoryCategory[] = [
   {
     id: 'all',
+    slug: 'all',
     name: 'All Stories',
     sinhalaName: 'සියලු කතා',
     description: 'සියලුම සිංහල කතා එකතුව',
@@ -11,6 +12,7 @@ export const CATEGORIES: StoryCategory[] = [
   },
   {
     id: 'romantic',
+    slug: 'romantic',
     name: 'Romantic',
     sinhalaName: 'ආදර කතා',
     description: 'හදවතට දැනෙන ආදරණීය කතා සහ ප්‍රේම වෘත්තාන්ත',
@@ -19,6 +21,7 @@ export const CATEGORIES: StoryCategory[] = [
   },
   {
     id: 'unconventional',
+    slug: 'unconventional',
     name: 'Adult & Drama',
     sinhalaName: 'අසම්මත කතා',
     description: 'සමාජ සම්මතයන්ගෙන් ඔබ්බට ගිය සත්‍ය හා ප්‍රබන්ධ කතා',
@@ -27,6 +30,7 @@ export const CATEGORIES: StoryCategory[] = [
   },
   {
     id: 'short',
+    slug: 'short',
     name: 'Short Stories',
     sinhalaName: 'කෙටි කතා',
     description: 'ඉක්මනින් කියවා රසවිඳිය හැකි කෙටි රස කතා',
@@ -35,6 +39,7 @@ export const CATEGORIES: StoryCategory[] = [
   },
   {
     id: 'suspense',
+    slug: 'suspense',
     name: 'Suspense & Mystery',
     sinhalaName: 'ත්‍රාසජනක',
     description: 'කුතුහලය සහ රහස් පිරි අභිරහස් කතා',
@@ -43,6 +48,7 @@ export const CATEGORIES: StoryCategory[] = [
   },
   {
     id: 'novel',
+    slug: 'novel',
     name: 'Series & Novels',
     sinhalaName: 'දිගු කතා මාලා',
     description: 'කොටස් වශයෙන් පළවන ආකර්ෂණීය දිගු කතා',

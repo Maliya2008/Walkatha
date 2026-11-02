@@ -15,6 +15,8 @@ export const StoryCard: React.FC<StoryCardProps> = ({
   isBookmarked,
   onToggleBookmark,
 }) => {
+  const authorName = typeof story.author === 'string' ? story.author : story.author?.name || 'Walkathawa';
+
   return (
     <article className="group bg-slate-900/60 hover:bg-slate-900 border border-slate-800/80 hover:border-slate-700 rounded-2xl p-5 flex flex-col justify-between transition-all duration-200 hover:shadow-xl hover:shadow-rose-950/20">
       <div>
@@ -52,7 +54,7 @@ export const StoryCard: React.FC<StoryCardProps> = ({
           onClick={() => onSelect(story)}
           className="text-sm text-slate-400 line-clamp-3 leading-relaxed mb-4 cursor-pointer"
         >
-          {story.excerpt}
+          {story.excerpt || story.shortDescription || story.description}
         </p>
       </div>
 
@@ -60,13 +62,13 @@ export const StoryCard: React.FC<StoryCardProps> = ({
       <div className="pt-4 border-t border-slate-800/60 flex items-center justify-between text-xs text-slate-400">
         <div className="flex items-center gap-1.5 truncate">
           <User className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-          <span className="truncate">{story.author}</span>
+          <span className="truncate">{authorName}</span>
         </div>
 
         <div className="flex items-center gap-3 shrink-0">
           <span className="flex items-center gap-1 text-slate-500">
             <Clock className="w-3.5 h-3.5" />
-            {story.readTime}
+            {story.readTime || '3 min'}
           </span>
           <span className="flex items-center gap-1 text-slate-500">
             <Eye className="w-3.5 h-3.5" />
@@ -74,7 +76,7 @@ export const StoryCard: React.FC<StoryCardProps> = ({
           </span>
           <span className="flex items-center gap-1 text-rose-400/80">
             <Heart className="w-3.5 h-3.5" />
-            {story.likes}
+            {story.likes || 0}
           </span>
         </div>
       </div>

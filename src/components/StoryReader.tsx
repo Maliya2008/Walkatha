@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Bookmark, Heart, Share2, Type, Eye, Clock, User, Calendar, Check } from 'lucide-react';
+import { ArrowLeft, Bookmark, Heart, Share2, Eye, Clock, User, Calendar, Check } from 'lucide-react';
 import { Story } from '../types/story';
 
 interface StoryReaderProps {
@@ -21,6 +21,8 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
 }) => {
   const [fontSize, setFontSize] = useState<'sm' | 'md' | 'lg' | 'xl'>('lg');
   const [copied, setCopied] = useState(false);
+
+  const authorName = typeof story.author === 'string' ? story.author : story.author?.name || 'Walkathawa';
 
   const fontSizeClasses = {
     sm: 'text-base leading-relaxed',
@@ -120,15 +122,15 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
         <div className="flex flex-wrap items-center gap-y-2 gap-x-4 text-xs sm:text-sm text-slate-400">
           <span className="flex items-center gap-1.5 font-medium text-slate-300">
             <User className="w-4 h-4 text-rose-400" />
-            {story.author}
+            {authorName}
           </span>
           <span className="flex items-center gap-1.5 text-slate-500">
             <Calendar className="w-4 h-4" />
-            {story.date}
+            {story.date || story.uploadDate || '2026'}
           </span>
           <span className="flex items-center gap-1.5 text-slate-500">
             <Clock className="w-4 h-4" />
-            {story.readTime} කියවීමක්
+            {story.readTime || '3 min'} කියවීමක්
           </span>
           <span className="flex items-center gap-1.5 text-slate-500">
             <Eye className="w-4 h-4" />
@@ -140,7 +142,7 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
       {/* Story Content */}
       <main className={`bg-slate-900/40 border border-slate-800/60 rounded-2xl p-6 sm:p-10 mb-10 ${fontSizeClasses[fontSize]}`}>
         <div className="text-slate-200 whitespace-pre-line tracking-wide">
-          {story.content}
+          {story.fullContent || story.content}
         </div>
       </main>
 
@@ -163,7 +165,7 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
             <Heart className="w-4 h-4" fill={hasLiked ? 'currentColor' : 'none'} />
             <span>{hasLiked ? 'කැමැත්ත පළ කළා' : 'කැමතියි'}</span>
             <span className="ml-1 text-xs px-2 py-0.5 rounded-full bg-slate-950/40">
-              {story.likes}
+              {story.likes || 0}
             </span>
           </button>
         </div>

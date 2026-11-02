@@ -5,13 +5,13 @@ import { AdBanner320x50 } from '../common/AdBanner320x50';
 import { cleanCategoryBadgeName } from '../../utils/formatters';
 
 interface FooterProps {
-  categories: Category[];
-  onSelectCategory: (categorySlug: string) => void;
+  categories?: Category[];
+  onSelectCategory?: (categorySlug: string) => void;
   onOpenSitemap?: () => void;
 }
 
 export const Footer: React.FC<FooterProps> = ({
-  categories,
+  categories = [],
   onSelectCategory,
   onOpenSitemap,
 }) => {
@@ -39,26 +39,28 @@ export const Footer: React.FC<FooterProps> = ({
             </div>
 
             {/* Quick Category Chips */}
-            <div className="flex flex-wrap gap-1.5 text-xs">
-              {categories
-                .filter((c) => c.slug !== 'all')
-                .slice(0, 5)
-                .map((cat) => (
-                  <a
-                    key={cat.id || cat.slug}
-                    href={`/category/${encodeURIComponent(cat.slug)}`}
-                    onClick={(e) => {
-                      if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
-                        e.preventDefault();
-                        onSelectCategory(cat.slug);
-                      }
-                    }}
-                    className="px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 transition-colors cursor-pointer text-[11px]"
-                  >
-                    {cleanCategoryBadgeName(cat.name)}
-                  </a>
-                ))}
-            </div>
+            {categories.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 text-xs">
+                {categories
+                  .filter((c) => c.slug !== 'all')
+                  .slice(0, 5)
+                  .map((cat) => (
+                    <a
+                      key={cat.id || cat.slug}
+                      href={`/category/${encodeURIComponent(cat.slug)}`}
+                      onClick={(e) => {
+                        if (!e.ctrlKey && !e.metaKey && !e.shiftKey && onSelectCategory) {
+                          e.preventDefault();
+                          onSelectCategory(cat.slug);
+                        }
+                      }}
+                      className="px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 transition-colors cursor-pointer text-[11px]"
+                    >
+                      {cleanCategoryBadgeName(cat.name)}
+                    </a>
+                  ))}
+              </div>
+            )}
           </div>
 
           {/* 320x50 In-Page Footer Ad Banner */}

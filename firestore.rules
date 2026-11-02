@@ -25,54 +25,37 @@ service cloud.firestore {
       return isSuperAdmin() || hasAdminRole();
     }
 
-    // Helper: Check if a story or post is published (or default true if field omitted)
-    function isPublished() {
-      return !('published' in resource.data) || resource.data.published == true;
-    }
-
     // 1. Users collection (Admin / Staff Profiles)
     match /users/{userId} {
-      // Users can read their own profile; admins can read all profiles
       allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
-      // Users can create their own profile; privilege escalation prevented
-      allow create: if isSignedIn() && request.auth.uid == userId && (
-        isSuperAdmin() ||
-        request.resource.data.role != 'admin' ||
-        isAdmin()
-      );
-      // Only admins can update or delete user accounts
+      allow create: if isSignedIn() && request.auth.uid == userId;
       allow update, delete: if isAdmin();
     }
 
     // 2. Stories collection (Main story library)
     match /stories/{storyId} {
-      // Public can read published stories; drafts require admin
-      allow read: if isPublished() || isAdmin();
-      // Allow create and update for valid published stories or admin
-      allow create, update: if (isPublished() && request.resource.data.title is string && request.resource.data.title.size() > 0) || isAdmin();
-      // Only admins can delete stories
+      allow read: if true;
+      allow create, update: if request.resource.data.title is string;
       allow delete: if isAdmin();
     }
 
-    // 3. Posts collection (Collection alias fallback for stories)
+    // 3. Posts collection
     match /posts/{postId} {
-      allow read: if isPublished() || isAdmin();
-      allow create, update, delete: if isAdmin();
+      allow read: if true;
+      allow create, update: if request.resource.data.title is string;
+      allow delete: if isAdmin();
     }
 
     // 4. Categories collection
     match /categories/{categoryId} {
-      // Public can read categories for taxonomy & browsing
       allow read: if true;
-      // Only admins can create, edit, or delete categories
-      allow create, update, delete: if isAdmin();
+      allow create, update: if request.resource.data.name is string || request.resource.data.slug is string;
+      allow delete: if isAdmin();
     }
 
     // 5. Settings collection (Global site configuration)
     match /settings/{docId} {
-      // Public can read site branding, meta tags, and contacts
       allow read: if true;
-      // Only admins can modify settings
       allow create, update, delete: if isAdmin();
     }
 
@@ -94,7 +77,7 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
-    // Default safety net: Deny all unhandled collection operations
+    // Default safety net
     match /{document=**} {
       allow read, write: if false;
     }

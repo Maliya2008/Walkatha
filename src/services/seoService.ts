@@ -439,7 +439,7 @@ export class SEOService {
       articleData: {
         publishedTime: story.uploadDate,
         modifiedTime: story.updatedDate || story.uploadDate,
-        authorName: story.author?.name || 'Walkathawa',
+        authorName: typeof story.author === 'string' ? story.author : story.author?.name || 'Walkathawa',
         section: catDisplayName,
         tags: story.tags || [],
         slug: story.slug,

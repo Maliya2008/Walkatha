@@ -1,451 +1,310 @@
-import React, { useState, useEffect, useCallback, useMemo, Suspense, lazy } from 'react';
-import { useStories } from './hooks/useStories';
-import { useStory } from './hooks/useStory';
-import { useTheme } from './hooks/useTheme';
-import { Header } from './components/layout/Header';
-import { Footer } from './components/layout/Footer';
-import { StoryGallery } from './components/stories/StoryGallery';
-import { SitemapPage } from './components/sitemap/SitemapPage';
-import { CategoriesPage } from './components/categories/CategoriesPage';
-import { DesktopSideSkyscrapers } from './components/common/DesktopSideSkyscrapers';
-import { normalizeCategorySlug, getCategoryDisplayName } from './utils/categoryTaxonomy';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Navbar } from './components/Navbar';
+import { StoryCard } from './components/StoryCard';
+import { StoryReader } from './components/StoryReader';
+import { Footer } from './components/Footer';
+import { CATEGORIES, SAMPLE_STORIES } from './data/initialStories';
+import { Story } from './types/story';
+import { Sparkles, BookOpen, Bookmark, X, Flame } from 'lucide-react';
 
-const StoryReader = lazy(() =>
-  import('./components/stories/StoryReader').then((m) => ({ default: m.StoryReader }))
-);
-const AdminRoot = lazy(() =>
-  import('./components/admin/AdminRoot').then((m) => ({ default: m.AdminRoot }))
-);
-
-export default function App() {
-  const { theme, setTheme, fontSize, setFontSize } = useTheme();
-
-  const {
-    stories,
-    total,
-    page,
-    totalPages,
-    limit,
-    categories,
-    isLoading: isStoriesLoading,
-    params,
-    setCategory,
-    setSearch,
-    setPage,
-    setSortBy,
-  } = useStories({ limit: 20 }); // 20 posts per view
-
-  const [isAdminView, setIsAdminView] = useState<boolean>(false);
-  const [isSitemapView, setIsSitemapView] = useState<boolean>(false);
-  const [isCategoriesView, setIsCategoriesView] = useState<boolean>(false);
-  const [currentStorySlug, setCurrentStorySlug] = useState<string | null>(null);
-  const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
-
-  // Active story hook
-  const { story: activeStory, relatedStories, isLoading: isStoryLoading } = useStory(currentStorySlug);
-
-  // Helper for router navigation
-  const navigateTo = useCallback((urlPath: string, replace = false) => {
+export function App() {
+  const [stories, setStories] = useState<Story[]>(SAMPLE_STORIES);
+  const [selectedStory, setSelectedStory] = useState<Story | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [bookmarks, setBookmarks] = useState<string[]>(() => {
     try {
-      if (replace) {
-        window.history.replaceState({}, '', urlPath);
-      } else {
-        window.history.pushState({}, '', urlPath);
-      }
+      const saved = localStorage.getItem('walkathawa_bookmarks');
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      window.location.hash = urlPath;
+      return [];
     }
-    window.dispatchEvent(new Event('popstate'));
-  }, []);
-
-  // Synchronize route from window.location
-  const syncRoute = useCallback(() => {
-    const path = window.location.pathname;
-    const hash = window.location.hash;
-
-    // 1. Admin route
-    if (path.startsWith('/admin') || hash === '#admin' || hash.startsWith('#/admin')) {
-      setIsAdminView(true);
-      setIsSitemapView(false);
-      setIsCategoriesView(false);
-      setCurrentStorySlug(null);
-      return;
-    }
-    setIsAdminView(false);
-
-    // 2. Sitemap / Archives
-    if (path === '/sitemap' || path === '/archives' || hash === '#sitemap') {
-      setIsSitemapView(true);
-      setIsCategoriesView(false);
-      setCurrentStorySlug(null);
-      return;
-    }
-    setIsSitemapView(false);
-
-    // 3. Categories Special Page: /categories
-    if (path === '/categories' || hash === '#categories') {
-      setIsCategoriesView(true);
-      setCurrentStorySlug(null);
-      return;
-    }
-    setIsCategoriesView(false);
-
-    // 4. Single Story: /story/:slug or /posts/:slug or legacy /katha/:slug
-    const storyMatch = path.match(/^\/(?:story|posts|katha)\/([^/]+)/);
-    if (storyMatch && storyMatch[1]) {
-      const slug = decodeURIComponent(storyMatch[1]);
-      setCurrentStorySlug(slug);
-      return;
-    }
-
-    // 5. Category: /category/:slug
-    const catMatch = path.match(/^\/category\/([^/]+)/);
-    if (catMatch && catMatch[1]) {
-      const rawSlug = decodeURIComponent(catMatch[1]);
-      const norm = normalizeCategorySlug(rawSlug);
-      setCategory(norm);
-      setCurrentStorySlug(null);
-      return;
-    }
-
-    // 6. Popular / Latest
-    if (path === '/popular') {
-      setSortBy('popular');
-      setCurrentStorySlug(null);
-      return;
-    }
-    if (path === '/latest') {
-      setSortBy('latest');
-      setCurrentStorySlug(null);
-      return;
-    }
-
-    // 7. Root Homepage
-    setCurrentStorySlug(null);
-  }, [setCategory, setSortBy]);
-
-  useEffect(() => {
-    syncRoute();
-    window.addEventListener('popstate', syncRoute);
-    return () => window.removeEventListener('popstate', syncRoute);
-  }, [syncRoute]);
-
-  // Update dynamic document title & canonical meta tags
-  useEffect(() => {
-    if (isAdminView) {
-      document.title = 'Admin Panel | Walkathawa (වල් කතාව)';
-      return;
-    }
-
-    let canonical = document.querySelector('link[rel="canonical"]') as HTMLLinkElement | null;
-
-    if (currentStorySlug && activeStory) {
-      document.title = `${activeStory.title} | Walkathawa (වල් කතාව)`;
-      if (canonical) {
-        canonical.href = `https://www.walkathawa.site/story/${encodeURIComponent(activeStory.slug)}`;
-      }
-      return;
-    }
-
-    if (isSitemapView) {
-      document.title = 'Sitemap & Archives (සියලු කතා සූචිය) | Walkathawa (වල් කතාව)';
-      if (canonical) {
-        canonical.href = 'https://www.walkathawa.site/sitemap';
-      }
-      return;
-    }
-
-    if (isCategoriesView) {
-      document.title = 'කතා වර්ගීකරණ (Story Categories) | Walkathawa (වල් කතාව)';
-      if (canonical) {
-        canonical.href = 'https://www.walkathawa.site/categories';
-      }
-      return;
-    }
-
-    if (params.category && params.category !== 'all') {
-      const catName = getCategoryDisplayName(params.category);
-      document.title = `${catName} | Walkathawa (වල් කතාව)`;
-      if (canonical) {
-        canonical.href = `https://www.walkathawa.site/category/${encodeURIComponent(params.category)}`;
-      }
-      return;
-    }
-
-    document.title = 'Walkathawa (වල් කතාව) | Sinhala Stories Online';
-    if (canonical) {
-      canonical.href = 'https://www.walkathawa.site/';
-    }
-  }, [isAdminView, currentStorySlug, activeStory, isSitemapView, isCategoriesView, params.category]);
-
-  // Compute previous and next stories in current active list
-  const { prevStory, nextStory } = useMemo(() => {
-    if (!currentStorySlug || stories.length === 0) {
-      return { prevStory: null, nextStory: null };
-    }
-    const idx = stories.findIndex(
-      (s) => s.slug === currentStorySlug || s.id === currentStorySlug
-    );
-    if (idx === -1) {
-      return { prevStory: null, nextStory: null };
-    }
-    return {
-      prevStory: idx > 0 ? stories[idx - 1] : null,
-      nextStory: idx < stories.length - 1 ? stories[idx + 1] : null,
-    };
-  }, [currentStorySlug, stories]);
-
-  // Navigation callbacks
-  const handleHomeClick = useCallback(() => {
-    setCategory('all');
-    setSearch('');
-    setPage(1);
-    setCurrentStorySlug(null);
-    setIsSitemapView(false);
-    setIsCategoriesView(false);
-    setIsAdminView(false);
-    navigateTo('/');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [setCategory, setSearch, setPage, navigateTo]);
-
-  const handleOpenCategories = useCallback(() => {
-    setCurrentStorySlug(null);
-    setIsSitemapView(false);
-    setIsCategoriesView(true);
-    setIsAdminView(false);
-    navigateTo('/categories');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [navigateTo]);
-
-  const handleSelectCategory = useCallback(
-    (catSlug: string) => {
-      setCategory(catSlug);
-      setPage(1);
-      setCurrentStorySlug(null);
-      setIsSitemapView(false);
-      setIsCategoriesView(false);
-      setIsAdminView(false);
-      if (catSlug === 'all') {
-        navigateTo('/');
-      } else {
-        navigateTo(`/category/${encodeURIComponent(catSlug)}`);
-      }
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    },
-    [setCategory, setPage, navigateTo]
-  );
-
-  const handleReadStory = useCallback(
-    (slug: string) => {
-      setCurrentStorySlug(slug);
-      setIsSitemapView(false);
-      setIsCategoriesView(false);
-      setIsAdminView(false);
-      navigateTo(`/story/${encodeURIComponent(slug)}`);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    },
-    [navigateTo]
-  );
-
-  const handleToggleTheme = useCallback(() => {
-    const nextTheme = theme === 'dark' ? 'light' : 'dark';
-    setTheme(nextTheme);
+  });
+  const [likedStories, setLikedStories] = useState<string[]>(() => {
     try {
-      localStorage.setItem('reader_theme', nextTheme);
-      if (nextTheme === 'dark') {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
-    } catch {}
-  }, [theme, setTheme]);
-
-  // Ensure strict zero-ad state in Admin area
-  useEffect(() => {
-    if (isAdminView) {
-      document.documentElement.classList.add('is-admin-mode');
-      document.body.classList.add('is-admin-mode');
-
-      // Hide static 320x50 banner
-      const staticBanner = document.getElementById('ad-banner-320x50');
-      if (staticBanner) {
-        staticBanner.style.setProperty('display', 'none', 'important');
-      }
-
-      // Hide any injected floating ads/social bar
-      const hideAdElements = () => {
-        const adElements = document.querySelectorAll(
-          '#ad-banner-320x50, #popunder-ad-script, #socialbar-ad-script, iframe[src*="profitable"], iframe[src*="highperformance"], iframe[src*="highrevenue"], [id*="adsterra"], [class*="adsterra"], [id*="socialbar"], [id*="popunder"]'
-        );
-        adElements.forEach((el) => {
-          (el as HTMLElement).style.setProperty('display', 'none', 'important');
-        });
-      };
-
-      hideAdElements();
-      const t1 = setTimeout(hideAdElements, 100);
-      const t2 = setTimeout(hideAdElements, 600);
-      return () => {
-        clearTimeout(t1);
-        clearTimeout(t2);
-      };
-    } else {
-      document.documentElement.classList.remove('is-admin-mode');
-      document.body.classList.remove('is-admin-mode');
-      const staticBanner = document.getElementById('ad-banner-320x50');
-      if (staticBanner) {
-        staticBanner.style.removeProperty('display');
-      }
+      const saved = localStorage.getItem('walkathawa_likes');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
     }
-  }, [isAdminView]);
+  });
+  const [showBookmarksDrawer, setShowBookmarksDrawer] = useState(false);
+  const [isDarkTheme, setIsDarkTheme] = useState(true);
 
-  // Render Admin Workspace
-  if (isAdminView) {
-    return (
-      <Suspense
-        fallback={
-          <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400 text-sm">
-            පූරණය වෙමින් පවතී...
-          </div>
+  // Sync bookmarks
+  useEffect(() => {
+    try {
+      localStorage.setItem('walkathawa_bookmarks', JSON.stringify(bookmarks));
+    } catch (e) {
+      console.warn(e);
+    }
+  }, [bookmarks]);
+
+  // Sync likes
+  useEffect(() => {
+    try {
+      localStorage.setItem('walkathawa_likes', JSON.stringify(likedStories));
+    } catch (e) {
+      console.warn(e);
+    }
+  }, [likedStories]);
+
+  // Handle URL hash for sharing or direct links
+  useEffect(() => {
+    const handleHash = () => {
+      const hash = window.location.hash.replace('#', '');
+      if (hash) {
+        const found = stories.find((s) => s.slug === hash || s.id === hash);
+        if (found) {
+          setSelectedStory(found);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
         }
-      >
-        <AdminRoot
-          onBackToPublic={handleHomeClick}
-          onViewStoryPublic={handleReadStory}
-        />
-      </Suspense>
+      }
+    };
+    handleHash();
+    window.addEventListener('hashchange', handleHash);
+    return () => window.removeEventListener('hashchange', handleHash);
+  }, [stories]);
+
+  const toggleBookmark = (story: Story) => {
+    setBookmarks((prev) =>
+      prev.includes(story.id) ? prev.filter((id) => id !== story.id) : [...prev, story.id]
     );
-  }
+  };
+
+  const handleLike = (story: Story) => {
+    if (likedStories.includes(story.id)) return;
+    setLikedStories((prev) => [...prev, story.id]);
+    setStories((prev) =>
+      prev.map((s) => (s.id === story.id ? { ...s, likes: s.likes + 1 } : s))
+    );
+    if (selectedStory && selectedStory.id === story.id) {
+      setSelectedStory((prev) => (prev ? { ...prev, likes: prev.likes + 1 } : null));
+    }
+  };
+
+  const openStory = (story: Story) => {
+    // Increment views
+    setStories((prev) =>
+      prev.map((s) => (s.id === story.id ? { ...s, views: s.views + 1 } : s))
+    );
+    setSelectedStory({ ...story, views: story.views + 1 });
+    window.location.hash = story.slug;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const closeStory = () => {
+    setSelectedStory(null);
+    history.pushState(null, '', window.location.pathname);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Filtered stories
+  const filteredStories = useMemo(() => {
+    return stories.filter((story) => {
+      const matchesCategory =
+        selectedCategory === 'all' || story.category === selectedCategory;
+      const q = searchQuery.toLowerCase().trim();
+      const matchesSearch =
+        !q ||
+        story.title.toLowerCase().includes(q) ||
+        story.excerpt.toLowerCase().includes(q) ||
+        story.author.toLowerCase().includes(q) ||
+        story.tags.some((t) => t.toLowerCase().includes(q));
+
+      return matchesCategory && matchesSearch;
+    });
+  }, [stories, selectedCategory, searchQuery]);
+
+  const bookmarkedStoriesList = useMemo(() => {
+    return stories.filter((s) => bookmarks.includes(s.id));
+  }, [stories, bookmarks]);
+
+  const featuredStories = useMemo(() => {
+    return stories.filter((s) => s.isFeatured);
+  }, [stories]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 selection:bg-rose-500 selection:text-white transition-colors duration-200">
-      {/* Desktop Outer Edge Skyscraper Ads (Positioned only at the sidest points of the site on desktop) */}
-      <DesktopSideSkyscrapers />
-
-      {/* Header */}
-      <Header
-        onHomeClick={handleHomeClick}
-        onOpenCategories={handleOpenCategories}
-        theme={theme}
-        onToggleTheme={handleToggleTheme}
-        onOpenSitemap={() => {
-          setIsSitemapView(true);
-          setIsCategoriesView(false);
-          setCurrentStorySlug(null);
-          navigateTo('/sitemap');
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        }}
-        onToggleSearch={() => {
-          if (currentStorySlug || isSitemapView || isCategoriesView) {
-            handleHomeClick();
-            setIsSearchOpen(true);
-          } else {
-            setIsSearchOpen((prev) => !prev);
-          }
-        }}
-        isSearchOpen={isSearchOpen}
+    <div className={`min-h-screen flex flex-col ${isDarkTheme ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
+      <Navbar
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        selectedCategory={selectedCategory}
+        setSelectedCategory={setSelectedCategory}
+        bookmarkCount={bookmarks.length}
+        onOpenBookmarks={() => setShowBookmarksDrawer(true)}
+        onGoHome={closeStory}
+        isDarkTheme={isDarkTheme}
+        setIsDarkTheme={setIsDarkTheme}
       />
 
-      {/* Main Content Area */}
+      {/* Main Body */}
       <main className="flex-1">
-        {currentStorySlug ? (
-          /* Reader View */
-          <Suspense
-            fallback={
-              <div className="max-w-2xl mx-auto px-4 py-16 text-center animate-pulse space-y-4">
-                <div className="h-6 bg-slate-200 dark:bg-slate-800 rounded-md w-24 mx-auto" />
-                <div className="h-8 bg-slate-200 dark:bg-slate-800 rounded-lg w-3/4 mx-auto" />
-                <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded-lg w-1/2 mx-auto" />
-                <div className="h-64 bg-slate-200 dark:bg-slate-800 rounded-xl mt-6" />
-              </div>
-            }
-          >
-            {activeStory ? (
-              <StoryReader
-                story={activeStory}
-                relatedStories={relatedStories}
-                prevStory={prevStory}
-                nextStory={nextStory}
-                onBack={handleHomeClick}
-                onSelectStory={handleReadStory}
-                onSelectCategory={handleSelectCategory}
-                theme={theme}
-                onThemeChange={setTheme}
-                fontSize={fontSize}
-                onFontSizeChange={setFontSize}
-              />
-            ) : isStoryLoading ? (
-              <div className="py-24 text-center text-slate-400 text-sm">
-                කතාව පූරණය වෙමින් පවතී...
-              </div>
-            ) : (
-              <div className="py-24 text-center space-y-4">
-                <h2 className="text-xl font-bold">සොයන ලද කතාව හමු නොවීය</h2>
-                <button
-                  type="button"
-                  onClick={handleHomeClick}
-                  className="px-4 py-2 bg-rose-600 text-white rounded-xl text-sm font-semibold cursor-pointer"
-                >
-                  මුල් පිටුවට යන්න
-                </button>
-              </div>
-            )}
-          </Suspense>
-        ) : isSitemapView ? (
-          /* Sitemap & Archives View */
-          <SitemapPage
-            stories={stories}
-            categories={categories}
-            onSelectStory={handleReadStory}
-            onNavigateHome={handleHomeClick}
-            onSelectCategory={handleSelectCategory}
-          />
-        ) : isCategoriesView ? (
-          /* Special Categories View (5 rows by 4 columns grid per page) */
-          <CategoriesPage
-            categories={categories}
-            onSelectCategory={handleSelectCategory}
-            onNavigateHome={handleHomeClick}
+        {selectedStory ? (
+          <StoryReader
+            story={selectedStory}
+            onBack={closeStory}
+            isBookmarked={bookmarks.includes(selectedStory.id)}
+            onToggleBookmark={() => toggleBookmark(selectedStory)}
+            onLike={() => handleLike(selectedStory)}
+            hasLiked={likedStories.includes(selectedStory.id)}
           />
         ) : (
-          /* Gallery View - At least 20 posts per view */
-          <StoryGallery
-            stories={stories}
-            categories={categories}
-            selectedCategory={params.category || 'all'}
-            onSelectCategory={handleSelectCategory}
-            searchTerm={params.search || ''}
-            onSearchChange={setSearch}
-            sortBy={params.sortBy || 'latest'}
-            onSortChange={setSortBy}
-            currentPage={page}
-            totalPages={totalPages}
-            total={total}
-            limit={limit}
-            onPageChange={(p) => {
-              setPage(p);
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-            onReadStory={handleReadStory}
-            isLoading={isStoriesLoading}
-            isSearchOpen={isSearchOpen}
-            onCloseSearch={() => setIsSearchOpen(false)}
-          />
+          <div className="max-w-6xl mx-auto px-4 py-8">
+            {/* Hero Banner */}
+            <section className="mb-10 relative overflow-hidden rounded-3xl bg-gradient-to-r from-rose-950/60 via-slate-900 to-amber-950/40 border border-slate-800/80 p-8 sm:p-12">
+              <div className="relative z-10 max-w-2xl">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-rose-500/20 text-rose-300 border border-rose-500/30 mb-4">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  නවතම සිංහල කතා එකතුව
+                </span>
+                <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-white tracking-tight leading-tight mb-4">
+                  සිත් ඇදගන්නා <span className="text-transparent bg-clip-text bg-gradient-to-r from-rose-400 to-amber-400">සිංහල කතා</span> රසවිඳින්න
+                </h1>
+                <p className="text-sm sm:text-base text-slate-300 leading-relaxed mb-6">
+                  ආදර කතා, අසම්මත කතා, කෙටි කතා සහ දිගු කතා මාලා දිනපතා නැවුම්ව එකම තැනකින් නොමිලේ කියවන්න.
+                </p>
+                <div className="flex flex-wrap items-center gap-3">
+                  {CATEGORIES.slice(1, 4).map((cat) => (
+                    <button
+                      key={cat.id}
+                      onClick={() => {
+                        setSelectedCategory(cat.id);
+                        window.scrollTo({ top: 400, behavior: 'smooth' });
+                      }}
+                      className="px-4 py-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-xs sm:text-sm font-medium text-slate-200 border border-slate-700/60 transition-all cursor-pointer"
+                    >
+                      {cat.sinhalaName}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="absolute -right-10 -bottom-10 w-72 h-72 bg-rose-600/10 rounded-full blur-3xl pointer-events-none" />
+            </section>
+
+            {/* Categories bar */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-4 mb-8 no-scrollbar">
+              {CATEGORIES.map((cat) => (
+                <button
+                  key={cat.id}
+                  onClick={() => setSelectedCategory(cat.id)}
+                  className={`px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all cursor-pointer ${
+                    selectedCategory === cat.id
+                      ? 'bg-rose-600 text-white shadow-lg shadow-rose-950/40'
+                      : 'bg-slate-900/80 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800/80'
+                  }`}
+                >
+                  {cat.sinhalaName}
+                </button>
+              ))}
+            </div>
+
+            {/* Stories Grid */}
+            <div className="mb-6 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
+                <BookOpen className="w-5 h-5 text-rose-500" />
+                <span>
+                  {CATEGORIES.find((c) => c.id === selectedCategory)?.sinhalaName || 'සියලු කතා'}
+                </span>
+                <span className="text-xs font-normal text-slate-400 ml-1">
+                  ({filteredStories.length} ක් සොයාගැනිණි)
+                </span>
+              </h2>
+            </div>
+
+            {filteredStories.length === 0 ? (
+              <div className="text-center py-16 px-4 bg-slate-900/40 border border-slate-800 rounded-3xl">
+                <BookOpen className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+                <h3 className="text-base font-semibold text-slate-300">කිසිදු කතාවක් හමු නොවීය</h3>
+                <p className="text-xs text-slate-500 mt-1">කරුණාකර වෙනත් කාණ්ඩයක් හෝ සෙවුම් වචනයක් උත්සාහ කරන්න.</p>
+                <button
+                  onClick={() => {
+                    setSelectedCategory('all');
+                    setSearchQuery('');
+                  }}
+                  className="mt-4 px-4 py-2 rounded-xl bg-slate-800 text-xs font-medium text-slate-200 hover:bg-slate-700 transition cursor-pointer"
+                >
+                  සියලු කතා පෙන්වන්න
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredStories.map((story) => (
+                  <StoryCard
+                    key={story.id}
+                    story={story}
+                    onSelect={openStory}
+                    isBookmarked={bookmarks.includes(story.id)}
+                    onToggleBookmark={toggleBookmark}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         )}
       </main>
 
-      {/* Minimal, Simplified Footer */}
-      <Footer
-        categories={categories}
-        onSelectCategory={handleSelectCategory}
-        onOpenSitemap={() => {
-          setIsSitemapView(true);
-          setIsCategoriesView(false);
-          setCurrentStorySlug(null);
-          navigateTo('/sitemap');
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        }}
-      />
+      {/* Bookmarks Drawer Modal */}
+      {showBookmarksDrawer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full max-h-[80vh] flex flex-col shadow-2xl">
+            <div className="p-5 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Bookmark className="w-5 h-5 text-rose-500" />
+                <h3 className="font-bold text-slate-100 text-lg">සුරකින ලද කතා</h3>
+                <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-400">
+                  {bookmarkedStoriesList.length}
+                </span>
+              </div>
+              <button
+                onClick={() => setShowBookmarksDrawer(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5 space-y-3">
+              {bookmarkedStoriesList.length === 0 ? (
+                <div className="text-center py-12 text-slate-400">
+                  <Bookmark className="w-10 h-10 text-slate-600 mx-auto mb-2" />
+                  <p className="text-sm">තවමත් ඔබ විසින් කිසිදු කතාවක් සුරැක නැත.</p>
+                </div>
+              ) : (
+                bookmarkedStoriesList.map((story) => (
+                  <div
+                    key={story.id}
+                    className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 flex items-center justify-between gap-3 group hover:border-slate-700 transition"
+                  >
+                    <div
+                      onClick={() => {
+                        setShowBookmarksDrawer(false);
+                        openStory(story);
+                      }}
+                      className="flex-1 cursor-pointer"
+                    >
+                      <h4 className="font-bold text-slate-200 text-sm group-hover:text-rose-400 transition truncate">
+                        {story.title}
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-0.5">{story.author} • {story.readTime}</p>
+                    </div>
+                    <button
+                      onClick={() => toggleBookmark(story)}
+                      className="p-1.5 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-lg transition cursor-pointer"
+                      title="ඉවත් කරන්න"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <Footer />
     </div>
   );
 }
+export default App;

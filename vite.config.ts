@@ -4,33 +4,20 @@ import path from 'path';
 import { defineConfig } from 'vite';
 
 export default defineConfig(() => {
-  const isHmrDisabled = process.env.DISABLE_HMR === 'true';
-
   return {
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve(__dirname, 'src'),
       },
     },
     server: {
-      hmr: isHmrDisabled ? false : { overlay: false },
-      watch: isHmrDisabled ? null : {},
+      port: 3000,
+      host: '0.0.0.0',
     },
     build: {
+      outDir: 'dist',
       sourcemap: true,
-      minify: 'esbuild' as const,
-      chunkSizeWarningLimit: 600,
-      rollupOptions: {
-        output: {
-          manualChunks: {
-            'vendor-react': ['react', 'react-dom'],
-            'vendor-firebase': ['firebase/app', 'firebase/firestore', 'firebase/auth'],
-            'vendor-motion': ['motion'],
-            'vendor-icons': ['lucide-react'],
-          },
-        },
-      },
     },
   };
 });

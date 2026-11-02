@@ -1,63 +1,42 @@
-import serverBundle from '../build/server.cjs';
-import { createRequire } from 'module';
-import path from 'path';
-import { fileURLToPath } from 'url';
+export default async function handler(req: any, res: any) {
+  const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  const pathname = url.pathname;
 
-// Extract the Express application instance supporting both ESM and CJS bundle shapes
-let resolvedApp: any = (serverBundle && ((serverBundle as any).default || (serverBundle as any).app)) || serverBundle;
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
-function getExpressApp(): any {
-  if (resolvedApp && typeof resolvedApp === 'function') {
-    return resolvedApp;
+  if (req.method === 'OPTIONS') {
+    res.statusCode = 204;
+    return res.end();
   }
-  try {
-    const req = createRequire(import.meta.url);
-    const dirname = typeof __dirname !== 'undefined' ? __dirname : path.dirname(fileURLToPath(import.meta.url));
-    const candidatePaths = [
-      path.join(process.cwd(), 'build', 'server.cjs'),
-      path.resolve(process.cwd(), 'build/server.cjs'),
-      path.join(dirname, '..', 'build', 'server.cjs'),
-      '/var/task/build/server.cjs',
-    ];
-    for (const p of candidatePaths) {
-      try {
-        const mod = req(p);
-        const app = mod.default || mod.app || mod;
-        if (typeof app === 'function') {
-          resolvedApp = app;
-          return resolvedApp;
-        }
-      } catch {}
-    }
-  } catch (err) {
-    console.warn('[Vite/Vercel Server Resolver Notice]:', err);
+
+  // Health check
+  if (pathname === '/api/health' || pathname === '/api') {
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'application/json');
+    return res.end(JSON.stringify({ status: 'ok', timestamp: new Date().toISOString() }));
   }
-  return resolvedApp;
+
+  // Categories
+  if (pathname === '/api/categories') {
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'application/json');
+    return res.end(
+      JSON.stringify({
+        categories: [
+          { id: 'all', name: 'All Stories', sinhalaName: 'සියලු කතා' },
+          { id: 'romantic', name: 'Romantic', sinhalaName: 'ආදර කතා' },
+          { id: 'unconventional', name: 'Adult & Drama', sinhalaName: 'අසම්මත කතා' },
+          { id: 'short', name: 'Short Stories', sinhalaName: 'කෙටි කතා' },
+          { id: 'suspense', name: 'Suspense & Mystery', sinhalaName: 'ත්‍රාසජනක' },
+          { id: 'novel', name: 'Series & Novels', sinhalaName: 'දිගු කතා මාලා' },
+        ],
+      })
+    );
+  }
+
+  res.statusCode = 200;
+  res.setHeader('Content-Type', 'application/json');
+  return res.end(JSON.stringify({ status: 'ok', message: 'Walkathawa API endpoint' }));
 }
-
-// Standard Vercel Serverless Function handler
-export default function handler(req: any, res: any) {
-  try {
-    // If running in AWS Lambda / Vercel Serverless runtime:
-    // prevent lambda from hanging waiting for open background event loop handles (like Firestore connections)
-    if (req?.context) {
-      req.context.callbackWaitsForEmptyEventLoop = false;
-    }
-    const app = getExpressApp();
-    if (typeof app === 'function') {
-      return app(req, res);
-    }
-    res.statusCode = 500;
-    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    res.end('Server initialization error: Express application could not be resolved from build/server.cjs');
-  } catch (err: any) {
-    console.error('[Vercel Serverless Top-Level Handler Error]:', err);
-    if (!res.headersSent) {
-      res.statusCode = 500;
-      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-      res.end('Server Execution Error: ' + (err?.message || 'Unknown error'));
-    }
-  }
-}
-
-export { resolvedApp as app };

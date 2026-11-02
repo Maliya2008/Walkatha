@@ -4,12 +4,6 @@
   "outputDirectory": "dist",
   "cleanUrls": true,
   "trailingSlash": false,
-  "functions": {
-    "api/index.ts": {
-      "includeFiles": "build/**,data/**,dist/**,firebase-applet-config.json,index.html,public/**",
-      "maxDuration": 15
-    }
-  },
   "headers": [
     {
       "source": "/(.*)",
@@ -93,40 +87,6 @@
       ]
     },
     {
-      "source": "/feed.xml",
-      "headers": [
-        {
-          "key": "Content-Type",
-          "value": "application/rss+xml; charset=utf-8"
-        },
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=600, s-maxage=1800"
-        },
-        {
-          "key": "X-Robots-Tag",
-          "value": "all"
-        }
-      ]
-    },
-    {
-      "source": "/atom.xml",
-      "headers": [
-        {
-          "key": "Content-Type",
-          "value": "application/atom+xml; charset=utf-8"
-        },
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=600, s-maxage=1800"
-        },
-        {
-          "key": "X-Robots-Tag",
-          "value": "all"
-        }
-      ]
-    },
-    {
       "source": "/robots.txt",
       "headers": [
         {
@@ -146,36 +106,12 @@
   ],
   "rewrites": [
     {
-      "source": "/api",
-      "destination": "/api/index"
-    },
-    {
       "source": "/api/(.*)",
       "destination": "/api/index"
     },
     {
-      "source": "/sitemap.xml",
-      "destination": "/api/index"
-    },
-    {
-      "source": "/sitemap-stories.xml",
-      "destination": "/api/index"
-    },
-    {
-      "source": "/sitemap-main.xml",
-      "destination": "/api/index"
-    },
-    {
-      "source": "/feed.xml",
-      "destination": "/api/index"
-    },
-    {
-      "source": "/atom.xml",
-      "destination": "/api/index"
-    },
-    {
-      "source": "/((?!assets/|favicon\\.ico|favicon\\.svg|icon\\.png|icon\\.svg|icon\\.jpg|apple-touch-icon\\.png|manifest\\.json|sw\\.js|robots\\.txt|sitemap\\.xml|sitemap-main\\.xml|sitemap-stories\\.xml|sitemap\\.xsl|google[a-zA-Z0-9_-]+\\.html).*)",
-      "destination": "/api/index?__vercel_url=/$1"
+      "source": "/((?!assets/|favicon\\.ico|favicon\\.svg|icon\\.png|icon\\.svg|icon\\.jpg|apple-touch-icon\\.png|manifest\\.json|sw\\.js|robots\\.txt|sitemap.*\\.xml|sitemap\\.xsl|google[a-zA-Z0-9_-]+\\.html|.*\\..*).*)",
+      "destination": "/index.html"
     }
   ]
 }

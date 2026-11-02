@@ -123,6 +123,16 @@ Sitemap: ${baseUrl}/sitemap-main.xml
 `;
   fs.writeFileSync(path.join(publicDir, 'robots.txt'), robotsContent, 'utf8');
   console.log(`[Sitemap] Generated robots.txt successfully.`);
+
+  // Also write to dist/ if dist/ exists
+  const distDir = path.join(process.cwd(), 'dist');
+  if (fs.existsSync(distDir)) {
+    fs.writeFileSync(path.join(distDir, 'sitemap.xml'), indexXml, 'utf8');
+    fs.writeFileSync(path.join(distDir, 'sitemap-main.xml'), mainXml, 'utf8');
+    fs.writeFileSync(path.join(distDir, 'sitemap-stories.xml'), storiesXml, 'utf8');
+    fs.writeFileSync(path.join(distDir, 'robots.txt'), robotsContent, 'utf8');
+    console.log(`[Sitemap] Synced sitemaps and robots.txt to dist/ successfully.`);
+  }
 }
 
 run().catch((err) => {

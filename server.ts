@@ -1,4 +1,5 @@
 import express from 'express';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -29,6 +30,58 @@ async function startServer() {
         { id: 'novel', name: 'Series & Novels', sinhalaName: 'දිගු කතා මාලා' },
       ],
     });
+  });
+
+  // Dedicated SEO Endpoints
+  const serveXml = (fileName: string, res: express.Response) => {
+    const candidates = [
+      path.resolve(process.cwd(), 'public', fileName),
+      path.resolve(process.cwd(), 'dist', fileName),
+      path.resolve(__dirname, 'public', fileName),
+      path.resolve(__dirname, 'dist', fileName),
+    ];
+    for (const filePath of candidates) {
+      if (fs.existsSync(filePath)) {
+        res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=600, s-maxage=1800, stale-while-revalidate=86400');
+        res.setHeader('X-Robots-Tag', 'all');
+        return res.sendFile(filePath);
+      }
+    }
+    res.status(404).setHeader('Content-Type', 'text/plain; charset=utf-8').send(`Sitemap ${fileName} not found`);
+  };
+
+  app.get(['/sitemap.xml', '/sitemap_index.xml'], (_req, res) => {
+    serveXml('sitemap.xml', res);
+  });
+
+  app.get('/sitemap-main.xml', (_req, res) => {
+    serveXml('sitemap-main.xml', res);
+  });
+
+  app.get('/sitemap-stories.xml', (_req, res) => {
+    serveXml('sitemap-stories.xml', res);
+  });
+
+  app.get('/robots.txt', (_req, res) => {
+    const candidates = [
+      path.resolve(process.cwd(), 'public', 'robots.txt'),
+      path.resolve(process.cwd(), 'dist', 'robots.txt'),
+      path.resolve(__dirname, 'public', 'robots.txt'),
+      path.resolve(__dirname, 'dist', 'robots.txt'),
+    ];
+    for (const filePath of candidates) {
+      if (fs.existsSync(filePath)) {
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=3600');
+        res.setHeader('X-Robots-Tag', 'all');
+        return res.sendFile(filePath);
+      }
+    }
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.send(
+      `User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api/\n\nSitemap: https://www.walkathawa.site/sitemap.xml\nSitemap: https://www.walkathawa.site/sitemap-stories.xml\nSitemap: https://www.walkathawa.site/sitemap-main.xml\n`
+    );
   });
 
   if (!isProd) {

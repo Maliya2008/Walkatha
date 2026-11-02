@@ -105,9 +105,10 @@ export function App() {
         SEOService.updateHead(SEOService.generateArchivesSEO());
       }
 
-      // 4. Single Story View: /story/:slug
-      if (path.startsWith('/story/')) {
-        const slug = decodeURIComponent(path.replace('/story/', '').split('?')[0]);
+      // 4. Single Story View: /story/:slug or /posts/:slug
+      if (path.startsWith('/story/') || path.startsWith('/posts/')) {
+        const prefix = path.startsWith('/story/') ? '/story/' : '/posts/';
+        const slug = decodeURIComponent(path.replace(prefix, '').split('?')[0]);
         if (slug) {
           const storyData = await StoryService.getStoryBySlug(slug);
           if (!isCancelled && storyData) {

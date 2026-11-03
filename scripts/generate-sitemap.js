@@ -124,6 +124,47 @@ Sitemap: ${baseUrl}/sitemap-main.xml
   fs.writeFileSync(path.join(publicDir, 'robots.txt'), robotsContent, 'utf8');
   console.log(`[Sitemap] Generated robots.txt successfully.`);
 
+  // Generate static API data JSON files (for instant reader access to all 613 stories)
+  const publicApiDir = path.join(publicDir, 'api-data');
+  const publicStoryDir = path.join(publicApiDir, 'story');
+  if (!fs.existsSync(publicStoryDir)) {
+    fs.mkdirSync(publicStoryDir, { recursive: true });
+  }
+
+  const catalog = stories.map((s) => ({
+    id: s.id,
+    title: s.title,
+    slug: s.slug || s.id,
+    shortDescription: s.shortDescription || s.description || '',
+    coverImage: s.coverImage || '',
+    category: s.category || 'all',
+    categoryName: s.categoryName || '',
+    tags: s.tags || [],
+    uploadDate: s.uploadDate || s.uploadedDate || '',
+    views: s.views || 0,
+    likes: s.likes || 0,
+    readingTime: s.readingTime || 3,
+    featured: !!s.featured,
+    published: s.published !== false,
+  }));
+
+  const catalogStr = JSON.stringify(catalog);
+  fs.writeFileSync(path.join(publicApiDir, 'catalog.json'), catalogStr, 'utf8');
+  fs.writeFileSync(path.join(publicApiDir, 'categories.json'), JSON.stringify(categories), 'utf8');
+
+  for (const s of stories) {
+    const payload = JSON.stringify(s);
+    const slugKey = (s.slug || s.id || '').trim().replace(/\//g, '_');
+    const idKey = (s.id || '').trim().replace(/\//g, '_');
+    if (slugKey) {
+      fs.writeFileSync(path.join(publicStoryDir, `${slugKey}.json`), payload, 'utf8');
+    }
+    if (idKey && idKey !== slugKey) {
+      fs.writeFileSync(path.join(publicStoryDir, `${idKey}.json`), payload, 'utf8');
+    }
+  }
+  console.log(`[API Data] Successfully generated static catalog and ${stories.length} story JSON files.`);
+
   // Also write to dist/ if dist/ exists
   const distDir = path.join(process.cwd(), 'dist');
   if (fs.existsSync(distDir)) {
@@ -131,7 +172,27 @@ Sitemap: ${baseUrl}/sitemap-main.xml
     fs.writeFileSync(path.join(distDir, 'sitemap-main.xml'), mainXml, 'utf8');
     fs.writeFileSync(path.join(distDir, 'sitemap-stories.xml'), storiesXml, 'utf8');
     fs.writeFileSync(path.join(distDir, 'robots.txt'), robotsContent, 'utf8');
-    console.log(`[Sitemap] Synced sitemaps and robots.txt to dist/ successfully.`);
+
+    const distApiDir = path.join(distDir, 'api-data');
+    const distStoryDir = path.join(distApiDir, 'story');
+    if (!fs.existsSync(distStoryDir)) {
+      fs.mkdirSync(distStoryDir, { recursive: true });
+    }
+    fs.writeFileSync(path.join(distApiDir, 'catalog.json'), catalogStr, 'utf8');
+    fs.writeFileSync(path.join(distApiDir, 'categories.json'), JSON.stringify(categories), 'utf8');
+
+    for (const s of stories) {
+      const payload = JSON.stringify(s);
+      const slugKey = (s.slug || s.id || '').trim().replace(/\//g, '_');
+      const idKey = (s.id || '').trim().replace(/\//g, '_');
+      if (slugKey) {
+        fs.writeFileSync(path.join(distStoryDir, `${slugKey}.json`), payload, 'utf8');
+      }
+      if (idKey && idKey !== slugKey) {
+        fs.writeFileSync(path.join(distStoryDir, `${idKey}.json`), payload, 'utf8');
+      }
+    }
+    console.log(`[Sitemap & API Data] Synced sitemaps, robots.txt, and api-data to dist/ successfully.`);
   }
 }
 

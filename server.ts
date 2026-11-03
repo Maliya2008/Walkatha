@@ -18,8 +18,57 @@ async function startServer() {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
+  // In-memory stories cache from data/database.json
+  let databaseStories: any[] = [];
+  let databaseCategories: any[] = [];
+  const storySlugMap = new Map<string, any>();
+
+  try {
+    const dbFilePath = path.resolve(process.cwd(), 'data', 'database.json');
+    if (fs.existsSync(dbFilePath)) {
+      const dbData = JSON.parse(fs.readFileSync(dbFilePath, 'utf8'));
+      databaseStories = dbData.stories || [];
+      databaseCategories = dbData.categories || [];
+      for (const s of databaseStories) {
+        if (s.slug) storySlugMap.set(String(s.slug).trim().toLowerCase(), s);
+        if (s.id) storySlugMap.set(String(s.id).trim().toLowerCase(), s);
+      }
+      console.log(`[Database Loaded] ${databaseStories.length} stories, ${databaseCategories.length} categories.`);
+    }
+  } catch (err) {
+    console.warn('[Database Load Warning]:', err);
+  }
+
+  // API route: Stories catalog
+  app.get('/api/stories', (req, res) => {
+    const limit = parseInt(String(req.query.limit || '1000'), 10);
+    const category = String(req.query.category || 'all');
+    let list = databaseStories;
+    if (category && category !== 'all') {
+      list = list.filter((s) => (s.category || '').toLowerCase().includes(category.toLowerCase()));
+    }
+    res.json({
+      total: list.length,
+      data: list.slice(0, limit),
+    });
+  });
+
+  // API route: Single story by slug or id
+  app.get('/api/story/:slug', (req, res) => {
+    const raw = req.params.slug;
+    const clean = decodeURIComponent(raw).trim().toLowerCase();
+    const story = storySlugMap.get(clean);
+    if (story) {
+      return res.json({ story });
+    }
+    res.status(404).json({ error: 'Story not found' });
+  });
+
   // API route: Categories
   app.get('/api/categories', (_req, res) => {
+    if (databaseCategories.length > 0) {
+      return res.json({ categories: databaseCategories });
+    }
     res.json({
       categories: [
         { id: 'all', name: 'All Stories', sinhalaName: 'සියලු කතා' },

@@ -350,6 +350,20 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
         {/* 320x50 In-Page Story Ad Banner */}
         <AdBanner320x50 />
 
+        {/* Sponsored Special Direct Link */}
+        <div className="my-4 text-center">
+          <a
+            href="https://asiaso.org/4/a42f0d62a73d3849fff5623bad9ff5dd"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center gap-2 w-full sm:w-auto px-5 py-3 rounded-xl bg-gradient-to-r from-rose-600 via-pink-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-bold text-sm shadow-md hover:shadow-lg transition-all duration-200"
+          >
+            <span>🔥</span>
+            <span>තවත් විශේෂ අලුත් කතා සහ වීඩියෝ බලන්න (Click Here)</span>
+            <span>✨</span>
+          </a>
+        </div>
+
         {/* Related Stories */}
         {relatedStories && relatedStories.length > 0 && (
           <div className="space-y-3 pt-2">

@@ -87,17 +87,22 @@ export function App() {
       setIsNotFound(false);
       setStaticPageType(null);
 
-      const path = currentPath;
+      // Parse current location pathname and search query
+      const fullUrl = new URL(currentPath, window.location.origin);
+      const cleanPathname = fullUrl.pathname.replace(/\/+$/, '') || '/';
+      const pageQueryParam = fullUrl.searchParams.get('page');
+      let pageNum = pageQueryParam ? parseInt(pageQueryParam, 10) : 1;
+      if (isNaN(pageNum) || pageNum < 1) pageNum = 1;
 
       // 1. Admin Route
-      if (path.startsWith('/admin')) {
+      if (cleanPathname === '/admin' || cleanPathname.startsWith('/admin/')) {
         SEOService.updateHead({ title: 'Admin Control Center', noIndex: true });
         setIsLoading(false);
         return;
       }
 
-      // 2. Categories Route
-      if (path === '/categories') {
+      // 2. Categories Overview Route
+      if (cleanPathname === '/categories') {
         SEOService.updateHead({
           title: 'කතා වර්ගීකරණ (Categories)',
           description: 'Explore all category grids on Walkathawa (වල් කතාව).',
@@ -108,37 +113,37 @@ export function App() {
       }
 
       // 3. Static Informational Pages
-      if (path === '/privacy') {
+      if (cleanPathname === '/privacy') {
         setStaticPageType('privacy');
         SEOService.updateHead({ title: 'Privacy Policy | Walkathawa', description: 'Privacy Policy & Cookie Policy' });
         setIsLoading(false);
         return;
       }
-      if (path === '/terms') {
+      if (cleanPathname === '/terms') {
         setStaticPageType('terms');
         SEOService.updateHead({ title: 'Terms and Conditions | Walkathawa', description: 'Terms of Service' });
         setIsLoading(false);
         return;
       }
-      if (path === '/dmca') {
+      if (cleanPathname === '/dmca') {
         setStaticPageType('dmca');
         SEOService.updateHead({ title: 'DMCA Copyright Notice | Walkathawa', description: 'DMCA Takedown and Copyright Notices' });
         setIsLoading(false);
         return;
       }
-      if (path === '/about') {
+      if (cleanPathname === '/about') {
         setStaticPageType('about');
         SEOService.updateHead({ title: 'About Us | Walkathawa', description: 'About Walkathawa Sinhala Stories' });
         setIsLoading(false);
         return;
       }
-      if (path === '/contact') {
+      if (cleanPathname === '/contact') {
         setStaticPageType('contact');
         SEOService.updateHead({ title: 'Contact Us | Walkathawa', description: 'Contact Walkathawa Editorial Desk' });
         setIsLoading(false);
         return;
       }
-      if (path === '/disclaimer') {
+      if (cleanPathname === '/disclaimer') {
         setStaticPageType('disclaimer');
         SEOService.updateHead({ title: 'Disclaimer | Walkathawa', description: 'Disclaimer & Advertising Policy' });
         setIsLoading(false);
@@ -146,19 +151,33 @@ export function App() {
       }
 
       // 4. Sitemap / Archives Route
-      if (path === '/sitemap' || path === '/archives') {
+      if (cleanPathname === '/sitemap' || cleanPathname === '/archives') {
         setIsSitemapOpen(true);
         SEOService.updateHead(SEOService.generateArchivesSEO());
       }
 
-      // 5. Single Story View: /story/:slug or /posts/:slug
-      if (path.startsWith('/story/') || path.startsWith('/posts/')) {
-        const prefix = path.startsWith('/story/') ? '/story/' : '/posts/';
-        const rawSlug = path.replace(prefix, '').split('?')[0];
-        const slug = decodeURIComponent(rawSlug);
+      // 5. Check for Page Number Routes e.g. /page/2
+      if (cleanPathname.startsWith('/page/')) {
+        const pageStr = cleanPathname.replace('/page/', '');
+        const parsedP = parseInt(pageStr, 10);
+        if (!isNaN(parsedP) && parsedP > 0) {
+          pageNum = parsedP;
+        }
+      }
 
-        if (slug) {
-          const storyData = await StoryService.getStoryBySlug(slug);
+      // 6. Single Story View vs Numeric Pagination Route (/story/:slug or /posts/:slug)
+      if (cleanPathname.startsWith('/story/') || cleanPathname.startsWith('/posts/')) {
+        const prefix = cleanPathname.startsWith('/story/') ? '/story/' : '/posts/';
+        const rawSlug = cleanPathname.replace(prefix, '');
+        const decodedSlug = decodeURIComponent(rawSlug).trim();
+
+        // Check if the part after /posts/ is purely numeric (e.g. /posts/2)
+        const isNumericPage = /^\d+$/.test(decodedSlug);
+
+        if (isNumericPage && cleanPathname.startsWith('/posts/')) {
+          pageNum = parseInt(decodedSlug, 10);
+        } else if (decodedSlug) {
+          const storyData = await StoryService.getStoryBySlug(decodedSlug);
           if (!isCancelled) {
             if (storyData) {
               setActiveStory(storyData);
@@ -186,21 +205,26 @@ export function App() {
         }
       }
 
-      // 6. Category Route: /category/:categorySlug
+      // 7. Category Route: /category/:categorySlug
       let categorySlug = 'all';
-      if (path.startsWith('/category/')) {
-        categorySlug = decodeURIComponent(path.replace('/category/', '').split('?')[0]);
-      } else if (path !== '/' && path !== '/posts' && path !== '/latest' && path !== '/popular' && path !== '/sitemap' && path !== '/archives') {
+      if (cleanPathname.startsWith('/category/')) {
+        categorySlug = decodeURIComponent(cleanPathname.replace('/category/', ''));
+      } else if (
+        cleanPathname !== '/' &&
+        cleanPathname !== '/posts' &&
+        cleanPathname !== '/latest' &&
+        cleanPathname !== '/popular' &&
+        cleanPathname !== '/sitemap' &&
+        cleanPathname !== '/archives' &&
+        !cleanPathname.startsWith('/page/') &&
+        !cleanPathname.startsWith('/posts/')
+      ) {
         // Unknown route -> 404
         setIsNotFound(true);
         SEOService.updateHead({ title: '404 - පිටුව හමු නොවීය | Walkathawa', noIndex: true });
         setIsLoading(false);
         return;
       }
-
-      // Extract query parameters (?page=2)
-      const urlParams = new URLSearchParams(window.location.search);
-      const pageNum = parseInt(urlParams.get('page') || '1', 10);
 
       setSelectedCategory(categorySlug);
       setCurrentPage(pageNum);

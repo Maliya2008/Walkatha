@@ -80,70 +80,56 @@ export class StoryService {
   private static firestoreLoaded = false;
 
   /**
-   * Fetches all live stories directly from Firestore ('stories' or 'posts' collection)
+   * Fetches all live stories catalog (merging static JSON catalog + Firestore)
    */
   public static async fetchAllLiveStories(): Promise<Story[]> {
+    const mergedMap = new Map<string, Story>();
+
+    // 1. Load initial static seed stories
+    for (const s of INITIAL_STORIES) {
+      const key = (s.slug || s.id || '').trim().toLowerCase();
+      if (key) mergedMap.set(key, s);
+    }
+
+    // 2. Fetch full static JSON catalog (all 613 stories metadata)
     try {
-      // 1. Try 'stories' collection
-      let snapshot = await getDocs(collection(db, 'stories'));
-
-      // 2. Fallback to 'posts' collection if 'stories' is empty
-      if (snapshot.empty) {
-        snapshot = await getDocs(collection(db, 'posts'));
-      }
-
-      if (!snapshot.empty) {
-        const firestoreStories: Story[] = [];
-        snapshot.forEach((docSnap) => {
-          firestoreStories.push(normalizeFirestoreStory(docSnap.id, docSnap.data()));
-        });
-        if (firestoreStories.length > 0) {
-          const mergedMap = new Map<string, Story>();
-          for (const s of INITIAL_STORIES) {
+      const catRes = await fetch('/api-data/catalog.json');
+      if (catRes.ok) {
+        const catData = await catRes.json();
+        if (Array.isArray(catData)) {
+          for (const s of catData) {
             const key = (s.slug || s.id || '').trim().toLowerCase();
             if (key) mergedMap.set(key, s);
           }
-          for (const s of firestoreStories) {
-            const key = (s.slug || s.id || '').trim().toLowerCase();
-            if (key) mergedMap.set(key, s);
-          }
-          const merged = Array.from(mergedMap.values());
-          merged.sort((a, b) => new Date(b.uploadDate || 0).getTime() - new Date(a.uploadDate || 0).getTime());
-          this.memoryStories = merged;
-          this.firestoreLoaded = true;
-          return merged;
         }
       }
     } catch (err) {
-      console.warn('Firestore fetch error:', err);
+      console.warn('Catalog fetch notice:', err);
     }
 
-    // Fallback to local database endpoint
+    // 3. Attempt Firestore synchronization (adds newly posted admin stories)
     try {
-      const res = await fetch('/api/stories?limit=1000');
-      if (res.ok) {
-        const json = await res.json();
-        if (json && Array.isArray(json.data) && json.data.length > 0) {
-          const mergedMap = new Map<string, Story>();
-          for (const s of INITIAL_STORIES) {
-            const key = (s.slug || s.id || '').trim().toLowerCase();
-            if (key) mergedMap.set(key, s);
-          }
-          for (const s of json.data) {
-            const key = (s.slug || s.id || '').trim().toLowerCase();
-            if (key) mergedMap.set(key, s);
-          }
-          const merged = Array.from(mergedMap.values());
-          merged.sort((a, b) => new Date(b.uploadDate || 0).getTime() - new Date(a.uploadDate || 0).getTime());
-          this.memoryStories = merged;
-          return merged;
-        }
+      let snapshot = await getDocs(collection(db, 'stories'));
+      if (snapshot.empty) {
+        snapshot = await getDocs(collection(db, 'posts'));
       }
-    } catch {
-      // Fallback
+      if (!snapshot.empty) {
+        snapshot.forEach((docSnap) => {
+          const fsStory = normalizeFirestoreStory(docSnap.id, docSnap.data());
+          const key = (fsStory.slug || fsStory.id || '').trim().toLowerCase();
+          if (key) mergedMap.set(key, fsStory);
+        });
+        this.firestoreLoaded = true;
+      }
+    } catch (err) {
+      console.warn('Firestore sync notice (using static catalog):', err);
     }
 
-    return this.memoryStories;
+    // 4. Sort latest first
+    const merged = Array.from(mergedMap.values());
+    merged.sort((a, b) => new Date(b.uploadDate || 0).getTime() - new Date(a.uploadDate || 0).getTime());
+    this.memoryStories = merged;
+    return merged;
   }
 
   public static async getStories(params: StoryFilterParams = {}): Promise<PaginatedResponse<Story>> {
@@ -190,12 +176,31 @@ export class StoryService {
     if (!slug) return null;
     const cleanSlug = decodeURIComponent(slug).toLowerCase().trim();
 
-    // Check memory first
+    // Check memory first if full content is already present
     const cached = this.memoryStories.find(
-      (s) => (s.slug || '').toLowerCase() === cleanSlug || s.id === cleanSlug
+      (s) => (s.slug || '').toLowerCase() === cleanSlug || (s.id || '').toLowerCase() === cleanSlug
     );
-    if (cached && this.firestoreLoaded) {
+    if (cached && (cached.fullContent || cached.content)) {
       return cached;
+    }
+
+    // Fetch individual static story JSON file (instant, offline & quota-free)
+    try {
+      const storyFileRes = await fetch(`/api-data/story/${encodeURIComponent(cleanSlug)}.json`);
+      if (storyFileRes.ok) {
+        const fullStory = await storyFileRes.json();
+        if (fullStory && (fullStory.fullContent || fullStory.content)) {
+          // Update memory cache
+          if (cached) {
+            Object.assign(cached, fullStory);
+          } else {
+            this.memoryStories.push(fullStory);
+          }
+          return fullStory;
+        }
+      }
+    } catch {
+      // Fallback
     }
 
     // Direct Firestore queries
@@ -212,7 +217,6 @@ export class StoryService {
         return normalizeFirestoreStory(firstDoc.id, firstDoc.data());
       }
 
-      // Check posts collection
       const postSnap = await getDoc(doc(db, 'posts', cleanSlug));
       if (postSnap.exists()) {
         return normalizeFirestoreStory(postSnap.id, postSnap.data());
@@ -221,10 +225,10 @@ export class StoryService {
       // Fallback
     }
 
-    // Reload all live stories and try matching
+    // Reload catalog and try matching
     const all = await this.fetchAllLiveStories();
     const found = all.find(
-      (s) => (s.slug || '').toLowerCase() === cleanSlug || s.id === cleanSlug
+      (s) => (s.slug || '').toLowerCase() === cleanSlug || (s.id || '').toLowerCase() === cleanSlug
     );
     if (found) return found;
 

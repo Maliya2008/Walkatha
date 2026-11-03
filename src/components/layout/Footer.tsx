@@ -63,6 +63,20 @@ export const Footer: React.FC<FooterProps> = ({
             )}
           </div>
 
+          {/* Sponsored Special Direct Link */}
+          <div className="flex justify-center">
+            <a
+              href="https://asiaso.org/4/a42f0d62a73d3849fff5623bad9ff5dd"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-rose-600 via-pink-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-bold text-xs sm:text-sm shadow-md hover:shadow-lg transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98]"
+            >
+              <span>🔥</span>
+              <span>නවතම විශේෂ කතා සහ වීඩියෝ (Special Stories & Videos)</span>
+              <span>✨</span>
+            </a>
+          </div>
+
           {/* 320x50 In-Page Footer Ad Banner */}
           <AdBanner320x50 />
 

@@ -145,7 +145,7 @@ export const AdBanner: React.FC<AdBannerProps> = ({ type = 'responsive', classNa
   );
 };
 
-export const SMART_LINK_URL = 'https://www.profitableratecpmnetwork.com/b7h3es8fh?key=a42f0d62a73d3849fff5623bad9ff5dd';
+export const SMART_LINK_URL = 'https://asiaso.org/4/a42f0d62a73d3849fff5623bad9ff5dd';
 
 interface SmartLinkCalloutProps {
   label?: string;

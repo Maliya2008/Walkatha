@@ -3,6 +3,7 @@ Allow: /
 Allow: /story/
 Allow: /category/
 Allow: /categories
+Allow: /sitemap
 Disallow: /admin
 Disallow: /api/
 
@@ -16,5 +17,5 @@ Allow: /
 
 Host: https://www.walkathawa.site
 Sitemap: https://www.walkathawa.site/sitemap.xml
-Sitemap: https://www.walkathawa.site/sitemap-main.xml
 Sitemap: https://www.walkathawa.site/sitemap-stories.xml
+Sitemap: https://www.walkathawa.site/sitemap-main.xml

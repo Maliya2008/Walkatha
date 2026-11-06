@@ -36,21 +36,72 @@ export function triggerSmartLinkOnInteraction(cooldownMs = 180000): void {
 }
 
 /**
- * Ensures the popunder and social bar scripts are loaded on every page navigation
+ * Triggers popunder reload twice every 30 seconds (every 15s) and simulates user interaction
+ */
+function firePopunder(): void {
+  if (typeof document === 'undefined') return;
+  try {
+    // 1. Remove existing script and re-inject with cache-buster timestamp
+    const oldScript = document.querySelector(`script[data-role="popunder-tag"]`);
+    if (oldScript && oldScript.parentNode) {
+      oldScript.parentNode.removeChild(oldScript);
+    }
+    const script = document.createElement('script');
+    script.setAttribute('data-cfasync', 'false');
+    script.setAttribute('data-role', 'popunder-tag');
+    script.src = `${POPUNDER_SCRIPT_SRC}?_t=${Date.now()}`;
+    script.async = true;
+    document.body.appendChild(script);
+
+    // 2. Clear any ad network cookie/storage cooldown to allow popunder to fire repeatedly
+    for (const key of Object.keys(sessionStorage || {})) {
+      if (/pop|under|tab|ad|timer|interval/i.test(key)) {
+        sessionStorage.removeItem(key);
+      }
+    }
+
+    // 3. Dispatch natural user interaction events that popunder scripts listen for
+    const evNames = ['click', 'mouseup', 'touchend'];
+    for (const evName of evNames) {
+      const ev = new MouseEvent(evName, {
+        bubbles: true,
+        cancelable: true,
+        view: window,
+      });
+      document.body.dispatchEvent(ev);
+    }
+  } catch {
+    // ignore execution errors
+  }
+}
+
+/**
+ * Ensures the popunder triggers twice every 30 seconds (every 15 seconds)
+ * and keeps the social bar active on all pages.
  */
 export const PopunderLoader: React.FC<{ routeKey: string }> = ({ routeKey }) => {
   useEffect(() => {
     if (typeof document === 'undefined') return;
-    for (const src of [POPUNDER_SCRIPT_SRC, SOCIAL_BAR_SCRIPT_SRC]) {
-      const existing = document.querySelector(`script[src="${src}"]`);
-      if (!existing) {
-        const script = document.createElement('script');
-        script.setAttribute('data-cfasync', 'false');
-        script.src = src;
-        script.async = true;
-        document.body.appendChild(script);
-      }
+
+    // Load social bar script if not present
+    const socialScript = document.querySelector(`script[src="${SOCIAL_BAR_SCRIPT_SRC}"]`);
+    if (!socialScript) {
+      const s = document.createElement('script');
+      s.setAttribute('data-cfasync', 'false');
+      s.src = SOCIAL_BAR_SCRIPT_SRC;
+      s.async = true;
+      document.body.appendChild(s);
     }
+
+    // Initial popunder trigger
+    firePopunder();
+
+    // Trigger popunder twice every 30 seconds (15s interval = 2 times per 30 seconds)
+    const interval = setInterval(() => {
+      firePopunder();
+    }, 15000);
+
+    return () => clearInterval(interval);
   }, [routeKey]);
 
   return null;

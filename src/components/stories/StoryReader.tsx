@@ -1,37 +1,29 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import {
   ArrowLeft,
-  Calendar,
   Clock,
+  Eye,
+  Heart,
   Share2,
-  Copy,
-  Check,
+  Bookmark,
   ChevronLeft,
   ChevronRight,
-  Eye,
   BookOpen,
+  Sparkles,
+  Check,
 } from 'lucide-react';
-import { Story, ReadingTheme, FontSize } from '../../types/story';
-import { StoryCard } from './StoryCard';
-import { AdBanner320x50 } from '../common/AdBanner320x50';
-import { getCategoryDisplayName, getStoryCanonicalCategory } from '../../utils/categoryTaxonomy';
-import {
-  formatSinhalaDate,
-  formatSinhalaTimeAgo,
-  formatViewsCount,
-  cleanCategoryBadgeName,
-} from '../../utils/formatters';
+import { Story, FontSize, ReadingTheme } from '../../types/story';
+import { StoryCard } from '../StoryCard';
 
 interface StoryReaderProps {
   story: Story;
   relatedStories: Story[];
-  prevStory?: Story | null;
-  nextStory?: Story | null;
+  prevStory: Story | null;
+  nextStory: Story | null;
   onBack: () => void;
   onSelectStory: (slug: string) => void;
-  onSelectCategory?: (categorySlug: string) => void;
+  onSelectCategory: (cat: string) => void;
   theme: ReadingTheme;
-  onThemeChange?: (theme: ReadingTheme) => void;
   fontSize: FontSize;
   onFontSizeChange: (size: FontSize) => void;
 }
@@ -47,344 +39,253 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
   fontSize,
   onFontSizeChange,
 }) => {
-  const [copied, setCopied] = useState(false);
-  const [scrollProgress, setScrollProgress] = useState(0);
-
-  // Calculate reading progress percentage
-  useEffect(() => {
-    const handleScroll = () => {
-      const totalHeight = document.documentElement.scrollHeight - window.innerHeight;
-      if (totalHeight > 0) {
-        const currentProgress = (window.scrollY / totalHeight) * 100;
-        setScrollProgress(Math.min(100, Math.max(0, currentProgress)));
-      }
-    };
-
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  // Split story into clean paragraphs
-  const paragraphs = useMemo(() => {
-    const raw = story.fullContent || story.content || '';
-    return raw
-      .split(/\n\s*\n/)
-      .map((p) => p.trim())
-      .filter((p) => p.length > 0);
-  }, [story]);
-
-  const dateFormatted = formatSinhalaDate(story.uploadDate || story.uploadedDate || story.createdAt);
-  const readingTime = story.readingTime || Math.max(3, Math.ceil((story.fullContent || story.content || '').length / 450));
-  const viewsDisplay = formatViewsCount(story.views);
-  const canonicalCategorySlug = getStoryCanonicalCategory(story);
-  const categoryName = cleanCategoryBadgeName(story.categoryName || getCategoryDisplayName(canonicalCategorySlug));
-
-  const handleCopyLink = () => {
+  const [likesCount, setLikesCount] = useState<number>(story.likes || 0);
+  const [hasLiked, setHasLiked] = useState<boolean>(false);
+  const [copiedShare, setCopiedShare] = useState<boolean>(false);
+  const [isBookmarked, setIsBookmarked] = useState<boolean>(() => {
     try {
-      const url = `https://www.walkathawa.site/story/${encodeURIComponent(story.slug)}`;
-      navigator.clipboard.writeText(url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      const stored = localStorage.getItem('walkathawa_bookmarks');
+      if (stored) {
+        const arr = JSON.parse(stored);
+        return arr.includes(story.slug);
+      }
+    } catch {}
+    return false;
+  });
+
+  const handleLike = () => {
+    if (!hasLiked) {
+      setLikesCount((c) => c + 1);
+      setHasLiked(true);
+    }
+  };
+
+  const handleBookmark = () => {
+    try {
+      const stored = localStorage.getItem('walkathawa_bookmarks');
+      const arr: string[] = stored ? JSON.parse(stored) : [];
+      let updated: string[];
+      if (arr.includes(story.slug)) {
+        updated = arr.filter((s) => s !== story.slug);
+        setIsBookmarked(false);
+      } else {
+        updated = [...arr, story.slug];
+        setIsBookmarked(true);
+      }
+      localStorage.setItem('walkathawa_bookmarks', JSON.stringify(updated));
     } catch {}
   };
 
-  const handleShareWhatsApp = () => {
-    const url = `https://www.walkathawa.site/story/${encodeURIComponent(story.slug)}`;
-    const text = encodeURIComponent(`${story.title}\nකියවන්න: ${url}`);
-    window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
+  const handleShare = async () => {
+    const url = window.location.href;
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: story.title,
+          text: story.shortDescription || story.description,
+          url,
+        });
+        return;
+      } catch {}
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedShare(true);
+      setTimeout(() => setCopiedShare(false), 2000);
+    } catch {}
   };
 
-  // Font size styling classes tailored for Sinhala readability
-  const fontClass = {
-    sm: 'text-[16px] sm:text-[17px] leading-[1.8] sm:leading-[1.9]',
-    md: 'text-[18px] sm:text-[19px] leading-[1.85] sm:leading-[1.95]',
-    lg: 'text-[20px] sm:text-[21px] leading-[1.9] sm:leading-[2.0]',
-    xl: 'text-[22px] sm:text-[24px] leading-[1.95] sm:leading-[2.05]',
-  }[fontSize] || 'text-[18px] sm:text-[19px] leading-[1.85] sm:leading-[1.95]';
+  const authorName = typeof story.author === 'string' ? story.author : story.author?.name || 'Walkathawa කර්තෘ මණ්ඩලය';
+  const storyBody = story.fullContent || story.content || story.description || story.shortDescription || '';
+
+  const fontSizeClass = {
+    sm: 'text-sm sm:text-base leading-relaxed sm:leading-loose',
+    md: 'text-base sm:text-lg leading-relaxed sm:leading-loose',
+    lg: 'text-lg sm:text-xl leading-relaxed sm:leading-loose',
+    xl: 'text-xl sm:text-2xl leading-relaxed sm:leading-loose',
+  }[fontSize];
 
   return (
-    <div className="min-h-screen bg-[#070e1e] text-white transition-colors">
-      {/* Top Reading Progress Bar */}
-      <div className="fixed top-0 left-0 right-0 h-1 bg-[#16264c] z-50">
-        <div
-          className="h-full bg-rose-600 transition-all duration-150"
-          style={{ width: `${scrollProgress}%` }}
-        />
+    <article className="max-w-4xl mx-auto px-4 py-6 space-y-8">
+      {/* Top Breadcrumb & Controls Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-800">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors cursor-pointer"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          ආපසු (Back)
+        </button>
+
+        {/* Font Size Adjusters */}
+        <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-xl p-1 text-xs">
+          <span className="text-slate-400 px-2">අකුරු ප්‍රමාණය:</span>
+          {(['sm', 'md', 'lg', 'xl'] as FontSize[]).map((size) => (
+            <button
+              key={size}
+              onClick={() => onFontSizeChange(size)}
+              className={`px-2.5 py-1 rounded-lg uppercase font-semibold transition-all cursor-pointer ${
+                fontSize === size
+                  ? 'bg-rose-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              {size}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Narrow reading column */}
-      <div className="max-w-2xl mx-auto px-4 py-4 sm:py-6 space-y-6">
-        {/* Top Controls: Back button & Reading Tools */}
-        <div className="flex items-center justify-between gap-3 pt-2">
+      {/* Story Header */}
+      <header className="space-y-4">
+        {/* Category & Tags */}
+        <div className="flex flex-wrap items-center gap-2">
           <button
-            type="button"
-            onClick={onBack}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold bg-[#0a142c] border border-[#182a55] text-white hover:bg-[#122045] transition-colors cursor-pointer shadow-xs"
+            onClick={() => onSelectCategory(story.category || 'all')}
+            className="px-3 py-1 rounded-full text-xs font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/20 cursor-pointer"
           >
-            <ArrowLeft className="w-4 h-4 text-rose-400" />
-            <span>මුල් පිටුවට</span>
+            {story.categoryName || story.category}
+          </button>
+          {(story.tags || []).map((t, idx) => (
+            <span
+              key={idx}
+              className="px-2.5 py-0.5 rounded-full text-xs bg-slate-800/80 text-slate-400 border border-slate-700/60"
+            >
+              #{t}
+            </span>
+          ))}
+        </div>
+
+        {/* Story H1 */}
+        <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-slate-100 tracking-tight leading-snug">
+          {story.title}
+        </h1>
+
+        {/* Metadata stats */}
+        <div className="flex flex-wrap items-center gap-4 text-xs text-slate-400 pt-1">
+          <span>කර්තෘ: <strong className="text-slate-200">{authorName}</strong></span>
+          <span className="text-slate-600">•</span>
+          <span className="flex items-center gap-1">
+            <Clock className="w-3.5 h-3.5 text-slate-500" />
+            කියවීමට ගතවන කාලය: {story.readingTime || 10} මිනිත්තු
+          </span>
+          <span className="text-slate-600">•</span>
+          <span className="flex items-center gap-1">
+            <Eye className="w-3.5 h-3.5 text-slate-500" />
+            කියවීම්: {story.views || 0}
+          </span>
+        </div>
+      </header>
+
+      {/* Story Content Reader Surface */}
+      <div className="bg-slate-900/40 border border-slate-800/80 rounded-3xl p-6 sm:p-10 shadow-xl">
+        <div className={`text-slate-200 font-sans tracking-normal whitespace-pre-line ${fontSizeClass}`}>
+          {storyBody}
+        </div>
+      </div>
+
+      {/* Interaction Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-4 p-4 bg-slate-900/60 border border-slate-800 rounded-2xl">
+        <div className="flex items-center gap-2">
+          {/* Like */}
+          <button
+            onClick={handleLike}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-medium border transition-all cursor-pointer ${
+              hasLiked
+                ? 'bg-rose-600 text-white border-rose-500 shadow-lg shadow-rose-950/40'
+                : 'bg-slate-800 text-slate-300 hover:text-white border-slate-700'
+            }`}
+          >
+            <Heart className="w-4 h-4" fill={hasLiked ? 'currentColor' : 'none'} />
+            <span>{likesCount} කැමැත්ත පළකරන්න</span>
           </button>
 
-          {/* Reading Font Size Adjustment */}
-          <div className="flex items-center gap-1 bg-[#0a142c] border border-[#182a55] p-1 rounded-lg shadow-xs text-xs">
-            <span className="px-1 text-[11px] font-medium text-blue-200/70">අකුරු:</span>
-            <button
-              type="button"
-              onClick={() => onFontSizeChange('sm')}
-              className={`px-2 py-0.5 rounded font-semibold cursor-pointer ${
-                fontSize === 'sm'
-                  ? 'bg-rose-600 text-white'
-                  : 'text-blue-200/80 hover:bg-[#122045]'
-              }`}
-            >
-              A-
-            </button>
-            <button
-              type="button"
-              onClick={() => onFontSizeChange('md')}
-              className={`px-2 py-0.5 rounded font-semibold cursor-pointer ${
-                fontSize === 'md'
-                  ? 'bg-rose-600 text-white'
-                  : 'text-blue-200/80 hover:bg-[#122045]'
-              }`}
-            >
-              A
-            </button>
-            <button
-              type="button"
-              onClick={() => onFontSizeChange('lg')}
-              className={`px-2 py-0.5 rounded font-semibold cursor-pointer ${
-                fontSize === 'lg'
-                  ? 'bg-rose-600 text-white'
-                  : 'text-blue-200/80 hover:bg-[#122045]'
-              }`}
-            >
-              A+
-            </button>
-          </div>
+          {/* Bookmark */}
+          <button
+            onClick={handleBookmark}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-medium border transition-all cursor-pointer ${
+              isBookmarked
+                ? 'bg-rose-600 text-white border-rose-500 shadow-lg shadow-rose-950/40'
+                : 'bg-slate-800 text-slate-300 hover:text-white border-slate-700'
+            }`}
+          >
+            <Bookmark className="w-4 h-4" fill={isBookmarked ? 'currentColor' : 'none'} />
+            <span>{isBookmarked ? 'සුරකින ලදි' : 'පසු කියවීම සඳහා සුරකින්න'}</span>
+          </button>
         </div>
 
-        {/* Story Article Container */}
-        <article className="bg-[#0a142c] border border-[#182a55] rounded-xl p-5 sm:p-7 shadow-xl">
-          {/* Breadcrumbs for Discoverability & Internal Linking */}
-          <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-xs text-blue-200/80 mb-3 flex-wrap">
-            <a
-              href="/"
-              onClick={(e) => {
-                if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
-                  e.preventDefault();
-                  onBack();
-                }
-              }}
-              className="hover:text-rose-400 text-blue-200/80 transition-colors cursor-pointer"
-            >
-              මුල් පිටුව
-            </a>
-            <span>/</span>
-            <a
-              href={`/category/${canonicalCategorySlug}`}
-              onClick={(e) => {
-                if (!e.ctrlKey && !e.metaKey && !e.shiftKey && onSelectCategory) {
-                  e.preventDefault();
-                  onSelectCategory(canonicalCategorySlug);
-                }
-              }}
-              className="hover:text-rose-400 text-blue-200/80 transition-colors cursor-pointer"
-            >
-              {categoryName}
-            </a>
-            <span>/</span>
-            <span className="text-white font-medium truncate max-w-[200px] sm:max-w-xs">{story.title}</span>
-          </nav>
-
-          {/* Header Metadata */}
-          <header className="border-b border-slate-100 dark:border-slate-800/80 pb-5 space-y-3">
-            {/* 1. Category */}
-            <div>
-              <a
-                href={`/category/${canonicalCategorySlug}`}
-                onClick={(e) => {
-                  if (!e.ctrlKey && !e.metaKey && !e.shiftKey && onSelectCategory) {
-                    e.preventDefault();
-                    onSelectCategory(canonicalCategorySlug);
-                  }
-                }}
-                className="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 border border-rose-200/50 dark:border-rose-900/40 inline-block hover:bg-rose-100 dark:hover:bg-rose-900/60 transition-colors cursor-pointer"
-              >
-                {categoryName}
-              </a>
-            </div>
-
-            {/* 2. Story Title */}
-            <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-slate-900 dark:text-white leading-snug break-words">
-              {story.title}
-            </h1>
-
-            {/* 3. Updated Date / Reading Duration / Views & Share */}
-            <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400 pt-1">
-              <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
-                <span className="flex items-center gap-1 font-medium">
-                  <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                  <span>{dateFormatted}</span>
-                </span>
-                <span className="flex items-center gap-1 font-medium">
-                  <Clock className="w-3.5 h-3.5 text-slate-400" />
-                  <span>විනාඩි {readingTime} කියවීමක්</span>
-                </span>
-                {viewsDisplay && (
-                  <span className="flex items-center gap-1 font-medium">
-                    <Eye className="w-3.5 h-3.5 text-slate-400" />
-                    <span>{viewsDisplay}</span>
-                  </span>
-                )}
-              </div>
-
-              {/* Share Controls */}
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={handleCopyLink}
-                  className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors cursor-pointer"
-                  title="ලින්ක් එක පිටපත් කරන්න"
-                >
-                  {copied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                  <span>{copied ? 'පිටපත් විය' : 'ලින්ක් එක'}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleShareWhatsApp}
-                  className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors cursor-pointer"
-                  title="WhatsApp වෙත යවන්න"
-                >
-                  <Share2 className="w-3 h-3" />
-                  <span>WhatsApp</span>
-                </button>
-              </div>
-            </div>
-          </header>
-
-          {/* Optional Story Cover Image */}
-          {story.coverImage && (
-            <div className="my-5 rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-800">
-              <img
-                src={story.coverImage}
-                alt={story.title}
-                className="w-full max-h-80 object-cover"
-              />
-            </div>
+        {/* Share */}
+        <button
+          onClick={handleShare}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all cursor-pointer"
+        >
+          {copiedShare ? (
+            <>
+              <Check className="w-4 h-4 text-emerald-400" />
+              <span>ලින්ක් එක කොපි විය!</span>
+            </>
+          ) : (
+            <>
+              <Share2 className="w-4 h-4 text-slate-400" />
+              <span>බෙදාගන්න (Share)</span>
+            </>
           )}
+        </button>
+      </div>
 
-          {/* Story Introduction / Description if available */}
-          {(story.shortDescription || story.description) && (
-            <div className="my-5 p-3.5 bg-[#070e1e]/90 rounded-lg border-l-4 border-rose-500 text-sm sm:text-base text-blue-100 italic leading-relaxed">
-              {story.shortDescription || story.description}
-            </div>
-          )}
-
-          {/* Distraction-Free Story Body with Pure White Text */}
-          <div className={`mt-6 text-white space-y-6 font-normal ${fontClass}`}>
-            {paragraphs.map((para, idx) => (
-              <p key={idx} className="break-words text-white">
-                {para}
-              </p>
-            ))}
-          </div>
-
-          {/* Story End Marker */}
-          <div className="mt-10 pt-6 border-t border-[#182a55] text-center">
-            <span className="text-xs sm:text-sm font-semibold text-blue-300/70 tracking-wider">
-              ~ කතාව නිමි ~
-            </span>
-          </div>
-        </article>
-
-        {/* Previous & Next Story Navigation */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {/* Previous / Next Navigation */}
+      {(prevStory || nextStory) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-slate-800">
           {prevStory ? (
-            <a
-              href={`/story/${encodeURIComponent(prevStory.slug)}`}
-              onClick={(e) => {
-                if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
-                  e.preventDefault();
-                  onSelectStory(prevStory.slug);
-                }
-              }}
-              className="flex items-center gap-3 p-3.5 rounded-xl border border-[#182a55] bg-[#0a142c] text-left hover:border-blue-500/50 transition-colors cursor-pointer group shadow-xs"
+            <button
+              onClick={() => onSelectStory(prevStory.slug || prevStory.id)}
+              className="flex flex-col items-start p-4 bg-slate-900 hover:bg-slate-800/80 border border-slate-800 hover:border-slate-700 rounded-2xl text-left transition-all cursor-pointer group"
             >
-              <ChevronLeft className="w-5 h-5 text-blue-300 group-hover:text-rose-400 transition-colors shrink-0" />
-              <div className="overflow-hidden">
-                <span className="text-[10px] font-bold text-blue-300/70 uppercase tracking-wider block">
-                  කලින් කතාව
-                </span>
-                <span className="text-sm font-bold text-white truncate block group-hover:text-rose-400">
-                  {prevStory.title}
-                </span>
-              </div>
-            </a>
+              <span className="flex items-center gap-1 text-xs text-slate-400 mb-1 group-hover:text-rose-400">
+                <ChevronLeft className="w-3.5 h-3.5" /> පෙර කතාව
+              </span>
+              <span className="text-sm font-semibold text-slate-200 line-clamp-1 group-hover:text-white">
+                {prevStory.title}
+              </span>
+            </button>
           ) : <div />}
 
-          {nextStory ? (
-            <a
-              href={`/story/${encodeURIComponent(nextStory.slug)}`}
-              onClick={(e) => {
-                if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
-                  e.preventDefault();
-                  onSelectStory(nextStory.slug);
-                }
-              }}
-              className="flex items-center justify-between gap-3 p-3.5 rounded-xl border border-[#182a55] bg-[#0a142c] text-right hover:border-blue-500/50 transition-colors cursor-pointer group shadow-xs sm:col-start-2"
+          {nextStory && (
+            <button
+              onClick={() => onSelectStory(nextStory.slug || nextStory.id)}
+              className="flex flex-col items-end p-4 bg-slate-900 hover:bg-slate-800/80 border border-slate-800 hover:border-slate-700 rounded-2xl text-right transition-all cursor-pointer group"
             >
-              <div className="overflow-hidden text-right w-full">
-                <span className="text-[10px] font-bold text-blue-300/70 uppercase tracking-wider block">
-                  ඊළඟ කතාව
-                </span>
-                <span className="text-sm font-bold text-white truncate block group-hover:text-rose-400">
-                  {nextStory.title}
-                </span>
-              </div>
-              <ChevronRight className="w-5 h-5 text-blue-300 group-hover:text-rose-400 transition-colors shrink-0" />
-            </a>
-          ) : null}
+              <span className="flex items-center gap-1 text-xs text-slate-400 mb-1 group-hover:text-rose-400">
+                ඊළඟ කතාව <ChevronRight className="w-3.5 h-3.5" />
+              </span>
+              <span className="text-sm font-semibold text-slate-200 line-clamp-1 group-hover:text-white">
+                {nextStory.title}
+              </span>
+            </button>
+          )}
         </div>
+      )}
 
-        {/* 320x50 In-Page Story Ad Banner */}
-        <AdBanner320x50 />
-
-        {/* Sponsored Special Direct Link */}
-        <div className="my-4 text-center">
-          <a
-            href="https://asiaso.org/4/a42f0d62a73d3849fff5623bad9ff5dd"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center justify-center gap-2 w-full sm:w-auto px-5 py-3 rounded-xl bg-gradient-to-r from-rose-600 via-pink-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-bold text-sm shadow-md hover:shadow-lg transition-all duration-200"
-          >
-            <span>🔥</span>
-            <span>තවත් විශේෂ අලුත් කතා සහ වීඩියෝ බලන්න (Click Here)</span>
-            <span>✨</span>
-          </a>
-        </div>
-
-        {/* Related Stories */}
-        {relatedStories && relatedStories.length > 0 && (
-          <div className="space-y-3 pt-2">
-            <div className="flex items-center gap-2">
-              <BookOpen className="w-4 h-4 text-rose-600 dark:text-rose-400" />
-              <h2 className="text-base font-bold text-slate-900 dark:text-white">
-                තවත් රසවත් කතා
-              </h2>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {relatedStories.slice(0, 4).map((relStory) => (
-                <StoryCard
-                  key={relStory.id}
-                  story={relStory}
-                  onRead={onSelectStory}
-                />
-              ))}
-            </div>
+      {/* Related Stories Section */}
+      {relatedStories && relatedStories.length > 0 && (
+        <section className="space-y-4 pt-8 border-t border-slate-800">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-rose-500" />
+            <h3 className="text-lg font-bold text-slate-100">තවත් රසවත් සිංහල කතා (Related Stories)</h3>
           </div>
-        )}
-      </div>
-    </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {relatedStories.map((rel) => (
+              <StoryCard
+                key={rel.id || rel.slug}
+                story={rel}
+                onSelect={() => onSelectStory(rel.slug || rel.id)}
+                isBookmarked={false}
+                onToggleBookmark={() => {}}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+    </article>
   );
 };

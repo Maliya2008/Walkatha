@@ -1,199 +1,90 @@
 import React from 'react';
-import { Home, ShieldCheck, FileText, Info, Mail, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Shield, FileText, Info, Mail, AlertTriangle } from 'lucide-react';
 
 interface StaticPageProps {
   pageType: 'privacy' | 'terms' | 'dmca' | 'about' | 'contact' | 'disclaimer';
   onNavigateHome: () => void;
 }
 
-export const StaticPage: React.FC<StaticPageProps> = ({
-  pageType,
-  onNavigateHome,
-}) => {
-  const getPageConfig = () => {
-    switch (pageType) {
-      case 'privacy':
-        return {
-          icon: <ShieldCheck className="w-6 h-6 text-indigo-500" />,
-          title: 'Privacy Policy & Cookie Disclosures',
-          sinhalaTitle: 'පුද්ගලිකත්ව ප්‍රතිපත්තිය',
-          content: (
-            <>
-              <p className="leading-relaxed">
-                Walkathawa (වල් කතාව) respects the privacy of every reader and contributor. This Privacy Policy outlines our guidelines regarding data collection, cookies, and local browsing data.
-              </p>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white mt-6 mb-2">1. Information Collection</h3>
-              <p className="leading-relaxed">
-                We do not require users to register or submit personal identifying information simply to read stories. Any reading preferences (such as dark mode, text size, and read history) are stored locally in your browser&apos;s localStorage and are never sent to external tracking servers.
-              </p>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white mt-6 mb-2">2. Cookies and Storage</h3>
-              <p className="leading-relaxed">
-                We use standard, anonymous browser cookies and local storage tokens solely to maintain your preferred UI theme and reader settings. Third-party advertising networks that serve ads on this platform may use non-identifying cookies to serve relevant advertisements.
-              </p>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white mt-6 mb-2">3. User Submissions</h3>
-              <p className="leading-relaxed">
-                Writers submitting stories through our admin submission desk acknowledge that their submitted fiction becomes public content upon editorial review. Authors retain copyright of their creative writing.
-              </p>
-            </>
-          ),
-        };
-      case 'terms':
-        return {
-          icon: <FileText className="w-6 h-6 text-rose-500" />,
-          title: 'Terms and Conditions of Use',
-          sinhalaTitle: 'සේවා කොන්දේසි',
-          content: (
-            <>
-              <p className="leading-relaxed">
-                Welcome to Walkathawa (වල් කතාව). By accessing this website, reading stories, or interacting with our platform, you agree to comply with the following Terms and Conditions.
-              </p>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white mt-6 mb-2">1. Adult Content & Age Restriction</h3>
-              <p className="leading-relaxed">
-                This platform publishes adult fiction, romantic literature, and mature stories intended exclusively for audiences of legal age (18+). If you are under 18 years of age or offended by adult fictional themes, please exit immediately.
-              </p>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white mt-6 mb-2">2. Fictional Nature of Content</h3>
-              <p className="leading-relaxed">
-                All names, characters, places, and events published across our story collections are strictly products of author imagination or used fictitiously. Any resemblance to real persons, living or dead, or actual events is purely coincidental.
-              </p>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white mt-6 mb-2">3. Intellectual Property</h3>
-              <p className="leading-relaxed">
-                Content published on Walkathawa may not be automatedly scraped, redistributed, republished, or sold without prior written consent from the editorial staff and respective authors.
-              </p>
-            </>
-          ),
-        };
-      case 'dmca':
-        return {
-          icon: <AlertTriangle className="w-6 h-6 text-amber-500" />,
-          title: 'DMCA & Copyright Notice',
-          sinhalaTitle: 'ප්‍රකාශන හිමිකම් සහ DMCA',
-          content: (
-            <>
-              <p className="leading-relaxed">
-                Walkathawa respects the intellectual property rights of writers, artists, and creators. We strictly adhere to the provisions of the Digital Millennium Copyright Act (DMCA).
-              </p>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white mt-6 mb-2">Takedown Request Process</h3>
-              <p className="leading-relaxed">
-                If you believe your copyrighted literary work or art has been published on this platform without authorization, please submit a formal DMCA takedown request containing:
-              </p>
-              <ul className="list-disc pl-5 mt-2 space-y-2">
-                <li>Identification of the copyrighted work claimed to have been infringed.</li>
-                <li>The exact URL on Walkathawa where the infringing material is located.</li>
-                <li>Your contact information (name, address, email address).</li>
-                <li>A statement of good faith belief that the disputed use is not authorized by the copyright owner.</li>
-              </ul>
-              <p className="mt-4 leading-relaxed">
-                Submit DMCA notices directly to: <span className="font-mono text-rose-500">mchethiyabandara@gmail.com</span>. We review and remove verified infringing material within 24–48 hours.
-              </p>
-            </>
-          ),
-        };
-      case 'about':
-        return {
-          icon: <Info className="w-6 h-6 text-sky-500" />,
-          title: 'About Walkathawa',
-          sinhalaTitle: 'අප ගැන (About Us)',
-          content: (
-            <>
-              <p className="leading-relaxed">
-                Walkathawa (වල් කතාව) is Sri Lanka’s premier digital Sinhala story platform, dedicated to publishing contemporary Sinhala creative literature, romantic novels, drama series, and engaging short stories.
-              </p>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white mt-6 mb-2">Our Mission</h3>
-              <p className="leading-relaxed">
-                Our mission is to provide Sinhala fiction enthusiasts with a modern, high-speed, and beautifully formatted reader experience. Featuring dark mode, adjustable typography, responsive layouts, and curated category collections, Walkathawa delivers distraction-free reading on all mobile and desktop devices.
-              </p>
-            </>
-          ),
-        };
-      case 'contact':
-        return {
-          icon: <Mail className="w-6 h-6 text-emerald-500" />,
-          title: 'Contact Editorial Desk',
-          sinhalaTitle: 'සම්බන්ධ වන්න (Contact Us)',
-          content: (
-            <>
-              <p className="leading-relaxed">
-                We value feedback, story contributions, partnerships, and editorial inquiries.
-              </p>
-              <div className="p-4 rounded-xl bg-[#070e1e] border border-[#16264c] mt-4 space-y-2">
-                <p className="text-sm font-semibold text-white">Email Address:</p>
-                <p className="font-mono text-rose-400 text-sm">mchethiyabandara@gmail.com</p>
-                <p className="text-xs text-blue-200/70 mt-2">
-                  Responses typically sent within 24 to 48 business hours.
-                </p>
-              </div>
-            </>
-          ),
-        };
-      case 'disclaimer':
-      default:
-        return {
-          icon: <AlertTriangle className="w-6 h-6 text-amber-500" />,
-          title: 'Disclaimer & Advertising Policy',
-          sinhalaTitle: 'වගකීම් පැහැර හැරීම (Disclaimer)',
-          content: (
-            <>
-              <p className="leading-relaxed">
-                The content published on Walkathawa (වල් කතාව) is meant strictly for entertainment purposes for consenting adults.
-              </p>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white mt-6 mb-2">Third-Party Advertisements</h3>
-              <p className="leading-relaxed">
-                Advertisements displayed on this website are delivered by third-party ad networks. Walkathawa does not explicitly endorse external products, services, or destinations advertised through banners or sponsored links.
-              </p>
-            </>
-          ),
-        };
-    }
-  };
+export const StaticPage: React.FC<StaticPageProps> = ({ pageType, onNavigateHome }) => {
+  const content = {
+    privacy: {
+      title: 'Privacy Policy (පුද්ගලිකත්ව ප්‍රතිපත්තිය)',
+      icon: <Shield className="w-5 h-5 text-rose-500" />,
+      body: `Walkathawa (වල් කතාව) ඔබගේ පුද්ගලිකත්වයට සහ දත්ත ආරක්ෂාවට ඉහළින්ම ගරු කරයි.
 
-  const config = getPageConfig();
+1. තොරතුරු රැස්කිරීම: අප පරිශීලකයන්ගේ පුද්ගලික තොරතුරු (නම, ලිපිනය, දුරකථන අංක) අනිවාර්යයෙන් රැස් නොකරයි. පරිශීලක රුචිකත්වයන් මත පදනම් වූ දත්ත (කියවූ කතා, තේමා වර්ණය, අකුරු ප්‍රමාණය) ඔබගේ උපාංගය තුළ පමණක් (Local Storage) සුරැකේ.
+2. කුකීස් සහ වෙබ් බීකන්ස්: වෙබ් අඩවියේ වේගය සහ ක්‍රියාකාරීත්වය වැඩිදියුණු කිරීමට කුකීස් භාවිත විය හැක.
+3. තෙවන පාර්ශව සබැඳි: බාහිර වෙබ් අඩවි හෝ දැන්වීම් සබැඳි පිළිබඳ වගකීම අප සතු නොවේ.`,
+    },
+    terms: {
+      title: 'Terms of Service (සේවා කොන්දේසි)',
+      icon: <FileText className="w-5 h-5 text-rose-500" />,
+      body: `Walkathawa වෙබ් අඩවිය භාවිතා කිරීමෙන් ඔබ පහත කොන්දේසි වලට එකඟ වේ:
+
+1. වයස් සීමාව: මෙම වෙබ් අඩවියේ පළවන සමහර සාහිත්‍ය නිර්මාණ සහ කතා වැඩිහිටියන් (18+) සඳහා පමණක් සීමා වේ. වයස අවුරුදු 18ට අඩු පුද්ගලයින් මෙම වෙබ් අඩවිය පරිශීලනය කිරීමෙන් වැළකී සිටිය යුතුය.
+2. ප්‍රකාශන හිමිකම: මෙහි පළවන නිර්මාණවල හිමිකාරිත්වය මුල් කතුවරුන් සතු වන අතර අනවසර පිටපත් කිරීම සපුරා තහනම් වේ.
+3. අන්තර්ගත භාවිතය: සියලු කතා හුදෙක් විනෝදාස්වාදය සහ සාහිත්‍ය රසවින්දනය සඳහා පමණක් පළකෙරේ.`,
+    },
+    dmca: {
+      title: 'DMCA Copyright Notice',
+      icon: <FileText className="w-5 h-5 text-amber-500" />,
+      body: `Walkathawa respects the intellectual property rights of authors and content creators.
+
+If you are a copyright owner or an agent thereof and believe that any content posted on Walkathawa infringes upon your copyright, you may submit a written DMCA notice to us.
+
+Please include:
+1. Identification of the copyrighted work claimed to have been infringed.
+2. The exact URL or slug where the material is located.
+3. Your contact information (name, email address).
+4. A statement of good faith belief that the disputed use is not authorized by the copyright owner.
+
+Upon receipt of a valid notice, we will investigate and expeditiously remove or disable access to the infringing material.`,
+    },
+    about: {
+      title: 'About Walkathawa (අප ගැන)',
+      icon: <Info className="w-5 h-5 text-rose-500" />,
+      body: `Walkathawa (වල් කතාව) යනු ශ්‍රී ලාංකික රසිකයන් සඳහා වෙන්වූ අන්තර්ජාල සිංහල කතා කියවීමේ ප්‍රමුඛතම වේදිකාවයි.
+
+අපගේ අරමුණ වන්නේ පාඨකයන්ට පිරිසිදු, සුවපහසු සහ නවීන තාක්ෂණයෙන් යුත් කියවීමේ අත්දැකීමක් නොමිලේ ලබාදීමයි. විවිධ කාණ්ඩ යටතේ දිනපතා යාවත්කාලීන වන කතා සිය ගණනක් මෙහි අන්තර්ගත වේ.`,
+    },
+    contact: {
+      title: 'Contact Us (අප අමතන්න)',
+      icon: <Mail className="w-5 h-5 text-rose-500" />,
+      body: `Walkathawa සම්බන්ධයෙන් ඕනෑම විමසීමක්, යෝජනාවක් හෝ සහය සඳහා අපගේ කර්තෘ මණ්ඩලය සම්බන්ධ කරගත හැක.
+
+Email: contact@walkathawa.site
+Telegram: @walkathawa_official
+ප්‍රතිචාර කාලය: පැය 24-48 අතර වේ.`,
+    },
+    disclaimer: {
+      title: 'Disclaimer (වගකීම් ප්‍රකාශය)',
+      icon: <AlertTriangle className="w-5 h-5 text-amber-500" />,
+      body: `1. මෙහි පළවන සියලුම කතා සහ චරිත මනඃකල්පිත හෝ කතුවරුන් විසින් ලබාදුන් නිර්මාණ වේ.
+2. සැබෑ ජීවිතයේ පුද්ගලයන් හෝ සිදුවීම් සමග යම් සමානකමක් වේ නම් එය හුදෙක් අහඹු සිදුවීමක් පමණි.
+3. වැඩිහිටි පාඨකයන් සඳහා වන නිර්මාණ පිළිබඳ පාඨකයාගේම අභිමතය පරිදි කියවිය යුතුය.`,
+    },
+  }[pageType];
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 animate-fadeIn">
-      {/* Breadcrumbs */}
-      <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-xs sm:text-sm text-blue-200/70 mb-6">
-        <button
-          type="button"
-          onClick={onNavigateHome}
-          className="hover:text-rose-400 flex items-center gap-1 transition-colors cursor-pointer"
-        >
-          <Home className="w-4 h-4" />
-          <span>මුල් පිටුව (Home)</span>
-        </button>
-        <span>/</span>
-        <span className="text-white font-medium">{config.sinhalaTitle}</span>
-      </nav>
+    <div className="max-w-3xl mx-auto px-4 py-12 space-y-6">
+      <button
+        onClick={onNavigateHome}
+        className="flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors cursor-pointer"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        මුල් පිටුවට (Home)
+      </button>
 
-      {/* Header */}
-      <div className="flex items-center gap-3.5 pb-6 border-b border-[#16264c] mb-8">
-        <div className="p-3 rounded-2xl bg-[#0b1633] border border-[#16264c]">
-          {config.icon}
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-10 space-y-6 shadow-xl">
+        <div className="flex items-center gap-3 pb-4 border-b border-slate-800">
+          <div className="p-3 bg-slate-800 rounded-2xl">{content.icon}</div>
+          <h1 className="text-xl sm:text-2xl font-bold text-white">{content.title}</h1>
         </div>
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-            {config.title}
-          </h1>
-          <p className="text-sm text-blue-200/80 mt-0.5">
-            {config.sinhalaTitle} · Walkathawa (වල් කතාව)
-          </p>
+
+        <div className="text-sm text-slate-300 leading-relaxed whitespace-pre-line font-sans">
+          {content.body}
         </div>
-      </div>
-
-      {/* Body */}
-      <div className="bg-[#0a142c] border border-[#182a55] rounded-2xl p-6 sm:p-10 shadow-lg text-sm sm:text-base text-slate-100 space-y-4">
-        {config.content}
-      </div>
-
-      {/* Back button */}
-      <div className="mt-8 text-center">
-        <button
-          type="button"
-          onClick={onNavigateHome}
-          className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-white hover:bg-slate-100 text-slate-950 font-semibold text-sm transition-all cursor-pointer shadow-xs"
-        >
-          <Home className="w-4 h-4" />
-          <span>මුල් පිටුවට යන්න (Return to Home)</span>
-        </button>
       </div>
     </div>
   );

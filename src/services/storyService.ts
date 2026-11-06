@@ -1,255 +1,241 @@
-import { Category, PaginatedResponse, Story, StoryFilterParams } from '../types/story';
-import { INITIAL_CATEGORIES } from '../data/seedStories';
-import {
-  storyMatchesCategory,
-  getStoryCanonicalCategory,
-  getCategoryDisplayName,
-} from '../utils/categoryTaxonomy';
-import { db } from '../lib/firebase';
-import { collection, getDocs, doc, getDoc, query, where } from 'firebase/firestore';
+import { Story, Category, StoryQueryParams, PagedResult } from '../types/story';
 
-function matchesSearchQuery(s: Story, queryText: string): boolean {
-  if (!queryText) return true;
-  const q = queryText.toLowerCase().trim();
-  const title = (s.title || '').toLowerCase();
-  const desc = (s.shortDescription || s.description || '').toLowerCase();
-  const cat = (s.categoryName || s.category || '').toLowerCase();
-  const tags = (s.tags || []).map((t) => t.toLowerCase());
+let cachedStories: Story[] | null = null;
+let cachedCategories: Category[] | null = null;
 
-  if (title.includes(q) || desc.includes(q) || cat.includes(q) || tags.some((t) => t.includes(q))) {
-    return true;
-  }
-
-  const tokens = q.split(/\s+/).filter(Boolean);
-  return tokens.every((token) => {
-    return title.includes(token) || desc.includes(token) || cat.includes(token) || tags.some((t) => t.includes(token));
-  });
-}
-
-export function normalizeFirestoreStory(id: string, data: any): Story {
-  let uploadDate = new Date().toISOString();
-  if (data.uploadDate) {
-    if (typeof data.uploadDate.toDate === 'function') {
-      uploadDate = data.uploadDate.toDate().toISOString();
-    } else if (typeof data.uploadDate === 'string') {
-      uploadDate = data.uploadDate;
-    }
-  } else if (data.createdAt) {
-    if (typeof data.createdAt.toDate === 'function') {
-      uploadDate = data.createdAt.toDate().toISOString();
-    } else if (typeof data.createdAt === 'string') {
-      uploadDate = data.createdAt;
-    }
-  } else if (data.uploadedDate) {
-    if (typeof data.uploadedDate.toDate === 'function') {
-      uploadDate = data.uploadedDate.toDate().toISOString();
-    } else if (typeof data.uploadedDate === 'string') {
-      uploadDate = data.uploadedDate;
-    }
-  }
-
-  const fullContent = data.fullContent || data.content || data.body || '';
-  const shortDescription = data.shortDescription || data.description || data.synopsis || '';
-  const slug = data.slug || id;
-
-  return {
-    id: id || data.id || slug,
-    title: data.title || 'Untitled Story',
-    slug,
-    coverImage: data.coverImage || data.image || data.thumbnail || '',
-    shortDescription,
-    description: shortDescription,
-    fullContent,
-    content: fullContent,
-    category: data.category || 'all',
-    categoryName: data.categoryName || getCategoryDisplayName(data.category || 'all'),
-    categoryId: data.categoryId || data.category,
-    tags: Array.isArray(data.tags) ? data.tags : [],
-    uploadDate,
-    uploadedDate: uploadDate,
-    updatedDate: data.updatedDate || uploadDate,
-    featured: Boolean(data.featured),
-    published: data.published !== false,
-    views: Number(data.views || 0),
-    readingTime: data.readingTime || Math.max(3, Math.ceil(fullContent.length / 450)),
-  };
-}
+const DEFAULT_CATEGORIES: Category[] = [
+  { id: 'all', name: 'All Stories', sinhalaName: 'සියලු කතා', slug: 'all', description: 'සියලුම සිංහල කතා එකතුව' },
+  { id: 'wife', name: 'Wife Stories', sinhalaName: 'වයිෆ් / බිරිඳ', slug: 'wife', description: 'බිරිඳ සහ පවුලේ සත්‍ය අත්දැකීම් ඇසුරින් ලියවුණු කතා' },
+  { id: 'akka-malli', name: 'Akka Malli', sinhalaName: 'අක්කා - මල්ලි', slug: 'akka-malli', description: 'අක්කා මල්ලි සහ අසල්වැසි සබඳතා පිළිබඳ රසවත් කතා' },
+  { id: 'nanda', name: 'Nanda Stories', sinhalaName: 'නැන්දා / ඇන්ටි', slug: 'nanda', description: 'නැන්දා, ඇන්ටි සහ වැඩිහිටි ආදර කතා එකතුව' },
+  { id: 'school', name: 'School & Campus', sinhalaName: 'පාසල් සහ කැම්පස්', slug: 'school', description: 'පාසල්, පන්ති සහ ගුරු සිසු සබඳතා ඇසුරින් ලියවුණු කතා' },
+  { id: 'romantic', name: 'Romantic Stories', sinhalaName: 'ආදර කතා', slug: 'romantic', description: 'ආදරය, හැඟීම්බර සහ ආශාවන් පිරි කතා' },
+  { id: 'unconventional', name: 'Adult & Drama', sinhalaName: 'අසම්මත කතා', slug: 'unconventional', description: 'අසම්මත සහ නාට්‍යමය කතා' },
+  { id: 'short', name: 'Short Stories', sinhalaName: 'කෙටි කතා', slug: 'short', description: 'කෙටි රසවත් කතා' },
+  { id: 'novel', name: 'Series & Novels', sinhalaName: 'දිගු කතා මාලා', slug: 'novel', description: 'කොටස් වශයෙන් පළවන දීර්ඝ නවකතා' },
+];
 
 export class StoryService {
-  private static memoryStories: Story[] = [];
-  private static firestoreLoaded = false;
-
   /**
-   * Fetches all live stories directly from Firestore ('stories' or 'posts' collection)
+   * Fetch all categories
    */
-  public static async fetchAllLiveStories(): Promise<Story[]> {
-    const mergedMap = new Map<string, Story>();
+  static async getCategories(): Promise<Category[]> {
+    if (cachedCategories && cachedCategories.length > 0) {
+      return cachedCategories;
+    }
 
-    // Fetch live stories directly from Firestore
     try {
-      let snapshot = await getDocs(collection(db, 'stories'));
-      if (snapshot.empty) {
-        snapshot = await getDocs(collection(db, 'posts'));
-      }
-      if (!snapshot.empty) {
-        snapshot.forEach((docSnap) => {
-          const fsStory = normalizeFirestoreStory(docSnap.id, docSnap.data());
-          const key = (fsStory.slug || fsStory.id || '').trim().toLowerCase();
-          if (key) mergedMap.set(key, fsStory);
-        });
-        this.firestoreLoaded = true;
-      }
-    } catch (err) {
-      console.warn('Firestore fetch notice:', err);
-    }
-
-    // 3. Sort latest first
-    const merged = Array.from(mergedMap.values());
-    merged.sort((a, b) => new Date(b.uploadDate || 0).getTime() - new Date(a.uploadDate || 0).getTime());
-    this.memoryStories = merged;
-    return merged;
-  }
-
-  public static async getStories(params: StoryFilterParams = {}): Promise<PaginatedResponse<Story>> {
-    const page = Math.max(1, params.page || 1);
-    const limit = params.limit || 20; // Default 20 posts per view
-    const category = params.category || 'all';
-    const search = params.search || '';
-    const sortBy = params.sortBy || 'latest';
-
-    const allLive = await this.fetchAllLiveStories();
-    let all = allLive.filter((s) => s.published !== false);
-
-    if (category && category !== 'all') {
-      all = all.filter((s) => storyMatchesCategory(s, category));
-    }
-
-    if (search.trim()) {
-      all = all.filter((s) => matchesSearchQuery(s, search));
-    }
-
-    if (sortBy === 'oldest') {
-      all.sort((a, b) => new Date(a.uploadDate || 0).getTime() - new Date(b.uploadDate || 0).getTime());
-    } else {
-      // latest (default)
-      all.sort((a, b) => new Date(b.uploadDate || 0).getTime() - new Date(a.uploadDate || 0).getTime());
-    }
-
-    const total = all.length;
-    const totalPages = Math.ceil(total / limit) || 1;
-    const startIndex = (page - 1) * limit;
-    const paged = all.slice(startIndex, startIndex + limit);
-
-    return {
-      data: paged,
-      total,
-      page,
-      totalPages,
-      hasMore: page < totalPages,
-      limit,
-    };
-  }
-
-  public static async getStoryBySlug(slug: string): Promise<Story | null> {
-    if (!slug) return null;
-    const cleanSlug = decodeURIComponent(slug).toLowerCase().trim();
-
-    // Check memory first if full content is already present
-    const cached = this.memoryStories.find(
-      (s) => (s.slug || '').toLowerCase() === cleanSlug || (s.id || '').toLowerCase() === cleanSlug
-    );
-    if (cached && (cached.fullContent || cached.content)) {
-      return cached;
-    }
-
-    // Direct Firestore queries
-    try {
-      const docSnap = await getDoc(doc(db, 'stories', cleanSlug));
-      if (docSnap.exists()) {
-        const story = normalizeFirestoreStory(docSnap.id, docSnap.data());
-        if (cached) Object.assign(cached, story);
-        return story;
-      }
-
-      const q = query(collection(db, 'stories'), where('slug', '==', cleanSlug));
-      const qSnap = await getDocs(q);
-      if (!qSnap.empty) {
-        const firstDoc = qSnap.docs[0];
-        const story = normalizeFirestoreStory(firstDoc.id, firstDoc.data());
-        if (cached) Object.assign(cached, story);
-        return story;
-      }
-
-      const postSnap = await getDoc(doc(db, 'posts', cleanSlug));
-      if (postSnap.exists()) {
-        const story = normalizeFirestoreStory(postSnap.id, postSnap.data());
-        if (cached) Object.assign(cached, story);
-        return story;
-      }
-    } catch {
-      // Fallback
-    }
-
-    // Reload catalog and try matching
-    const all = await this.fetchAllLiveStories();
-    const found = all.find(
-      (s) => (s.slug || '').toLowerCase() === cleanSlug || (s.id || '').toLowerCase() === cleanSlug
-    );
-    if (found) return found;
-
-    return null;
-  }
-
-  public static async getRelatedStories(currentStory: Story, limit = 4): Promise<Story[]> {
-    if (!currentStory) return [];
-    const all = this.memoryStories.length > 0 ? this.memoryStories : await this.fetchAllLiveStories();
-    const currentCat = getStoryCanonicalCategory(currentStory);
-    const related = all.filter(
-      (s) => s.id !== currentStory.id && s.published !== false && storyMatchesCategory(s, currentCat)
-    );
-
-    if (related.length >= limit) {
-      return related.slice(0, limit);
-    }
-
-    const others = all.filter(
-      (s) => s.id !== currentStory.id && s.published !== false && !related.some((r) => r.id === s.id)
-    );
-    return [...related, ...others].slice(0, limit);
-  }
-
-  public static async getCategories(): Promise<Category[]> {
-    try {
-      const catRef = collection(db, 'categories');
-      const snap = await getDocs(catRef);
-      if (!snap.empty) {
-        const cats: Category[] = [];
-        snap.forEach((d) => {
-          const data = d.data();
-          cats.push({
-            id: d.id,
-            name: data.name || d.id,
-            slug: data.slug || d.id,
-            description: data.description || '',
-            storyCount: data.storyCount || 0,
-          });
-        });
-        if (cats.length > 0) {
-          if (!cats.some((c) => c.slug === 'all')) {
-            cats.unshift({
-              id: 'all',
-              name: 'සියලුම කතා (All Stories)',
-              slug: 'all',
-              description: 'සියලුම අලුත් සිංහල කතා සහ රසවත් කතා එකතුව',
+      const res = await fetch('/api-data/categories.json');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          // Merge with default categories if needed
+          const catMap = new Map<string, Category>();
+          DEFAULT_CATEGORIES.forEach((c) => catMap.set(c.id, c));
+          data.forEach((c: any) => {
+            const id = c.id || c.slug;
+            catMap.set(id, {
+              id,
+              name: c.name || id,
+              sinhalaName: c.sinhalaName || c.name || id,
+              slug: c.slug || id,
+              description: c.description || '',
+              storyCount: c.storyCount || 0,
             });
-          }
-          return cats;
+          });
+          cachedCategories = Array.from(catMap.values());
+          return cachedCategories;
         }
       }
     } catch {
-      // Fallback
+      // ignore network errors and fallback
     }
 
-    return INITIAL_CATEGORIES;
+    cachedCategories = DEFAULT_CATEGORIES;
+    return cachedCategories;
+  }
+
+  /**
+   * Fetch all live stories (cached in memory)
+   */
+  static async fetchAllLiveStories(): Promise<Story[]> {
+    if (cachedStories && cachedStories.length > 0) {
+      return cachedStories;
+    }
+
+    try {
+      const res = await fetch('/api-data/catalog.json');
+      if (res.ok) {
+        const rawList = await res.json();
+        if (Array.isArray(rawList)) {
+          cachedStories = rawList.map((s: any) => ({
+            id: s.id || s.slug,
+            title: s.title || 'නමක් නැති කතාව',
+            slug: s.slug || s.id,
+            shortDescription: s.shortDescription || s.description || '',
+            description: s.description || s.shortDescription || '',
+            excerpt: s.shortDescription || s.description || '',
+            content: s.content || s.fullContent || '',
+            fullContent: s.fullContent || s.content || '',
+            category: s.category || 'all',
+            categoryName: s.categoryName || '',
+            categoryId: s.categoryId || s.category || 'all',
+            tags: Array.isArray(s.tags) ? s.tags : [],
+            coverImage: s.coverImage || '',
+            views: Number(s.views) || 0,
+            likes: Number(s.likes) || 0,
+            readingTime: Number(s.readingTime) || 10,
+            readTime: `${Number(s.readingTime) || 10} min`,
+            author: s.author || 'Walkathawa',
+            featured: Boolean(s.featured),
+            published: s.published !== false,
+            uploadDate: s.uploadDate || s.uploadedDate || '2026-01-01',
+          }));
+          return cachedStories;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load /api-data/catalog.json:', e);
+    }
+
+    cachedStories = [];
+    return cachedStories;
+  }
+
+  /**
+   * Filtered & paginated query for stories
+   */
+  static async getStories(params: StoryQueryParams = {}): Promise<PagedResult<Story>> {
+    const all = await this.fetchAllLiveStories();
+    const { category = 'all', search = '', sortBy = 'latest', page = 1, limit = 20 } = params;
+
+    let filtered = [...all];
+
+    // Filter by category
+    if (category && category !== 'all') {
+      const lowerCat = category.toLowerCase();
+      filtered = filtered.filter((s) => {
+        const sCat = (s.category || '').toLowerCase();
+        const sCatId = (s.categoryId || '').toLowerCase();
+        const sTags = (s.tags || []).map((t) => t.toLowerCase());
+        return sCat === lowerCat || sCatId === lowerCat || sTags.includes(lowerCat);
+      });
+    }
+
+    // Filter by search query
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      filtered = filtered.filter((s) => {
+        const inTitle = (s.title || '').toLowerCase().includes(q);
+        const inDesc = (s.shortDescription || s.description || '').toLowerCase().includes(q);
+        const inTags = (s.tags || []).some((t) => t.toLowerCase().includes(q));
+        const inAuthor = typeof s.author === 'string' ? s.author.toLowerCase().includes(q) : s.author?.name?.toLowerCase().includes(q);
+        return inTitle || inDesc || inTags || inAuthor;
+      });
+    }
+
+    // Sort
+    if (sortBy === 'popular') {
+      filtered.sort((a, b) => (b.views || 0) - (a.views || 0));
+    } else if (sortBy === 'oldest') {
+      filtered.sort((a, b) => new Date(a.uploadDate || 0).getTime() - new Date(b.uploadDate || 0).getTime());
+    } else {
+      // latest
+      filtered.sort((a, b) => new Date(b.uploadDate || 0).getTime() - new Date(a.uploadDate || 0).getTime());
+    }
+
+    const total = filtered.length;
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+    const safePage = Math.min(Math.max(1, page), totalPages);
+    const start = (safePage - 1) * limit;
+    const data = filtered.slice(start, start + limit);
+
+    return {
+      data,
+      total,
+      totalPages,
+      currentPage: safePage,
+    };
+  }
+
+  /**
+   * Get story details by its slug or ID
+   */
+  static async getStoryBySlug(slug: string): Promise<Story | null> {
+    const all = await this.fetchAllLiveStories();
+    const decodedSlug = decodeURIComponent(slug).trim().toLowerCase();
+
+    const found = all.find(
+      (s) =>
+        s.slug.toLowerCase() === decodedSlug ||
+        s.id.toLowerCase() === decodedSlug ||
+        decodeURIComponent(s.slug).toLowerCase() === decodedSlug
+    );
+
+    let baseStory = found ? { ...found } : null;
+
+    // Fetch full story body from /api-data/story/${slug}.json if needed
+    try {
+      const candidates = [
+        `/api-data/story/${encodeURIComponent(slug)}.json`,
+        `/api-data/story/${slug}.json`,
+      ];
+      if (found) {
+        candidates.unshift(`/api-data/story/${encodeURIComponent(found.slug)}.json`);
+        candidates.unshift(`/api-data/story/${found.slug}.json`);
+        candidates.unshift(`/api-data/story/${found.id}.json`);
+      }
+
+      for (const url of candidates) {
+        try {
+          const res = await fetch(url);
+          if (res.ok) {
+            const fullData = await res.json();
+            if (fullData && (fullData.fullContent || fullData.content)) {
+              baseStory = {
+                ...(baseStory || {}),
+                ...fullData,
+                fullContent: fullData.fullContent || fullData.content,
+                content: fullData.fullContent || fullData.content,
+              } as Story;
+              break;
+            }
+          }
+        } catch {
+          // try next candidate
+        }
+      }
+    } catch (e) {
+      console.warn('Error reading story JSON:', e);
+    }
+
+    return baseStory;
+  }
+
+  /**
+   * Get related stories
+   */
+  static async getRelatedStories(story: Story, limit = 4): Promise<Story[]> {
+    const all = await this.fetchAllLiveStories();
+    const currentId = story.id;
+    const currentCat = (story.category || '').toLowerCase();
+    const currentTags = (story.tags || []).map((t) => t.toLowerCase());
+
+    const candidates = all.filter((s) => s.id !== currentId && s.slug !== story.slug);
+
+    // Score candidates based on category match and common tags
+    const scored = candidates.map((cand) => {
+      let score = 0;
+      if (cand.category && cand.category.toLowerCase() === currentCat) score += 5;
+      if (Array.isArray(cand.tags)) {
+        cand.tags.forEach((t) => {
+          if (currentTags.includes(t.toLowerCase())) score += 2;
+        });
+      }
+      return { story: cand, score };
+    });
+
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, limit).map((s) => s.story);
   }
 }

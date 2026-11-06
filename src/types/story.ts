@@ -2,64 +2,53 @@ export interface Story {
   id: string;
   title: string;
   slug: string;
-  excerpt?: string;
   shortDescription?: string;
   description?: string;
+  excerpt?: string;
+  content?: string;
   fullContent?: string;
-  content: string;
-  coverImage?: string;
   category: string;
   categoryName?: string;
   categoryId?: string;
-  author?: string | { name: string };
-  date?: string;
+  tags: string[];
+  coverImage?: string;
+  views: number;
+  likes?: number;
+  readingTime?: number;
+  readTime?: string;
+  author?: string | { name: string; avatar?: string };
+  featured?: boolean;
+  published?: boolean;
   uploadDate?: string;
   uploadedDate?: string;
   updatedDate?: string;
   createdAt?: string;
-  readTime?: string;
-  readingTime?: number;
-  views: number;
-  likes?: number;
-  tags: string[];
-  isFeatured?: boolean;
-  featured?: boolean;
-  published?: boolean;
 }
 
 export interface Category {
   id: string;
   name: string;
-  slug: string;
+  sinhalaName?: string;
+  slug?: string;
   description?: string;
   storyCount?: number;
   icon?: string;
-  sinhalaName?: string;
 }
 
-export interface StoryCategory extends Category {
-  sinhalaName: string;
-  icon: string;
-  count: number;
-}
+export type ReadingTheme = 'light' | 'dark' | 'sepia';
+export type FontSize = 'sm' | 'md' | 'lg' | 'xl';
 
-export interface PaginatedResponse<T> {
-  data: T[];
-  total: number;
-  page: number;
-  totalPages: number;
-  hasMore: boolean;
-  limit: number;
-}
-
-export interface StoryFilterParams {
-  page?: number;
-  limit?: number;
+export interface StoryQueryParams {
   category?: string;
   search?: string;
   sortBy?: 'latest' | 'popular' | 'oldest';
+  page?: number;
+  limit?: number;
 }
 
-export type ReadingTheme = 'navy' | 'dark' | 'light' | 'sepia';
-export type FontSize = 'sm' | 'md' | 'lg' | 'xl';
-export type FontFamily = 'sans' | 'serif' | 'sinhala';
+export interface PagedResult<T> {
+  data: T[];
+  total: number;
+  totalPages: number;
+  currentPage: number;
+}

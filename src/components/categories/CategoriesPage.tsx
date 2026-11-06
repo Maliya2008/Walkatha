@@ -1,81 +1,11 @@
-import React, { useState } from 'react';
-import {
-  BookOpen,
-  FolderTree,
-  ChevronLeft,
-  ChevronRight,
-  Heart,
-  Users,
-  GraduationCap,
-  Briefcase,
-  Home,
-  Flame,
-  Sparkles,
-  MapPin,
-  Compass,
-  Smile,
-  ShieldAlert,
-  MessageCircle,
-  Tv,
-  Clock,
-  TrendingUp,
-  Bookmark
-} from 'lucide-react';
+import React from 'react';
+import { ArrowLeft, BookOpen, ChevronRight, Grid } from 'lucide-react';
 import { Category } from '../../types/story';
-import { cleanCategoryBadgeName } from '../../utils/formatters';
 
 interface CategoriesPageProps {
   categories: Category[];
-  onSelectCategory: (categorySlug: string) => void;
+  onSelectCategory: (catSlug: string) => void;
   onNavigateHome: () => void;
-}
-
-// Icon mapping helper for categories
-function getCategoryIcon(slug: string) {
-  switch (slug) {
-    case 'all':
-      return <BookOpen className="w-5 h-5 text-rose-500" />;
-    case 'wife':
-      return <Heart className="w-5 h-5 text-pink-500" />;
-    case 'akka-malli':
-      return <Users className="w-5 h-5 text-indigo-500" />;
-    case 'nanda':
-      return <Flame className="w-5 h-5 text-amber-500" />;
-    case 'school':
-      return <GraduationCap className="w-5 h-5 text-emerald-500" />;
-    case 'romantic':
-      return <Sparkles className="w-5 h-5 text-purple-500" />;
-    case 'office':
-      return <Briefcase className="w-5 h-5 text-blue-500" />;
-    case 'neighbour':
-      return <Home className="w-5 h-5 text-teal-500" />;
-    case 'series':
-      return <Tv className="w-5 h-5 text-orange-500" />;
-    case 'short-stories':
-      return <Bookmark className="w-5 h-5 text-cyan-500" />;
-    case 'boarding':
-      return <Home className="w-5 h-5 text-lime-500" />;
-    case 'travel':
-      return <Compass className="w-5 h-5 text-sky-500" />;
-    case 'family':
-      return <Users className="w-5 h-5 text-amber-600" />;
-    case 'true-story':
-      return <ShieldAlert className="w-5 h-5 text-red-500" />;
-    case 'mystery':
-      return <MapPin className="w-5 h-5 text-violet-500" />;
-    case 'chat':
-      return <MessageCircle className="w-5 h-5 text-green-500" />;
-    case 'fantasy':
-      return <Sparkles className="w-5 h-5 text-fuchsia-500" />;
-    case 'drama':
-      return <Smile className="w-5 h-5 text-yellow-500" />;
-    case 'classic':
-      return <Clock className="w-5 h-5 text-slate-500" />;
-    case 'popular':
-      return <TrendingUp className="w-5 h-5 text-rose-600" />;
-    default:
-      return <FolderTree className="w-5 h-5 text-rose-500" />;
-  }
 }
 
 export const CategoriesPage: React.FC<CategoriesPageProps> = ({
@@ -83,183 +13,69 @@ export const CategoriesPage: React.FC<CategoriesPageProps> = ({
   onSelectCategory,
   onNavigateHome,
 }) => {
-  const [currentPage, setCurrentPage] = useState(1);
-  const [searchFilter, setSearchFilter] = useState('');
-
-  // 5 rows x 4 columns = 20 items per page
-  const ITEMS_PER_PAGE = 20;
-
-  // Filter categories by search term if provided
-  const filteredCategories = categories.filter((cat) => {
-    if (!searchFilter.trim()) return true;
-    const term = searchFilter.toLowerCase().trim();
-    return (
-      cat.name.toLowerCase().includes(term) ||
-      (cat.description && cat.description.toLowerCase().includes(term)) ||
-      cat.slug.toLowerCase().includes(term)
-    );
-  });
-
-  const totalPages = Math.max(1, Math.ceil(filteredCategories.length / ITEMS_PER_PAGE));
-  const activePage = Math.min(currentPage, totalPages);
-  const startIndex = (activePage - 1) * ITEMS_PER_PAGE;
-  const currentCategories = filteredCategories.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10 space-y-8 animate-fadeIn">
-      {/* Breadcrumb Navigation */}
-      <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-xs sm:text-sm text-blue-200/70">
+    <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
+      {/* Header & Back */}
+      <div className="flex items-center justify-between pb-4 border-b border-slate-800">
         <button
-          type="button"
           onClick={onNavigateHome}
-          className="hover:text-rose-400 flex items-center gap-1 transition-colors cursor-pointer"
+          className="flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors cursor-pointer"
         >
-          <Home className="w-4 h-4" />
-          <span>මුල් පිටුව (Home)</span>
+          <ArrowLeft className="w-4 h-4" />
+          මුල් පිටුවට (Home)
         </button>
-        <span>/</span>
-        <span className="text-white font-medium">කතා වර්ගීකරණ (Categories)</span>
-      </nav>
-
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-[#16264c]">
-        <div>
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-[#0b1633] border border-[#16264c] text-rose-400">
-              <FolderTree className="w-6 h-6" />
-            </div>
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-                කතා වර්ගීකරණ (Categories)
-              </h1>
-              <p className="text-sm text-blue-200/80 mt-1">
-                ඔබ කැමති ඕනෑම වර්ගීකරණයක් තෝරා රසවත් සිංහල කතා පහසුවෙන් කියවන්න.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Quick Search inside Categories */}
-        <div className="w-full sm:w-72">
-          <input
-            type="search"
-            value={searchFilter}
-            onChange={(e) => {
-              setSearchFilter(e.target.value);
-              setCurrentPage(1);
-            }}
-            placeholder="වර්ගීකරණය සොයන්න..."
-            className="w-full px-3.5 py-2 text-sm bg-[#0a142c] border border-[#182a55] rounded-xl focus:outline-hidden focus:border-blue-400 text-white placeholder-slate-400"
-          />
-        </div>
       </div>
 
-      {/* Grid: 5 rows by 4 columns (20 items per page on large screens) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5">
-        {currentCategories.map((category) => {
-          const icon = getCategoryIcon(category.slug);
-          const cleanName = cleanCategoryBadgeName(category.name);
+      <div className="space-y-2">
+        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20">
+          <Grid className="w-3.5 h-3.5" />
+          කතා වර්ගීකරණය
+        </div>
+        <h1 className="text-2xl sm:text-3xl font-extrabold text-white">
+          සියලු කතා වර්ගීකරණ (All Categories)
+        </h1>
+        <p className="text-sm text-slate-400">
+          ඔබ කැමති ශානරය තෝරාගෙන ඒ යටතේ ඇති සියලුම සිංහල කතා පහසුවෙන් කියවන්න.
+        </p>
+      </div>
 
-          return (
-            <a
-              key={category.id || category.slug}
-              href={`/category/${encodeURIComponent(category.slug)}`}
-              onClick={(e) => {
-                if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
-                  e.preventDefault();
-                  onSelectCategory(category.slug);
-                }
-              }}
-              className="group relative flex flex-col justify-between p-5 rounded-2xl bg-[#0b1633] border border-[#16264c] hover:border-blue-500/50 shadow-xs hover:shadow-md transition-all duration-200 cursor-pointer overflow-hidden text-left"
-            >
-              {/* Subtle accent hover background */}
-              <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-rose-500/10 to-transparent rounded-bl-full pointer-events-none transition-transform duration-300 group-hover:scale-125" />
+      {/* Categories Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 pt-4">
+        {categories.map((cat) => (
+          <div
+            key={cat.id || cat.slug}
+            onClick={() => onSelectCategory(cat.slug || cat.id)}
+            className="group p-6 bg-slate-900/60 hover:bg-slate-900 border border-slate-800 hover:border-rose-500/50 rounded-2xl cursor-pointer transition-all duration-200 hover:shadow-xl hover:shadow-rose-950/20 flex flex-col justify-between"
+          >
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20 flex items-center justify-center group-hover:scale-105 transition-transform">
+                  <BookOpen className="w-5 h-5" />
+                </div>
+                {cat.storyCount ? (
+                  <span className="text-xs px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 font-medium border border-slate-700">
+                    {cat.storyCount} කතා
+                  </span>
+                ) : null}
+              </div>
 
               <div>
-                {/* Category Icon & Story Count */}
-                <div className="flex items-center justify-between gap-2 mb-3.5">
-                  <div className="p-2.5 rounded-xl bg-[#111f44] border border-[#182a55] transition-colors group-hover:bg-[#162a5c] group-hover:border-rose-400/40">
-                    {icon}
-                  </div>
-                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-[#111f44] text-blue-200 group-hover:bg-rose-950/60 group-hover:text-rose-400 transition-colors">
-                    {typeof category.storyCount === 'number' ? `${category.storyCount} කතා` : 'කියවන්න'}
-                  </span>
-                </div>
-
-                {/* Category Titles */}
-                <h2 className="text-base sm:text-lg font-bold text-white group-hover:text-rose-400 transition-colors line-clamp-1">
-                  {cleanName}
-                </h2>
-                <span className="text-xs font-medium text-blue-300/80 block mt-0.5">
-                  {category.name}
-                </span>
-
-                {/* Category Description */}
-                <p className="text-xs text-slate-300 mt-2.5 line-clamp-2 leading-relaxed">
-                  {category.description || 'මෙම වර්ගීකරණය යටතේ ඇති නවතම සිංහල කතා කියවන්න.'}
+                <h3 className="text-lg font-bold text-slate-100 group-hover:text-rose-400 transition-colors">
+                  {cat.sinhalaName || cat.name}
+                </h3>
+                <p className="text-xs text-slate-400 mt-1 line-clamp-2">
+                  {cat.description || `${cat.name} කාණ්ඩයට අදාළ රසවත් කතා`}
                 </p>
               </div>
+            </div>
 
-              {/* Action Link Footer */}
-              <div className="mt-4 pt-3 border-t border-[#16264c] flex items-center justify-between text-xs font-semibold text-rose-400">
-                <span>කතා බලන්න</span>
-                <span className="transition-transform group-hover:translate-x-1">→</span>
-              </div>
-            </a>
-          );
-        })}
+            <div className="pt-4 mt-4 border-t border-slate-800/60 flex items-center justify-between text-xs text-rose-400 font-medium">
+              <span>කතා කියවන්න</span>
+              <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </div>
+        ))}
       </div>
-
-      {/* Empty State */}
-      {currentCategories.length === 0 && (
-        <div className="text-center py-16 px-4 rounded-2xl bg-[#0b1633] border border-[#16264c]">
-          <FolderTree className="w-12 h-12 mx-auto text-blue-300 mb-3" />
-          <h3 className="text-base font-bold text-white">කිසිදු වර්ගීකරණයක් හමු නොවීය</h3>
-          <p className="text-sm text-blue-200/80 mt-1">කරුණාකර වෙනත් සෙවුම් පදයක් භාවිතා කරන්න.</p>
-          <button
-            type="button"
-            onClick={() => setSearchFilter('')}
-            className="mt-4 px-4 py-2 bg-rose-600 text-white rounded-xl text-xs font-semibold cursor-pointer"
-          >
-            සියල්ල පෙන්වන්න
-          </button>
-        </div>
-      )}
-
-      {/* Pagination Controls (5 rows by 4 columns = 20 items per page) */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between pt-6 border-t border-[#16264c]">
-          <button
-            type="button"
-            disabled={activePage <= 1}
-            onClick={() => {
-              setCurrentPage((p) => Math.max(1, p - 1));
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-            className="inline-flex items-center gap-1 px-4 py-2 rounded-xl text-sm font-semibold bg-[#0b1633] border border-[#182a55] text-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#111f44] cursor-pointer transition-colors"
-          >
-            <ChevronLeft className="w-4 h-4" />
-            <span>පෙර පිටුව</span>
-          </button>
-
-          <span className="text-xs sm:text-sm font-medium text-blue-200/80">
-            පිටුව {activePage} / {totalPages} (එක් පිටුවකට වර්ග 20ක්)
-          </span>
-
-          <button
-            type="button"
-            disabled={activePage >= totalPages}
-            onClick={() => {
-              setCurrentPage((p) => Math.min(totalPages, p + 1));
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-            className="inline-flex items-center gap-1 px-4 py-2 rounded-xl text-sm font-semibold bg-[#0b1633] border border-[#182a55] text-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#111f44] cursor-pointer transition-colors"
-          >
-            <span>මීළඟ පිටුව</span>
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
-      )}
     </div>
   );
 };

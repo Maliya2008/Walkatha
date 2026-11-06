@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Search, Moon, Sun, Menu, X, Home, FolderTree, Compass, Sparkles } from 'lucide-react';
+import React from 'react';
+import { BookOpen, Search, Moon, Sun, Grid, FileText } from 'lucide-react';
 import { ReadingTheme } from '../../types/story';
 
 interface HeaderProps {
@@ -7,9 +7,9 @@ interface HeaderProps {
   onOpenCategories: () => void;
   theme: ReadingTheme;
   onToggleTheme: () => void;
-  onOpenSitemap?: () => void;
-  onToggleSearch?: () => void;
-  isSearchOpen?: boolean;
+  onOpenSitemap: () => void;
+  onToggleSearch: () => void;
+  isSearchOpen: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -19,223 +19,84 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleTheme,
   onOpenSitemap,
   onToggleSearch,
-  isSearchOpen = false,
+  isSearchOpen,
 }) => {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const menuBtnRef = useRef<HTMLButtonElement>(null);
-
-  // Close menu on outside click
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        menuRef.current &&
-        !menuRef.current.contains(event.target as Node) &&
-        menuBtnRef.current &&
-        !menuBtnRef.current.contains(event.target as Node)
-      ) {
-        setIsMenuOpen(false);
-      }
-    }
-
-    if (isMenuOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isMenuOpen]);
-
   return (
-    <header
-      id="main-app-header"
-      className="sticky top-0 z-40 w-full border-b border-slate-200/90 dark:border-slate-800 bg-white/95 dark:bg-slate-950/95 backdrop-blur-xs transition-colors duration-200"
-    >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-13 sm:h-14 flex items-center justify-between gap-2">
-        {/* Brand Logo & Name */}
-        <a
-          href="/"
-          id="brand-logo-btn"
-          onClick={(e) => {
-            if (!e.ctrlKey && !e.metaKey) {
-              e.preventDefault();
-              onHomeClick();
-              setIsMenuOpen(false);
-            }
-          }}
-          className="flex items-center gap-2.5 cursor-pointer select-none text-inherit no-underline min-w-0"
+    <header className="sticky top-0 z-40 bg-slate-900/90 dark:bg-slate-950/90 backdrop-blur-md border-b border-slate-800 transition-colors">
+      <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
+        {/* Brand */}
+        <button
+          onClick={onHomeClick}
+          className="flex items-center gap-2.5 text-left group cursor-pointer focus:outline-none"
         >
-          <div className="flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg overflow-hidden bg-slate-950 border border-slate-800 shrink-0">
-            <img
-              src="/icon.svg"
-              alt="Walkathawa Logo"
-              className="w-full h-full object-cover"
-              onError={(e) => {
-                (e.currentTarget as HTMLImageElement).src = '/icon.png';
-              }}
-            />
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-rose-600 to-amber-500 flex items-center justify-center text-white shadow-lg shadow-rose-950/40 group-hover:scale-105 transition-transform">
+            <BookOpen className="w-5 h-5" />
           </div>
-          <div className="truncate">
-            <span className="font-extrabold text-base sm:text-lg tracking-tight text-slate-900 dark:text-white leading-none flex items-center gap-1.5">
+          <div>
+            <div className="flex items-center gap-1.5 font-bold text-lg text-slate-100 tracking-tight leading-none">
               <span>Walkathawa</span>
-              <span className="text-xs sm:text-sm font-semibold text-rose-600 dark:text-rose-400 font-serif">
-                (වල් කතාව)
-              </span>
-            </span>
-          </div>
-        </a>
-
-        {/* Header Action Controls */}
-        <div className="relative flex items-center gap-1 sm:gap-1.5 shrink-0">
-          {/* Search Trigger */}
-          {onToggleSearch && (
-            <button
-              type="button"
-              id="header-search-btn"
-              onClick={onToggleSearch}
-              aria-label="සොයන්න (Search)"
-              className={`p-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer ${
-                isSearchOpen ? 'bg-slate-100 dark:bg-slate-800 text-rose-600 dark:text-rose-400' : ''
-              }`}
-              title="කතා සොයන්න"
-            >
-              <Search className="w-4 h-4" />
-            </button>
-          )}
-
-          {/* Theme Toggle Button */}
-          <button
-            type="button"
-            id="header-theme-toggle-btn"
-            onClick={onToggleTheme}
-            aria-label={theme === 'dark' ? 'ආලෝක තේමාවට මාරු වන්න (Switch to Light Mode)' : 'අඳුරු තේමාවට මාරු වන්න (Switch to Dark Mode)'}
-            className="p-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-all cursor-pointer"
-            title={theme === 'dark' ? 'ආලෝක තේමාව (Light Mode)' : 'අඳුරු තේමාව (Dark Mode)'}
-          >
-            {theme === 'dark' ? (
-              <Sun className="w-4 h-4 text-amber-400 pointer-events-none transition-transform duration-200" />
-            ) : (
-              <Moon className="w-4 h-4 text-slate-700 dark:text-slate-300 pointer-events-none transition-transform duration-200" />
-            )}
-          </button>
-
-          {/* Menu / Expansion Button in Top Right Corner */}
-          <button
-            ref={menuBtnRef}
-            type="button"
-            id="header-menu-btn"
-            onClick={() => setIsMenuOpen(!isMenuOpen)}
-            aria-label="මෙනුව විවෘත කරන්න (Main Menu)"
-            aria-expanded={isMenuOpen}
-            className={`p-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer ${
-              isMenuOpen ? 'bg-slate-100 dark:bg-slate-800 text-rose-600 dark:text-rose-400' : ''
-            }`}
-            title="මෙනුව"
-          >
-            {isMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
-          </button>
-
-          {/* Button Expansion Dropdown Menu */}
-          {isMenuOpen && (
-            <div
-              ref={menuRef}
-              className="absolute right-0 top-full mt-2 w-64 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-xl py-2 z-50 animate-fadeIn"
-            >
-              <div className="px-3 py-1.5 text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-                ප්‍රධාන මෙනුව (Navigation)
-              </div>
-
-              {/* 1. Home Redirection Option */}
-              <a
-                href="/"
-                onClick={(e) => {
-                  if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
-                    e.preventDefault();
-                    onHomeClick();
-                    setIsMenuOpen(false);
-                  }
-                }}
-                className="w-full flex items-center gap-3 px-3.5 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 dark:hover:text-rose-400 transition-colors text-left cursor-pointer group"
-              >
-                <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 group-hover:bg-rose-100 dark:group-hover:bg-rose-900/60 group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors">
-                  <Home className="w-4 h-4" />
-                </div>
-                <div>
-                  <div className="font-semibold leading-tight">මුල් පිටුව</div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400">Home Page</div>
-                </div>
-              </a>
-
-              {/* 2. Categories Redirection Option */}
-              <a
-                href="/categories"
-                onClick={(e) => {
-                  if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
-                    e.preventDefault();
-                    onOpenCategories();
-                    setIsMenuOpen(false);
-                  }
-                }}
-                className="w-full flex items-center gap-3 px-3.5 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 dark:hover:text-rose-400 transition-colors text-left cursor-pointer group"
-              >
-                <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 group-hover:bg-rose-100 dark:group-hover:bg-rose-900/60 group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors">
-                  <FolderTree className="w-4 h-4" />
-                </div>
-                <div>
-                  <div className="font-semibold leading-tight flex items-center gap-1.5">
-                    <span>කතා වර්ගීකරණ</span>
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-500 text-white">Grid</span>
-                  </div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400">Categories (5x4 Grids)</div>
-                </div>
-              </a>
-
-              {/* 3. Sitemap / Archives Option */}
-              {onOpenSitemap && (
-                <a
-                  href="/sitemap"
-                  onClick={(e) => {
-                    if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
-                      e.preventDefault();
-                      onOpenSitemap();
-                      setIsMenuOpen(false);
-                    }
-                  }}
-                  className="w-full flex items-center gap-3 px-3.5 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 dark:hover:text-rose-400 transition-colors text-left cursor-pointer group"
-                >
-                  <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 group-hover:bg-rose-100 dark:group-hover:bg-rose-900/60 group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors">
-                    <Compass className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="font-semibold leading-tight">සියලු කතා සූචිය</div>
-                    <div className="text-xs text-slate-500 dark:text-slate-400">Sitemap & Archives</div>
-                  </div>
-                </a>
-              )}
-
-              {/* Divider & Quick Theme Toggle in Menu */}
-              <div className="mt-1 pt-1 border-t border-slate-100 dark:border-slate-800 px-3.5 py-2 flex items-center justify-between text-xs text-slate-500">
-                <span>තේමාව (Theme):</span>
-                <button
-                  type="button"
-                  onClick={onToggleTheme}
-                  className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer transition-colors flex items-center gap-1.5"
-                >
-                  {theme === 'dark' ? (
-                    <>
-                      <Sun className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Light</span>
-                    </>
-                  ) : (
-                    <>
-                      <Moon className="w-3.5 h-3.5 text-slate-600" />
-                      <span>Dark</span>
-                    </>
-                  )}
-                </button>
-              </div>
+              <span className="text-xs px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400 font-medium">සිංහල</span>
             </div>
-          )}
+            <p className="text-xs text-slate-400 mt-0.5">වල් කතාව - රස කතා එකතුව</p>
+          </div>
+        </button>
+
+        {/* Desktop Quick Nav Links */}
+        <nav className="hidden md:flex items-center gap-3 text-sm font-medium">
+          <button
+            onClick={onHomeClick}
+            className="px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+          >
+            මුල් පිටුව
+          </button>
+          <button
+            onClick={onOpenCategories}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+          >
+            <Grid className="w-4 h-4 text-rose-400" />
+            වර්ගීකරණ
+          </button>
+          <button
+            onClick={onOpenSitemap}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+          >
+            <FileText className="w-4 h-4 text-amber-400" />
+            සමස්ත ලේඛනාගාරය
+          </button>
+        </nav>
+
+        {/* Right Action Icons */}
+        <div className="flex items-center gap-2">
+          {/* Toggle Search */}
+          <button
+            onClick={onToggleSearch}
+            className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
+              isSearchOpen
+                ? 'bg-rose-600 text-white border-rose-500 shadow-lg shadow-rose-950/30'
+                : 'bg-slate-800/80 hover:bg-slate-800 text-slate-300 hover:text-white border-slate-700/60'
+            }`}
+            title="කතා සොයන්න"
+          >
+            <Search className="w-4 h-4" />
+          </button>
+
+          {/* Categories for mobile */}
+          <button
+            onClick={onOpenCategories}
+            className="md:hidden p-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/60 transition-all cursor-pointer"
+            title="වර්ගීකරණ"
+          >
+            <Grid className="w-4 h-4" />
+          </button>
+
+          {/* Theme Switcher */}
+          <button
+            onClick={onToggleTheme}
+            className="p-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/60 transition-all cursor-pointer"
+            title="වර්ණ සැකසුම් (Dark / Light)"
+          >
+            {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-300" />}
+          </button>
         </div>
       </div>
     </header>

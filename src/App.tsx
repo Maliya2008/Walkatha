@@ -1,428 +1,312 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Header } from './components/layout/Header';
 import { Footer } from './components/layout/Footer';
 import { StoryGallery } from './components/stories/StoryGallery';
 import { StoryReader } from './components/stories/StoryReader';
 import { CategoriesPage } from './components/categories/CategoriesPage';
-import { AdminRoot } from './components/admin/AdminRoot';
-import { SitemapModal } from './components/common/SitemapModal';
-import { DesktopSideSkyscrapers } from './components/common/DesktopSideSkyscrapers';
-import { NotFoundPage } from './components/common/NotFoundPage';
 import { StaticPage } from './components/common/StaticPage';
+import { NotFoundPage } from './components/common/NotFoundPage';
+import { AdminRoot } from './components/admin/AdminRoot';
+import { Story, Category } from './types/story';
 import { StoryService } from './services/storyService';
-import { SEOService } from './services/seoService';
-import { Category, FontSize, ReadingTheme, Story } from './types/story';
+import { SeoService } from './services/seoService';
+import { testConnection } from './firebase';
+
+type ViewMode =
+  | 'home'
+  | 'reader'
+  | 'categories'
+  | 'about'
+  | 'privacy'
+  | 'terms'
+  | 'contact'
+  | 'not-found'
+  | 'admin';
 
 export function App() {
-  const [currentPath, setCurrentPath] = useState<string>(() => window.location.pathname);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [stories, setStories] = useState<Story[]>([]);
-  const [activeStory, setActiveStory] = useState<Story | null>(null);
-  const [relatedStories, setRelatedStories] = useState<Story[]>([]);
-  const [prevStory, setPrevStory] = useState<Story | null>(null);
-  const [nextStory, setNextStory] = useState<Story | null>(null);
-
-  // Gallery Filters
+  const [viewMode, setViewMode] = useState<ViewMode>('home');
+  const [selectedStorySlug, setSelectedStorySlug] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortBy, setSortBy] = useState<'latest' | 'popular' | 'oldest'>('latest');
   const [currentPage, setCurrentPage] = useState<number>(1);
+
+  const [stories, setStories] = useState<Story[]>([]);
+  const [totalStories, setTotalStories] = useState<number>(0);
   const [totalPages, setTotalPages] = useState<number>(1);
-  const [totalStoriesCount, setTotalStoriesCount] = useState<number>(0);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-
-  // Page States
-  const [isNotFound, setIsNotFound] = useState<boolean>(false);
-  const [staticPageType, setStaticPageType] = useState<'privacy' | 'terms' | 'dmca' | 'about' | 'contact' | 'disclaimer' | null>(null);
-
-  // Modals & UI States
-  const [isSitemapOpen, setIsSitemapOpen] = useState<boolean>(false);
-  const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
-  const [theme, setTheme] = useState<ReadingTheme>(() => {
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     try {
-      const stored = localStorage.getItem('walkathawa_theme');
-      if (stored === 'light' || stored === 'dark') return stored;
+      const saved = localStorage.getItem('walkathawa_theme');
+      if (saved === 'light' || saved === 'dark') return saved;
     } catch {
-      // LocalStorage unavailable
+      // ignore
     }
     return 'dark';
   });
-  const [fontSize, setFontSize] = useState<FontSize>('md');
 
-  // Handle URL Location Routing
-  const navigateTo = useCallback((path: string) => {
-    if (window.location.pathname !== path) {
-      window.history.pushState({}, '', path);
-    }
-    setCurrentPath(path);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, []);
-
-  // Popstate Listener (Browser Back / Forward)
   useEffect(() => {
-    const handlePopState = () => {
-      setCurrentPath(window.location.pathname);
-    };
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    testConnection();
   }, []);
 
-  // Theme Class Toggle on <html> & LocalStorage Sync
   useEffect(() => {
     const root = document.documentElement;
     if (theme === 'dark') {
       root.classList.add('dark');
-      root.classList.remove('light');
     } else {
       root.classList.remove('dark');
-      root.classList.add('light');
     }
     try {
       localStorage.setItem('walkathawa_theme', theme);
     } catch {
-      // Storage quota or error
-    }
-
-    const metaTheme = document.querySelector('meta[name="theme-color"]');
-    if (metaTheme) {
-      metaTheme.setAttribute('content', theme === 'dark' ? '#0f172a' : '#ffffff');
+      // ignore
     }
   }, [theme]);
 
-  // Load Categories on Initial Boot
-  useEffect(() => {
-    StoryService.getCategories().then((cats) => {
-      if (cats && cats.length > 0) {
-        setCategories(cats);
-      }
-    });
+  const toggleTheme = useCallback(() => {
+    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
   }, []);
 
-  // Parse Path & Load Relevant Content
+  const parseRoute = useCallback(() => {
+    const path = decodeURIComponent(window.location.pathname).replace(/\/+$/, '') || '/';
+    const searchParams = new URLSearchParams(window.location.search);
+    const pageParam = parseInt(searchParams.get('page') || '1', 10);
+    const validPage = !isNaN(pageParam) && pageParam > 0 ? pageParam : 1;
+    const qParam = searchParams.get('q') || '';
+
+    if (qParam) {
+      setSearchQuery(qParam);
+    }
+
+    if (path === '/admin' || path.startsWith('/admin/')) {
+      setViewMode('admin');
+      return;
+    }
+
+    if (path === '/' || path === '') {
+      setViewMode('home');
+      setSelectedStorySlug(null);
+      setSelectedCategory('all');
+      setCurrentPage(validPage);
+      return;
+    }
+
+    if (path === '/categories') {
+      setViewMode('categories');
+      setSelectedStorySlug(null);
+      return;
+    }
+
+    if (path === '/about') {
+      setViewMode('about');
+      return;
+    }
+    if (path === '/privacy') {
+      setViewMode('privacy');
+      return;
+    }
+    if (path === '/terms') {
+      setViewMode('terms');
+      return;
+    }
+    if (path === '/contact') {
+      setViewMode('contact');
+      return;
+    }
+
+    if (path.startsWith('/category/')) {
+      const catSlug = path.replace('/category/', '').trim();
+      if (catSlug) {
+        setViewMode('home');
+        setSelectedStorySlug(null);
+        setSelectedCategory(catSlug);
+        setCurrentPage(validPage);
+        return;
+      }
+    }
+
+    if (path.startsWith('/story/')) {
+      const slug = path.replace('/story/', '').trim();
+      if (slug) {
+        setSelectedStorySlug(slug);
+        setViewMode('reader');
+        return;
+      }
+    }
+
+    setViewMode('not-found');
+  }, []);
+
   useEffect(() => {
-    let isCancelled = false;
+    parseRoute();
+    const handlePopState = () => parseRoute();
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [parseRoute]);
 
-    const routeApp = async () => {
-      setIsLoading(true);
-      setIsNotFound(false);
-      setStaticPageType(null);
+  useEffect(() => {
+    StoryService.getCategories()
+      .then((cats) => setCategories(cats))
+      .catch(() => setCategories([]));
+  }, []);
 
-      // Parse current location pathname and search query
-      const fullUrl = new URL(currentPath, window.location.origin);
-      const cleanPathname = fullUrl.pathname.replace(/\/+$/, '') || '/';
-      const pageQueryParam = fullUrl.searchParams.get('page');
-      let pageNum = pageQueryParam ? parseInt(pageQueryParam, 10) : 1;
-      if (isNaN(pageNum) || pageNum < 1) pageNum = 1;
-
-      // 1. Admin Route
-      if (cleanPathname === '/admin' || cleanPathname.startsWith('/admin/')) {
-        SEOService.updateHead({ title: 'Admin Control Center', noIndex: true });
-        setIsLoading(false);
-        return;
-      }
-
-      // 2. Categories Overview Route
-      if (cleanPathname === '/categories') {
-        SEOService.updateHead({
-          title: 'කතා වර්ගීකරණ (Categories)',
-          description: 'Explore all category grids on Walkathawa (වල් කතාව).',
-          canonicalUrl: `${window.location.origin}/categories`,
-        });
-        setIsLoading(false);
-        return;
-      }
-
-      // 3. Static Informational Pages
-      if (cleanPathname === '/privacy') {
-        setStaticPageType('privacy');
-        SEOService.updateHead({ title: 'Privacy Policy | Walkathawa', description: 'Privacy Policy & Cookie Policy' });
-        setIsLoading(false);
-        return;
-      }
-      if (cleanPathname === '/terms') {
-        setStaticPageType('terms');
-        SEOService.updateHead({ title: 'Terms and Conditions | Walkathawa', description: 'Terms of Service' });
-        setIsLoading(false);
-        return;
-      }
-      if (cleanPathname === '/dmca') {
-        setStaticPageType('dmca');
-        SEOService.updateHead({ title: 'DMCA Copyright Notice | Walkathawa', description: 'DMCA Takedown and Copyright Notices' });
-        setIsLoading(false);
-        return;
-      }
-      if (cleanPathname === '/about') {
-        setStaticPageType('about');
-        SEOService.updateHead({ title: 'About Us | Walkathawa', description: 'About Walkathawa Sinhala Stories' });
-        setIsLoading(false);
-        return;
-      }
-      if (cleanPathname === '/contact') {
-        setStaticPageType('contact');
-        SEOService.updateHead({ title: 'Contact Us | Walkathawa', description: 'Contact Walkathawa Editorial Desk' });
-        setIsLoading(false);
-        return;
-      }
-      if (cleanPathname === '/disclaimer') {
-        setStaticPageType('disclaimer');
-        SEOService.updateHead({ title: 'Disclaimer | Walkathawa', description: 'Disclaimer & Advertising Policy' });
-        setIsLoading(false);
-        return;
-      }
-
-      // 4. Sitemap / Archives Route
-      if (cleanPathname === '/sitemap' || cleanPathname === '/archives') {
-        setIsSitemapOpen(true);
-        SEOService.updateHead(SEOService.generateArchivesSEO());
-      }
-
-      // 5. Check for Page Number Routes e.g. /page/2
-      if (cleanPathname.startsWith('/page/')) {
-        const pageStr = cleanPathname.replace('/page/', '');
-        const parsedP = parseInt(pageStr, 10);
-        if (!isNaN(parsedP) && parsedP > 0) {
-          pageNum = parsedP;
-        }
-      }
-
-      // 6. Single Story View vs Numeric Pagination Route (/story/:slug or /posts/:slug)
-      if (cleanPathname.startsWith('/story/') || cleanPathname.startsWith('/posts/')) {
-        const prefix = cleanPathname.startsWith('/story/') ? '/story/' : '/posts/';
-        const rawSlug = cleanPathname.replace(prefix, '');
-        const decodedSlug = decodeURIComponent(rawSlug).trim();
-
-        // Check if the part after /posts/ is purely numeric (e.g. /posts/2)
-        const isNumericPage = /^\d+$/.test(decodedSlug);
-
-        if (isNumericPage && cleanPathname.startsWith('/posts/')) {
-          pageNum = parseInt(decodedSlug, 10);
-        } else if (decodedSlug) {
-          const storyData = await StoryService.getStoryBySlug(decodedSlug);
-          if (!isCancelled) {
-            if (storyData) {
-              setActiveStory(storyData);
-              SEOService.updateHead(SEOService.generateStorySEO(storyData));
-
-              // Load related, prev & next stories
-              const related = await StoryService.getRelatedStories(storyData, 4);
-              const allLive = await StoryService.fetchAllLiveStories();
-              const currIdx = allLive.findIndex((s) => s.id === storyData.id || s.slug === storyData.slug);
-
-              setRelatedStories(related);
-              setPrevStory(currIdx > 0 ? allLive[currIdx - 1] : null);
-              setNextStory(currIdx >= 0 && currIdx < allLive.length - 1 ? allLive[currIdx + 1] : null);
-              setIsLoading(false);
-              return;
-            } else {
-              // Story not found in database
-              setActiveStory(null);
-              setIsNotFound(true);
-              SEOService.updateHead({ title: '404 - කතාව හමු නොවීය | Walkathawa', noIndex: true });
-              setIsLoading(false);
-              return;
-            }
-          }
-        }
-      }
-
-      // 7. Category Route: /category/:categorySlug
-      let categorySlug = 'all';
-      if (cleanPathname.startsWith('/category/')) {
-        categorySlug = decodeURIComponent(cleanPathname.replace('/category/', ''));
-      } else if (
-        cleanPathname !== '/' &&
-        cleanPathname !== '/posts' &&
-        cleanPathname !== '/latest' &&
-        cleanPathname !== '/popular' &&
-        cleanPathname !== '/sitemap' &&
-        cleanPathname !== '/archives' &&
-        !cleanPathname.startsWith('/page/') &&
-        !cleanPathname.startsWith('/posts/')
-      ) {
-        // Unknown route -> 404
-        setIsNotFound(true);
-        SEOService.updateHead({ title: '404 - පිටුව හමු නොවීය | Walkathawa', noIndex: true });
-        setIsLoading(false);
-        return;
-      }
-
-      setSelectedCategory(categorySlug);
-      setCurrentPage(pageNum);
-      setActiveStory(null);
-
-      // Fetch Paged Stories
-      const pagedResult = await StoryService.getStories({
-        category: categorySlug,
-        search: searchTerm,
-        sortBy: sortBy,
-        page: pageNum,
-        limit: 20,
+  const fetchStoriesList = useCallback(async () => {
+    if (viewMode !== 'home') return;
+    setIsLoading(true);
+    try {
+      const result = await StoryService.getStories({
+        category: selectedCategory !== 'all' ? selectedCategory : undefined,
+        search: searchQuery,
+        sortBy,
+        page: currentPage,
+        limit: 30,
       });
 
-      if (!isCancelled) {
-        setStories(pagedResult.data);
-        setTotalPages(pagedResult.totalPages);
-        setTotalStoriesCount(pagedResult.total);
-        setIsLoading(false);
+      setStories(result.data);
+      setTotalStories(result.total);
+      setTotalPages(result.totalPages || 1);
 
-        // Update SEO
-        SEOService.updateHead(SEOService.generateHomeSEO(categorySlug, undefined, searchTerm));
-      }
-    };
+      const activeCategoryObj =
+        selectedCategory !== 'all'
+          ? categories.find((c) => c.slug === selectedCategory || c.id === selectedCategory) || null
+          : null;
 
-    routeApp();
+      SeoService.updateHomeSeo(activeCategoryObj, currentPage);
+    } catch {
+      setStories([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [viewMode, selectedCategory, searchQuery, sortBy, currentPage, categories]);
 
-    return () => {
-      isCancelled = true;
-    };
-  }, [currentPath, searchTerm, sortBy]);
+  useEffect(() => {
+    fetchStoriesList();
+  }, [fetchStoriesList]);
 
-  // Handlers for Navigation Actions
+  const navigateTo = (url: string) => {
+    window.history.pushState({}, '', url);
+    parseRoute();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const handleSelectStory = (slug: string) => {
     navigateTo(`/story/${encodeURIComponent(slug)}`);
   };
 
   const handleSelectCategory = (catSlug: string) => {
-    setSelectedCategory(catSlug);
-    setSearchTerm('');
-    setCurrentPage(1);
-    if (catSlug === 'all') {
+    setSearchQuery('');
+    if (!catSlug || catSlug === 'all') {
       navigateTo('/');
     } else {
       navigateTo(`/category/${encodeURIComponent(catSlug)}`);
     }
   };
 
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page);
-    const basePath = selectedCategory === 'all' ? '' : `/category/${encodeURIComponent(selectedCategory)}`;
-    const pageQuery = page > 1 ? `?page=${page}` : '';
-    navigateTo(`${basePath || '/'}${pageQuery}`);
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage);
+    const baseUrl =
+      selectedCategory && selectedCategory !== 'all'
+        ? `/category/${encodeURIComponent(selectedCategory)}`
+        : '/';
+    const targetUrl = newPage > 1 ? `${baseUrl}?page=${newPage}` : baseUrl;
+    window.history.pushState({}, '', targetUrl);
   };
 
-  // Render Admin View
-  if (currentPath.startsWith('/admin')) {
+  const handleSearchChange = (q: string) => {
+    setSearchQuery(q);
+    setCurrentPage(1);
+    if (viewMode !== 'home') {
+      setViewMode('home');
+      window.history.pushState({}, '', q ? `/?q=${encodeURIComponent(q)}` : '/');
+    }
+  };
+
+  if (viewMode === 'admin') {
     return (
       <AdminRoot
         onBackToPublic={() => navigateTo('/')}
-        onViewStoryPublic={(slug) => navigateTo(`/story/${encodeURIComponent(slug)}`)}
+        onViewStoryPublic={(slug) => handleSelectStory(slug)}
       />
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200 selection:bg-rose-600 selection:text-white">
-      {/* Edge Skyscrapers for HD Desktop Screens */}
-      <DesktopSideSkyscrapers />
-
-      {/* Main App Header */}
+    <div className="min-h-screen flex flex-col bg-[#f8fafc] dark:bg-[#090e1d] text-[#0f172a] dark:text-slate-100 transition-colors duration-200">
       <Header
-        onHomeClick={() => {
-          setSelectedCategory('all');
-          setSearchTerm('');
-          setActiveStory(null);
-          setIsNotFound(false);
-          setStaticPageType(null);
+        categories={categories}
+        selectedCategory={selectedCategory}
+        onSelectCategory={handleSelectCategory}
+        searchQuery={searchQuery}
+        onSearchChange={handleSearchChange}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        onGoHome={() => {
+          setSearchQuery('');
           navigateTo('/');
         }}
-        onOpenCategories={() => navigateTo('/categories')}
-        theme={theme}
-        onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
-        onOpenSitemap={() => setIsSitemapOpen(true)}
-        onToggleSearch={() => setIsSearchOpen((s) => !s)}
-        isSearchOpen={isSearchOpen}
+        onOpenCategoriesPage={() => navigateTo('/categories')}
       />
 
-      {/* Main View Area */}
-      <main className="flex-1">
-        {isNotFound ? (
-          /* 1. 404 Page Not Found */
-          <NotFoundPage
-            onNavigateHome={() => {
-              setIsNotFound(false);
-              navigateTo('/');
-            }}
-            onSelectCategory={handleSelectCategory}
-            onSearch={(term) => {
-              setSearchTerm(term);
-              setIsNotFound(false);
-            }}
-            categories={categories}
-          />
-        ) : staticPageType ? (
-          /* 2. Static Informational Page */
-          <StaticPage
-            pageType={staticPageType}
-            onNavigateHome={() => {
-              setStaticPageType(null);
-              navigateTo('/');
-            }}
-          />
-        ) : activeStory ? (
-          /* 3. Story Reader View */
-          <StoryReader
-            story={activeStory}
-            relatedStories={relatedStories}
-            prevStory={prevStory}
-            nextStory={nextStory}
-            onBack={() => {
-              setActiveStory(null);
-              if (selectedCategory && selectedCategory !== 'all') {
-                navigateTo(`/category/${encodeURIComponent(selectedCategory)}`);
-              } else {
-                navigateTo('/');
-              }
-            }}
-            onSelectStory={handleSelectStory}
-            onSelectCategory={handleSelectCategory}
-            theme={theme}
-            fontSize={fontSize}
-            onFontSizeChange={setFontSize}
-          />
-        ) : currentPath === '/categories' ? (
-          /* 4. Categories Grid Page */
-          <CategoriesPage
-            categories={categories}
-            onSelectCategory={handleSelectCategory}
-            onNavigateHome={() => navigateTo('/')}
-          />
-        ) : (
-          /* 5. Story Feed / Gallery View */
+      <main className="flex-1 w-full max-w-6xl mx-auto px-4 sm:px-6 py-6">
+        {viewMode === 'home' && (
           <StoryGallery
             stories={stories}
+            totalStories={totalStories}
             categories={categories}
             selectedCategory={selectedCategory}
             onSelectCategory={handleSelectCategory}
-            searchTerm={searchTerm}
-            onSearchChange={setSearchTerm}
+            onSelectStory={handleSelectStory}
+            searchQuery={searchQuery}
+            onSearchChange={handleSearchChange}
             sortBy={sortBy}
-            onSortChange={setSortBy}
+            onSortChange={(newSort) => {
+              setSortBy(newSort);
+              setCurrentPage(1);
+            }}
             currentPage={currentPage}
             totalPages={totalPages}
-            total={totalStoriesCount}
-            limit={20}
             onPageChange={handlePageChange}
-            onReadStory={handleSelectStory}
             isLoading={isLoading}
-            isSearchOpen={isSearchOpen}
-            onCloseSearch={() => setIsSearchOpen(false)}
+          />
+        )}
+
+        {viewMode === 'reader' && selectedStorySlug && (
+          <StoryReader
+            slug={selectedStorySlug}
+            onBack={() => navigateTo('/')}
+            onSelectStory={handleSelectStory}
+            onSelectCategory={handleSelectCategory}
+          />
+        )}
+
+        {viewMode === 'categories' && (
+          <CategoriesPage
+            categories={categories}
+            onSelectCategory={handleSelectCategory}
+            onBack={() => navigateTo('/')}
+          />
+        )}
+
+        {(viewMode === 'about' ||
+          viewMode === 'privacy' ||
+          viewMode === 'terms' ||
+          viewMode === 'contact') && (
+          <StaticPage page={viewMode} onBack={() => navigateTo('/')} />
+        )}
+
+        {viewMode === 'not-found' && (
+          <NotFoundPage
+            onGoHome={() => navigateTo('/')}
+            onBrowseCategories={() => navigateTo('/categories')}
           />
         )}
       </main>
 
-      {/* Sitemap / Archive Index Modal */}
-      <SitemapModal
-        isOpen={isSitemapOpen}
-        onClose={() => setIsSitemapOpen(false)}
-        stories={stories}
-        onSelectStory={handleSelectStory}
-      />
-
-      {/* Main App Footer */}
       <Footer
         categories={categories}
         onSelectCategory={handleSelectCategory}
-        onOpenSitemap={() => setIsSitemapOpen(true)}
+        onNavigateStatic={(page) => navigateTo(`/${page}`)}
       />
     </div>
   );

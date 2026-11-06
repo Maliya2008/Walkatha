@@ -1,7 +1,17 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
 @layer base {
   body {
     font-family: 'Inter', 'Noto Sans Sinhala', system-ui, -apple-system, sans-serif;
   }
+}
+
+/* Custom Navy Theme Accents */
+.dark {
+  color-scheme: dark;
+}
+
+:root:not(.dark) {
+  color-scheme: light;
 }

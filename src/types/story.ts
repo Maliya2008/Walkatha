@@ -7,6 +7,7 @@ export interface Story {
   excerpt?: string;
   content?: string;
   fullContent?: string;
+  wordCount?: number;
   category: string;
   categoryName?: string;
   categoryId?: string;

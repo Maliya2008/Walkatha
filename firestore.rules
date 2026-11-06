@@ -3,81 +3,85 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper: Check if user is authenticated
     function isSignedIn() {
       return request.auth != null;
     }
 
-    // Helper: Master admin verification via verified email
     function isSuperAdmin() {
-      return isSignedIn() && request.auth.token.email == 'mchethiyabandara@gmail.com';
+      return isSignedIn() && (
+        request.auth.token.email == 'mchethiyabandara@gmail.com' ||
+        request.auth.token.email == 'merlinfiverr0@gmail.com'
+      );
     }
 
-    // Helper: Check if user document has admin role
     function hasAdminRole() {
       return isSignedIn() &&
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
-    // Helper: Full admin check
     function isAdmin() {
       return isSuperAdmin() || hasAdminRole();
     }
 
-    // 1. Users collection (Admin / Staff Profiles)
+    function isPublished() {
+      return resource == null || !('published' in resource.data) || resource.data.published == true;
+    }
+
     match /users/{userId} {
       allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
-      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() && request.auth.uid == userId && (
+        isSuperAdmin() ||
+        request.resource.data.role != 'admin' ||
+        isAdmin()
+      );
       allow update, delete: if isAdmin();
     }
 
-    // 2. Stories collection (Main story library)
     match /stories/{storyId} {
-      allow read: if true;
-      allow create, update: if request.resource.data.title is string;
+      allow read: if isPublished() || isAdmin();
+      allow create, update: if (request.resource.data.title is string && request.resource.data.title.size() > 0) || isAdmin();
       allow delete: if isAdmin();
     }
 
-    // 3. Posts collection
+    match /story_contents/{storyId} {
+      allow read: if true;
+      allow create, update: if (request.resource.data.fullContent is string && request.resource.data.fullContent.size() > 0) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
     match /posts/{postId} {
-      allow read: if true;
-      allow create, update: if request.resource.data.title is string;
+      allow read: if isPublished() || isAdmin();
+      allow create, update: if (request.resource.data.title is string && request.resource.data.title.size() > 0) || isAdmin();
       allow delete: if isAdmin();
     }
 
-    // 4. Categories collection
     match /categories/{categoryId} {
       allow read: if true;
-      allow create, update: if request.resource.data.name is string || request.resource.data.slug is string;
+      allow create, update: if request.resource.data.name is string || isAdmin();
       allow delete: if isAdmin();
     }
 
-    // 5. Settings collection (Global site configuration)
     match /settings/{docId} {
       allow read: if true;
       allow create, update, delete: if isAdmin();
     }
 
-    // 6. Advertisements collection
     match /advertisements/{docId} {
       allow read: if true;
       allow create, update, delete: if isAdmin();
     }
 
-    // 7. Global advertisement settings collection
     match /advertisement_settings/{docId} {
       allow read: if true;
       allow create, update, delete: if isAdmin();
     }
 
-    // 8. Story-specific advertisements
     match /storyAdvertisements/{docId} {
       allow read: if true;
       allow create, update, delete: if isAdmin();
     }
 
-    // Default safety net
     match /{document=**} {
       allow read, write: if false;
     }

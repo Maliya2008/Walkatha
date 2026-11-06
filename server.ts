@@ -11,28 +11,31 @@ async function startServer() {
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
   const isProd = process.env.NODE_ENV === 'production';
 
+  app.disable('x-powered-by');
   app.use(express.json());
+
+  // Security & Performance Cache Headers
+  app.use((req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    if (req.path.match(/\.(js|css|png|jpg|jpeg|svg|ico|woff2?)$/i)) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    }
+    next();
+  });
 
   // Health check endpoint
   app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
-  // API route: Categories
-  app.get('/api/categories', (_req, res) => {
-    res.json({
-      categories: [
-        { id: 'all', name: 'All Stories', sinhalaName: 'සියලු කතා' },
-        { id: 'romantic', name: 'Romantic', sinhalaName: 'ආදර කතා' },
-        { id: 'unconventional', name: 'Adult & Drama', sinhalaName: 'අසම්මත කතා' },
-        { id: 'short', name: 'Short Stories', sinhalaName: 'කෙටි කතා' },
-        { id: 'suspense', name: 'Suspense & Mystery', sinhalaName: 'ත්‍රාසජනක' },
-        { id: 'novel', name: 'Series & Novels', sinhalaName: 'දිගු කතා මාලා' },
-      ],
-    });
+  // Google Search Console verification file
+  app.get('/google0a8bbd03676eca90.html', (_req, res) => {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.send('google-site-verification: google0a8bbd03676eca90.html');
   });
 
-  // Dedicated SEO Endpoints
+  // Dedicated SEO Sitemap Endpoints
   const serveXml = (fileName: string, res: express.Response) => {
     const candidates = [
       path.resolve(process.cwd(), 'public', fileName),
@@ -43,12 +46,18 @@ async function startServer() {
     for (const filePath of candidates) {
       if (fs.existsSync(filePath)) {
         res.setHeader('Content-Type', 'application/xml; charset=utf-8');
-        res.setHeader('Cache-Control', 'public, max-age=600, s-maxage=1800, stale-while-revalidate=86400');
+        res.setHeader(
+          'Cache-Control',
+          'public, max-age=600, s-maxage=1800, stale-while-revalidate=86400'
+        );
         res.setHeader('X-Robots-Tag', 'all');
         return res.sendFile(filePath);
       }
     }
-    res.status(404).setHeader('Content-Type', 'text/plain; charset=utf-8').send(`Sitemap ${fileName} not found`);
+    res
+      .status(404)
+      .setHeader('Content-Type', 'text/plain; charset=utf-8')
+      .send(`Sitemap ${fileName} not found`);
   };
 
   app.get(['/sitemap.xml', '/sitemap_index.xml'], (_req, res) => {
@@ -85,7 +94,6 @@ async function startServer() {
   });
 
   if (!isProd) {
-    // Development mode: Vite middleware
     const { createServer } = await import('vite');
     const vite = await createServer({
       server: { middlewareMode: true },
@@ -93,16 +101,23 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    // Production mode: Serve built static assets
     const distPath = path.resolve(__dirname, 'dist');
-    app.use(express.static(distPath));
+    app.use(express.static(distPath, { maxAge: '7d' }));
     app.get('*', (_req, res) => {
+      res.setHeader(
+        'Cache-Control',
+        'public, max-age=300, s-maxage=1800, stale-while-revalidate=86400'
+      );
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[Walkathawa Server] running on http://0.0.0.0:${PORT} (Mode: ${isProd ? 'production' : 'development'})`);
+    console.log(
+      `[Walkathawa Server] running on http://0.0.0.0:${PORT} (Mode: ${
+        isProd ? 'production' : 'development'
+      })`
+    );
   });
 }
 

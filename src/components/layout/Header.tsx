@@ -1,102 +1,97 @@
 import React from 'react';
-import { BookOpen, Search, Moon, Sun, Grid, FileText } from 'lucide-react';
-import { ReadingTheme } from '../../types/story';
+import { Search, Sun, Moon, X } from 'lucide-react';
+import { Category } from '../../types/story';
 
 interface HeaderProps {
-  onHomeClick: () => void;
-  onOpenCategories: () => void;
-  theme: ReadingTheme;
+  categories: Category[];
+  selectedCategory: string;
+  onSelectCategory: (slug: string) => void;
+  searchQuery: string;
+  onSearchChange: (q: string) => void;
+  theme: 'light' | 'dark';
   onToggleTheme: () => void;
-  onOpenSitemap: () => void;
-  onToggleSearch: () => void;
-  isSearchOpen: boolean;
+  onGoHome: () => void;
+  onOpenCategoriesPage: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
-  onHomeClick,
-  onOpenCategories,
+  searchQuery,
+  onSearchChange,
   theme,
   onToggleTheme,
-  onOpenSitemap,
-  onToggleSearch,
-  isSearchOpen,
+  onGoHome,
+  onOpenCategoriesPage,
 }) => {
   return (
-    <header className="sticky top-0 z-40 bg-slate-900/90 dark:bg-slate-950/90 backdrop-blur-md border-b border-slate-800 transition-colors">
-      <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
-        {/* Brand */}
-        <button
-          onClick={onHomeClick}
-          className="flex items-center gap-2.5 text-left group cursor-pointer focus:outline-none"
-        >
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-rose-600 to-amber-500 flex items-center justify-center text-white shadow-lg shadow-rose-950/40 group-hover:scale-105 transition-transform">
-            <BookOpen className="w-5 h-5" />
+    <header className="sticky top-0 z-40 w-full bg-white/95 dark:bg-[#0d152b]/95 backdrop-blur border-b border-slate-200 dark:border-[#1e2d52] transition-colors">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6">
+        <div className="flex items-center justify-between h-14 gap-3">
+          {/* Brand link */}
+          <a
+            href="/"
+            onClick={(e) => {
+              if (!e.ctrlKey && !e.metaKey) {
+                e.preventDefault();
+                onGoHome();
+              }
+            }}
+            className="flex items-baseline gap-2 shrink-0"
+          >
+            <span className="text-lg font-bold tracking-tight text-[#0f172a] dark:text-white">
+              Walkathawa
+            </span>
+            <span className="text-xs font-medium text-blue-700 dark:text-blue-400 hidden sm:inline">
+              සිංහල වැල කතා
+            </span>
+          </a>
+
+          {/* Search input */}
+          <div className="flex-1 max-w-md relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => onSearchChange(e.target.value)}
+              placeholder="සිංහල වැල කතා, වල් කතා සොයන්න..."
+              aria-label="සිංහල වැල කතා සොයන්න"
+              className="w-full pl-9 pr-8 py-1.5 text-sm rounded-lg bg-slate-100 dark:bg-[#131f3e] text-slate-900 dark:text-slate-100 placeholder-slate-500 dark:placeholder-slate-400 border border-slate-200 dark:border-[#243763] focus:outline-none focus:border-blue-600 dark:focus:border-blue-400"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => onSearchChange('')}
+                aria-label="Clear search"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </div>
-          <div>
-            <div className="flex items-center gap-1.5 font-bold text-lg text-slate-100 tracking-tight leading-none">
-              <span>Walkathawa</span>
-              <span className="text-xs px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400 font-medium">සිංහල</span>
-            </div>
-            <p className="text-xs text-slate-400 mt-0.5">වල් කතාව - රස කතා එකතුව</p>
+
+          {/* Minimal Actions: Categories link + Navy/Light Theme Toggle */}
+          <div className="flex items-center gap-2 shrink-0">
+            <a
+              href="/categories"
+              onClick={(e) => {
+                if (!e.ctrlKey && !e.metaKey) {
+                  e.preventDefault();
+                  onOpenCategoriesPage();
+                }
+              }}
+              className="text-xs font-medium px-2.5 py-1.5 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#162347] transition-colors"
+            >
+              වර්ගීකරණ
+            </a>
+
+            <button
+              type="button"
+              onClick={onToggleTheme}
+              aria-label={theme === 'dark' ? 'Switch to Light Theme' : 'Switch to Navy Theme'}
+              className="p-2 rounded-lg border border-slate-200 dark:border-[#243763] bg-slate-100 dark:bg-[#131f3e] text-slate-700 dark:text-blue-300 hover:bg-slate-200 dark:hover:bg-[#1a2b52] transition-colors cursor-pointer"
+            >
+              {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </button>
           </div>
-        </button>
-
-        {/* Desktop Quick Nav Links */}
-        <nav className="hidden md:flex items-center gap-3 text-sm font-medium">
-          <button
-            onClick={onHomeClick}
-            className="px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
-          >
-            මුල් පිටුව
-          </button>
-          <button
-            onClick={onOpenCategories}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
-          >
-            <Grid className="w-4 h-4 text-rose-400" />
-            වර්ගීකරණ
-          </button>
-          <button
-            onClick={onOpenSitemap}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
-          >
-            <FileText className="w-4 h-4 text-amber-400" />
-            සමස්ත ලේඛනාගාරය
-          </button>
-        </nav>
-
-        {/* Right Action Icons */}
-        <div className="flex items-center gap-2">
-          {/* Toggle Search */}
-          <button
-            onClick={onToggleSearch}
-            className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
-              isSearchOpen
-                ? 'bg-rose-600 text-white border-rose-500 shadow-lg shadow-rose-950/30'
-                : 'bg-slate-800/80 hover:bg-slate-800 text-slate-300 hover:text-white border-slate-700/60'
-            }`}
-            title="කතා සොයන්න"
-          >
-            <Search className="w-4 h-4" />
-          </button>
-
-          {/* Categories for mobile */}
-          <button
-            onClick={onOpenCategories}
-            className="md:hidden p-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/60 transition-all cursor-pointer"
-            title="වර්ගීකරණ"
-          >
-            <Grid className="w-4 h-4" />
-          </button>
-
-          {/* Theme Switcher */}
-          <button
-            onClick={onToggleTheme}
-            className="p-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/60 transition-all cursor-pointer"
-            title="වර්ණ සැකසුම් (Dark / Light)"
-          >
-            {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-300" />}
-          </button>
         </div>
       </div>
     </header>

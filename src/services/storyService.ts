@@ -1,5 +1,5 @@
 import { Category, PaginatedResponse, Story, StoryFilterParams } from '../types/story';
-import { INITIAL_STORIES, INITIAL_CATEGORIES } from '../data/seedStories';
+import { INITIAL_CATEGORIES } from '../data/seedStories';
 import {
   storyMatchesCategory,
   getStoryCanonicalCategory,
@@ -76,38 +76,16 @@ export function normalizeFirestoreStory(id: string, data: any): Story {
 }
 
 export class StoryService {
-  private static memoryStories: Story[] = [...INITIAL_STORIES];
+  private static memoryStories: Story[] = [];
   private static firestoreLoaded = false;
 
   /**
-   * Fetches all live stories catalog (merging static JSON catalog + Firestore)
+   * Fetches all live stories directly from Firestore ('stories' or 'posts' collection)
    */
   public static async fetchAllLiveStories(): Promise<Story[]> {
     const mergedMap = new Map<string, Story>();
 
-    // 1. Load initial static seed stories
-    for (const s of INITIAL_STORIES) {
-      const key = (s.slug || s.id || '').trim().toLowerCase();
-      if (key) mergedMap.set(key, s);
-    }
-
-    // 2. Fetch full static JSON catalog (all 613 stories metadata)
-    try {
-      const catRes = await fetch('/api-data/catalog.json');
-      if (catRes.ok) {
-        const catData = await catRes.json();
-        if (Array.isArray(catData)) {
-          for (const s of catData) {
-            const key = (s.slug || s.id || '').trim().toLowerCase();
-            if (key) mergedMap.set(key, s);
-          }
-        }
-      }
-    } catch (err) {
-      console.warn('Catalog fetch notice:', err);
-    }
-
-    // 3. Attempt Firestore synchronization (adds newly posted admin stories)
+    // Fetch live stories directly from Firestore
     try {
       let snapshot = await getDocs(collection(db, 'stories'));
       if (snapshot.empty) {
@@ -122,10 +100,10 @@ export class StoryService {
         this.firestoreLoaded = true;
       }
     } catch (err) {
-      console.warn('Firestore sync notice (using static catalog):', err);
+      console.warn('Firestore fetch notice:', err);
     }
 
-    // 4. Sort latest first
+    // 3. Sort latest first
     const merged = Array.from(mergedMap.values());
     merged.sort((a, b) => new Date(b.uploadDate || 0).getTime() - new Date(a.uploadDate || 0).getTime());
     this.memoryStories = merged;
@@ -184,42 +162,29 @@ export class StoryService {
       return cached;
     }
 
-    // Fetch individual static story JSON file (instant, offline & quota-free)
-    try {
-      const storyFileRes = await fetch(`/api-data/story/${encodeURIComponent(cleanSlug)}.json`);
-      if (storyFileRes.ok) {
-        const fullStory = await storyFileRes.json();
-        if (fullStory && (fullStory.fullContent || fullStory.content)) {
-          // Update memory cache
-          if (cached) {
-            Object.assign(cached, fullStory);
-          } else {
-            this.memoryStories.push(fullStory);
-          }
-          return fullStory;
-        }
-      }
-    } catch {
-      // Fallback
-    }
-
     // Direct Firestore queries
     try {
       const docSnap = await getDoc(doc(db, 'stories', cleanSlug));
       if (docSnap.exists()) {
-        return normalizeFirestoreStory(docSnap.id, docSnap.data());
+        const story = normalizeFirestoreStory(docSnap.id, docSnap.data());
+        if (cached) Object.assign(cached, story);
+        return story;
       }
 
       const q = query(collection(db, 'stories'), where('slug', '==', cleanSlug));
       const qSnap = await getDocs(q);
       if (!qSnap.empty) {
         const firstDoc = qSnap.docs[0];
-        return normalizeFirestoreStory(firstDoc.id, firstDoc.data());
+        const story = normalizeFirestoreStory(firstDoc.id, firstDoc.data());
+        if (cached) Object.assign(cached, story);
+        return story;
       }
 
       const postSnap = await getDoc(doc(db, 'posts', cleanSlug));
       if (postSnap.exists()) {
-        return normalizeFirestoreStory(postSnap.id, postSnap.data());
+        const story = normalizeFirestoreStory(postSnap.id, postSnap.data());
+        if (cached) Object.assign(cached, story);
+        return story;
       }
     } catch {
       // Fallback

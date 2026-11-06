@@ -1,9 +1,12 @@
 import fs from 'fs';
 import path from 'path';
 
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getFirestore, collection, getDocs } from 'firebase/firestore';
+
 const baseUrl = 'https://www.walkathawa.site';
 const publicDir = path.join(process.cwd(), 'public');
-const dbPath = path.join(process.cwd(), 'data', 'database.json');
+const cfgPath = path.join(process.cwd(), 'firebase-applet-config.json');
 
 if (!fs.existsSync(publicDir)) {
   fs.mkdirSync(publicDir, { recursive: true });
@@ -42,26 +45,58 @@ function getLatestDate(storyList) {
 }
 
 async function run() {
-  console.log('[Sitemap] Generating seamless Google sitemap for https://www.walkathawa.site ...');
+  console.log('[Sitemap] Generating live Firestore sitemaps for https://www.walkathawa.site ...');
 
   let stories = [];
   let categories = [];
+  const seen = new Set();
 
+  // 1. Fetch live stories directly from Firestore
   try {
-    if (fs.existsSync(dbPath)) {
-      const data = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
-      const rawStories = (data.stories || []).filter((s) => s.published !== false);
-      const seen = new Set();
-      for (const s of rawStories) {
-        const slug = (s.slug || s.id || '').trim().toLowerCase();
-        if (!slug || seen.has(slug)) continue;
-        seen.add(slug);
-        stories.push(s);
+    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+    const app = getApps().length === 0 ? initializeApp(cfg) : getApp();
+    const db = getFirestore(app);
+
+    console.log(`[Sitemap] Fetching live stories from Firestore project ${cfg.projectId}...`);
+    const snap = await getDocs(collection(db, 'stories'));
+    snap.forEach((docSnap) => {
+      const data = docSnap.data();
+      const slug = (data.slug || docSnap.id || '').trim().toLowerCase();
+      if (!slug || seen.has(slug)) return;
+      seen.add(slug);
+      stories.push({
+        id: docSnap.id,
+        title: data.title || 'Untitled',
+        slug: data.slug || docSnap.id,
+        category: data.category || 'all',
+        coverImage: data.coverImage || '',
+        uploadDate: data.uploadDate || data.uploadedDate || new Date().toISOString(),
+        updatedDate: data.updatedDate || data.createdAt || new Date().toISOString(),
+      });
+    });
+    console.log(`[Sitemap] Retrieved ${stories.length} stories directly from Firestore.`);
+
+    // Also fetch categories from Firestore
+    const catSnap = await getDocs(collection(db, 'categories'));
+    catSnap.forEach((docSnap) => {
+      const c = docSnap.data();
+      if (c.slug && c.slug !== 'all') {
+        categories.push({ id: docSnap.id, slug: c.slug, name: c.name || c.slug });
       }
-      categories = (data.categories || []).filter((c) => c.slug !== 'all');
-    }
+    });
   } catch (err) {
-    console.warn('[Sitemap] Could not read database.json, attempting fallback:', err);
+    console.warn('[Sitemap] Firestore fetch error, checking local fallback:', err.message);
+  }
+
+  // Fallback default categories if empty
+  if (categories.length === 0) {
+    categories = [
+      { id: 'romantic', slug: 'romantic', name: 'ආදර කතා' },
+      { id: 'unconventional', slug: 'unconventional', name: 'අසම්මත කතා' },
+      { id: 'short', slug: 'short', name: 'කෙටි කතා' },
+      { id: 'suspense', slug: 'suspense', name: 'ත්‍රාසජනක' },
+      { id: 'novel', slug: 'novel', name: 'දිගු කතා මාලා' },
+    ];
   }
 
   const latestStoryMod = getLatestDate(stories);
@@ -124,78 +159,20 @@ Sitemap: ${baseUrl}/sitemap-main.xml
   fs.writeFileSync(path.join(publicDir, 'robots.txt'), robotsContent, 'utf8');
   console.log(`[Sitemap] Generated robots.txt successfully.`);
 
-  // Generate static API data JSON files (for instant reader access to all 613 stories)
-  const publicApiDir = path.join(publicDir, 'api-data');
-  const publicStoryDir = path.join(publicApiDir, 'story');
-  if (!fs.existsSync(publicStoryDir)) {
-    fs.mkdirSync(publicStoryDir, { recursive: true });
-  }
-
-  const catalog = stories.map((s) => ({
-    id: s.id,
-    title: s.title,
-    slug: s.slug || s.id,
-    shortDescription: s.shortDescription || s.description || '',
-    coverImage: s.coverImage || '',
-    category: s.category || 'all',
-    categoryName: s.categoryName || '',
-    tags: s.tags || [],
-    uploadDate: s.uploadDate || s.uploadedDate || '',
-    views: s.views || 0,
-    likes: s.likes || 0,
-    readingTime: s.readingTime || 3,
-    featured: !!s.featured,
-    published: s.published !== false,
-  }));
-
-  const catalogStr = JSON.stringify(catalog);
-  fs.writeFileSync(path.join(publicApiDir, 'catalog.json'), catalogStr, 'utf8');
-  fs.writeFileSync(path.join(publicApiDir, 'categories.json'), JSON.stringify(categories), 'utf8');
-
-  for (const s of stories) {
-    const payload = JSON.stringify(s);
-    const slugKey = (s.slug || s.id || '').trim().replace(/\//g, '_');
-    const idKey = (s.id || '').trim().replace(/\//g, '_');
-    if (slugKey) {
-      fs.writeFileSync(path.join(publicStoryDir, `${slugKey}.json`), payload, 'utf8');
-    }
-    if (idKey && idKey !== slugKey) {
-      fs.writeFileSync(path.join(publicStoryDir, `${idKey}.json`), payload, 'utf8');
-    }
-  }
-  console.log(`[API Data] Successfully generated static catalog and ${stories.length} story JSON files.`);
-
-  // Also write to dist/ if dist/ exists
+  // Also write sitemaps to dist/ if dist/ exists
   const distDir = path.join(process.cwd(), 'dist');
   if (fs.existsSync(distDir)) {
     fs.writeFileSync(path.join(distDir, 'sitemap.xml'), indexXml, 'utf8');
     fs.writeFileSync(path.join(distDir, 'sitemap-main.xml'), mainXml, 'utf8');
     fs.writeFileSync(path.join(distDir, 'sitemap-stories.xml'), storiesXml, 'utf8');
     fs.writeFileSync(path.join(distDir, 'robots.txt'), robotsContent, 'utf8');
-
-    const distApiDir = path.join(distDir, 'api-data');
-    const distStoryDir = path.join(distApiDir, 'story');
-    if (!fs.existsSync(distStoryDir)) {
-      fs.mkdirSync(distStoryDir, { recursive: true });
-    }
-    fs.writeFileSync(path.join(distApiDir, 'catalog.json'), catalogStr, 'utf8');
-    fs.writeFileSync(path.join(distApiDir, 'categories.json'), JSON.stringify(categories), 'utf8');
-
-    for (const s of stories) {
-      const payload = JSON.stringify(s);
-      const slugKey = (s.slug || s.id || '').trim().replace(/\//g, '_');
-      const idKey = (s.id || '').trim().replace(/\//g, '_');
-      if (slugKey) {
-        fs.writeFileSync(path.join(distStoryDir, `${slugKey}.json`), payload, 'utf8');
-      }
-      if (idKey && idKey !== slugKey) {
-        fs.writeFileSync(path.join(distStoryDir, `${idKey}.json`), payload, 'utf8');
-      }
-    }
-    console.log(`[Sitemap & API Data] Synced sitemaps, robots.txt, and api-data to dist/ successfully.`);
+    console.log(`[Sitemap] Synced sitemaps and robots.txt to dist/ successfully.`);
   }
+
+  process.exit(0);
 }
 
 run().catch((err) => {
   console.error('[Sitemap] Error generating sitemap:', err);
+  process.exit(1);
 });

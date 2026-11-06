@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Story } from '../types/story';
 import { StoryService } from '../services/storyService';
-import { INITIAL_STORIES } from '../data/seedStories';
 
 export function useStory(slug: string | null) {
   const [story, setStory] = useState<Story | null>(() => {
@@ -18,7 +17,7 @@ export function useStory(slug: string | null) {
         return init;
       }
     }
-    return INITIAL_STORIES.find((s) => s.slug === clean || s.id === clean) || null;
+    return null;
   });
   const [relatedStories, setRelatedStories] = useState<Story[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);

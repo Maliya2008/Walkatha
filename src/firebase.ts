@@ -21,14 +21,14 @@ export const firebaseConfig = {
   measurementId: "G-E0YMRGV1SK"
 };
 
-// Cloud Firestore Dedicated Content Replica Configuration
+// Cloud Firestore Dedicated Content & Admin Replica Configuration
 const contentReplicaConfig = {
-  projectId: "cedar-binder-448501-h7",
-  appId: "1:962224124146:web:d311b4ce4093d1ae84a06b",
-  apiKey: "AIzaSyC0QRGIKuDcgAVTJ3P2YynIV4hClqw2jic",
-  authDomain: "cedar-binder-448501-h7.firebaseapp.com",
-  storageBucket: "cedar-binder-448501-h7.firebasestorage.app",
-  messagingSenderId: "962224124146"
+  projectId: "advance-sandbox-gmzf6",
+  appId: "1:448261670736:web:b9c2a2ffea58dfe8ce0e55",
+  apiKey: "AIzaSyC52g5zyvwkpuqYuP2SlW9yqU50KXxm3DE",
+  authDomain: "advance-sandbox-gmzf6.firebaseapp.com",
+  storageBucket: "advance-sandbox-gmzf6.firebasestorage.app",
+  messagingSenderId: "448261670736"
 };
 
 // Initialize Firebase
@@ -56,7 +56,7 @@ if (typeof window !== 'undefined') {
 export const db = getFirestore(app);
 export const contentDb = getFirestore(
   replicaApp,
-  'ai-studio-walkathawa-02ef80ec-1ede-4cb8-a1f9-9e6e1fcb951b'
+  'ai-studio-walkatha-f5f7438d-1626-498d-ab41-6bcb7c299cae'
 );
 export const auth = getAuth(app);
 
@@ -118,7 +118,7 @@ export function handleFirestoreError(
 
 export async function testConnection() {
   try {
-    await getDocFromServer(doc(db, 'settings', 'global'));
+    await getDocFromServer(doc(contentDb, 'stories', '_health'));
   } catch (error) {
     if (
       error instanceof FirestoreError &&

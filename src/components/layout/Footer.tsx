@@ -5,10 +5,10 @@ import { TripleInlineBanners320x50, SMART_LINK_URL } from '../common/AdUnits';
 interface FooterProps {
   categories: Category[];
   onSelectCategory: (slug: string) => void;
-  onNavigateStatic: (page: 'about' | 'privacy' | 'terms' | 'contact') => void;
+  onNavigateStatic: (page: 'about' | 'privacy' | 'terms' | 'contact' | 'admin') => void;
 }
 
-export const Footer: React.FC<FooterProps> = () => {
+export const Footer: React.FC<FooterProps> = ({ onNavigateStatic }) => {
   return (
     <footer className="bg-white dark:bg-[#0b1224] border-t border-slate-200 dark:border-[#1c2b4f] mt-12 transition-colors">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-6">
@@ -29,7 +29,29 @@ export const Footer: React.FC<FooterProps> = () => {
         </div>
 
         <div className="pt-4 border-t border-slate-200 dark:border-[#1c2b4f] flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 dark:text-slate-400 gap-2">
-          <p>© {new Date().getFullYear()} Walkathawa. සියලුම හිමිකම් ඇවිරිණි.</p>
+          <div className="flex items-center gap-3">
+            <p>© {new Date().getFullYear()} Walkathawa. සියලුම හිමිකම් ඇවිරිණි.</p>
+            <a
+              href="/sitemap.xml"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:underline text-slate-400"
+            >
+              Sitemap
+            </a>
+            <a
+              href="/admin"
+              onClick={(e) => {
+                if (!e.ctrlKey && !e.metaKey) {
+                  e.preventDefault();
+                  onNavigateStatic('admin');
+                }
+              }}
+              className="hover:underline text-slate-400"
+            >
+              Admin
+            </a>
+          </div>
           <a
             href={SMART_LINK_URL}
             target="_blank"

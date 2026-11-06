@@ -2,6 +2,7 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { execFile } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -26,6 +27,17 @@ async function startServer() {
   // Health check endpoint
   app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
+  // Dynamic Sitemap Regeneration Endpoint (triggered automatically when Admin adds/edits/deletes stories or categories)
+  app.post('/api/regenerate-sitemap', (_req, res) => {
+    const scriptPath = path.resolve(process.cwd(), 'scripts', 'generate-sitemap.js');
+    execFile('node', [scriptPath], { cwd: process.cwd() }, (err, stdout) => {
+      if (err) {
+        return res.status(500).json({ status: 'error', message: err.message });
+      }
+      res.json({ status: 'ok', output: stdout.trim() });
+    });
   });
 
   // Google Search Console verification file
@@ -60,7 +72,7 @@ async function startServer() {
       .send(`Sitemap ${fileName} not found`);
   };
 
-  app.get(['/sitemap.xml', '/sitemap_index.xml'], (_req, res) => {
+  app.get(['/sitemap.xml', '/sitmap.xml', '/sitemap_index.xml'], (_req, res) => {
     serveXml('sitemap.xml', res);
   });
 
@@ -89,7 +101,7 @@ async function startServer() {
     }
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.send(
-      `User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api/\n\nSitemap: https://www.walkathawa.site/sitemap.xml\nSitemap: https://www.walkathawa.site/sitemap-stories.xml\nSitemap: https://www.walkathawa.site/sitemap-main.xml\n`
+      `User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api/\n\nSitemap: https://www.walkathawa.site/sitemap.xml\nSitemap: https://www.walkathawa.site/sitemap-main.xml\nSitemap: https://www.walkathawa.site/sitemap-stories.xml\n`
     );
   });
 

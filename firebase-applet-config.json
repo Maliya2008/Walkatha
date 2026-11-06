@@ -1,12 +1,12 @@
 {
-  "projectId": "walkathawa-93f80",
-  "appId": "1:575596307575:web:daf2ef013ba17b53745272",
-  "apiKey": "AIzaSyDWIC_GSMIOliCrhHKPgZgNUAZKUZ96nh4",
-  "authDomain": "walkathawa-93f80.firebaseapp.com",
-  "firestoreDatabaseId": "(default)",
-  "storageBucket": "walkathawa-93f80.firebasestorage.app",
-  "messagingSenderId": "575596307575",
-  "measurementId": "G-E0YMRGV1SK",
-  "oAuthClientId": "",
+  "projectId": "advance-sandbox-gmzf6",
+  "appId": "1:448261670736:web:b9c2a2ffea58dfe8ce0e55",
+  "apiKey": "AIzaSyC52g5zyvwkpuqYuP2SlW9yqU50KXxm3DE",
+  "authDomain": "advance-sandbox-gmzf6.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-walkatha-f5f7438d-1626-498d-ab41-6bcb7c299cae",
+  "storageBucket": "advance-sandbox-gmzf6.firebasestorage.app",
+  "messagingSenderId": "448261670736",
+  "measurementId": "",
+  "oAuthClientId": "448261670736-9b9pm6eoncpf43r440fh0q85bk6a8rpk.apps.googleusercontent.com",
   "recaptchaSiteKey": ""
 }

@@ -228,14 +228,30 @@ export function App() {
     }
   };
 
+  const refreshAllFromFirestore = useCallback(async () => {
+    try {
+      const cats = await StoryService.getCategories(true);
+      setCategories(cats);
+    } catch {
+      // ignore
+    }
+    fetchStoriesList();
+  }, [fetchStoriesList]);
+
   if (viewMode === 'admin') {
     return (
       <AdminRoot
-        onBackToPublic={() => navigateTo('/')}
+        onBackToPublic={() => {
+          refreshAllFromFirestore();
+          navigateTo('/');
+        }}
         onViewStoryPublic={(slug) => handleSelectStory(slug)}
+        onDataChanged={refreshAllFromFirestore}
       />
     );
   }
+
+  const sideBannerCount = viewMode === 'home' ? 5 : 3;
 
   return (
     <div className="min-h-screen flex flex-col bg-[#f8fafc] dark:bg-[#090e1d] text-[#0f172a] dark:text-slate-100 transition-colors duration-200">
@@ -256,7 +272,7 @@ export function App() {
       />
 
       <div className="flex-1 w-full max-w-[1540px] mx-auto px-2 sm:px-4 py-6 flex items-start justify-center gap-4">
-        <SideBannerColumn side="left" count={3} />
+        <SideBannerColumn side="left" count={sideBannerCount} />
 
         <main className="flex-1 min-w-0 max-w-6xl">
         {viewMode === 'home' && (
@@ -313,7 +329,7 @@ export function App() {
         )}
         </main>
 
-        <SideBannerColumn side="right" count={3} />
+        <SideBannerColumn side="right" count={sideBannerCount} />
       </div>
 
       <Footer

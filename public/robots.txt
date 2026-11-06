@@ -1,8 +1,20 @@
 User-agent: *
 Allow: /
+Allow: /story/
+Allow: /category/
+Allow: /categories
 Disallow: /admin
 Disallow: /api/
 
+User-agent: Googlebot
+Allow: /
+Disallow: /admin
+Disallow: /api/
+
+User-agent: Googlebot-Image
+Allow: /
+
+Host: https://www.walkathawa.site
 Sitemap: https://www.walkathawa.site/sitemap.xml
-Sitemap: https://www.walkathawa.site/sitemap-stories.xml
 Sitemap: https://www.walkathawa.site/sitemap-main.xml
+Sitemap: https://www.walkathawa.site/sitemap-stories.xml

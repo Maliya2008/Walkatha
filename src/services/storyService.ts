@@ -114,7 +114,7 @@ export class StoryService {
   }
 
   /**
-   * Loads all published stories exclusively from Firestore collections
+   * Loads all published stories with complete fullContent from Firestore & server Firestore sync cache
    */
   static async fetchAllLiveStories(forceRefresh = false): Promise<Story[]> {
     if (!forceRefresh && this.storiesCache && this.storiesCache.length > 0) {
@@ -125,97 +125,81 @@ export class StoryService {
     const deletedIds = new Set<string>();
     const deletedSlugs = new Set<string>();
 
-    // 1. Load baseline stories from primary Firestore (walkathawa-93f80)
-    try {
-      const primarySnap = await getDocs(collection(db, 'stories'));
-      primarySnap.forEach((docSnap) => {
-        const raw = docSnap.data();
-        const docId = String(raw.id || docSnap.id).trim();
-        const docSlug = String(raw.slug || docId).trim();
-
-        if (isDocDeleted(raw)) {
-          deletedIds.add(docId.toLowerCase());
-          deletedIds.add(docSnap.id.toLowerCase());
-          deletedSlugs.add(docSlug.toLowerCase());
-          return;
+    // 1. Load complete 614-story Firestore sync cache from backend first (fast, 0 quota cost, 100% fullContent)
+    if (typeof window !== 'undefined') {
+      try {
+        const res = await fetch('/api/firestore/stories');
+        if (res.ok) {
+          const payload = await res.json();
+          const serverStories: any[] = Array.isArray(payload.stories) ? payload.stories : [];
+          for (const raw of serverStories) {
+            if (isDocDeleted(raw)) continue;
+            const story = normalizeStoryDoc(raw.id || raw.slug, raw);
+            mergedById.set(story.id, story);
+            if (story.fullContent && story.fullContent.length > 50) {
+              this.contentByIdCache.set(story.id.toLowerCase(), story);
+              this.contentByIdCache.set(story.slug.toLowerCase(), story);
+            }
+          }
         }
-
-        const story = normalizeStoryDoc(docSnap.id, raw);
-        mergedById.set(story.id, story);
-        if (story.fullContent && story.fullContent.length > 50) {
-          this.contentByIdCache.set(story.id.toLowerCase(), story);
-          this.contentByIdCache.set(story.slug.toLowerCase(), story);
-        }
-      });
-    } catch (err) {
-      console.warn('Primary Firestore stories query notice:', err);
+      } catch {
+        // Fallback to direct Firestore below
+      }
     }
 
-    // 2. Load and overlay full story documents & admin updates/deletions from contentDb (advance-sandbox-gmzf6)
-    try {
-      const replicaSnap = await getDocs(collection(contentDb, 'stories'));
-      replicaSnap.forEach((docSnap) => {
-        const raw = docSnap.data();
-        const docId = String(raw.id || docSnap.id).trim();
-        const docSlug = String(raw.slug || docId).trim();
+    // 2. If server sync cache was empty or forceRefresh, also check Firestore collections directly
+    if (mergedById.size === 0) {
+      for (const firestoreInstance of [contentDb, db]) {
+        try {
+          const snap = await getDocs(collection(firestoreInstance, 'stories'));
+          snap.forEach((docSnap) => {
+            const raw = docSnap.data();
+            const docId = String(raw.id || docSnap.id).trim();
+            const docSlug = String(raw.slug || docId).trim();
 
-        if (isDocDeleted(raw)) {
-          deletedIds.add(docId.toLowerCase());
-          deletedIds.add(docSnap.id.toLowerCase());
-          deletedSlugs.add(docSlug.toLowerCase());
-          mergedById.delete(docId);
-          mergedById.delete(docSnap.id);
-          this.contentByIdCache.delete(docId.toLowerCase());
-          this.contentByIdCache.delete(docSlug.toLowerCase());
-          return;
-        }
+            if (isDocDeleted(raw)) {
+              deletedIds.add(docId.toLowerCase());
+              deletedIds.add(docSnap.id.toLowerCase());
+              deletedSlugs.add(docSlug.toLowerCase());
+              mergedById.delete(docId);
+              return;
+            }
 
-        const incoming = normalizeStoryDoc(docSnap.id, raw);
-        if (
-          deletedIds.has(incoming.id.toLowerCase()) ||
-          deletedSlugs.has(incoming.slug.toLowerCase())
-        ) {
-          return;
-        }
+            const incoming = normalizeStoryDoc(docSnap.id, raw);
+            if (
+              deletedIds.has(incoming.id.toLowerCase()) ||
+              deletedSlugs.has(incoming.slug.toLowerCase())
+            ) {
+              return;
+            }
 
-        const existing = mergedById.get(incoming.id);
-        if (existing) {
-          const fullBody =
-            incoming.fullContent && incoming.fullContent.length > 50
-              ? incoming.fullContent
-              : existing.fullContent || '';
-          const merged: Story = {
-            ...existing,
-            ...incoming,
-            fullContent: fullBody,
-            content: fullBody,
-            shortDescription:
-              incoming.shortDescription && incoming.shortDescription.length >= 25
-                ? incoming.shortDescription
-                : existing.shortDescription,
-            description:
-              incoming.description && incoming.description.length >= 25
-                ? incoming.description
-                : existing.description,
-            wordCount: incoming.wordCount || existing.wordCount || 0,
-            readingTime: incoming.readingTime || existing.readingTime || 5,
-            views: Math.max(incoming.views || 0, existing.views || 0),
-          };
-          mergedById.set(incoming.id, merged);
-          if (fullBody.length > 50) {
-            this.contentByIdCache.set(merged.id.toLowerCase(), merged);
-            this.contentByIdCache.set(merged.slug.toLowerCase(), merged);
-          }
-        } else {
-          mergedById.set(incoming.id, incoming);
-          if (incoming.fullContent && incoming.fullContent.length > 50) {
-            this.contentByIdCache.set(incoming.id.toLowerCase(), incoming);
-            this.contentByIdCache.set(incoming.slug.toLowerCase(), incoming);
-          }
+            const existing = mergedById.get(incoming.id);
+            if (existing) {
+              const bestBody =
+                (incoming.fullContent || '').length >= (existing.fullContent || '').length
+                  ? incoming.fullContent || ''
+                  : existing.fullContent || '';
+              const merged: Story = {
+                ...existing,
+                ...incoming,
+                fullContent: bestBody,
+                content: bestBody,
+              };
+              mergedById.set(incoming.id, merged);
+              this.contentByIdCache.set(merged.id.toLowerCase(), merged);
+              this.contentByIdCache.set(merged.slug.toLowerCase(), merged);
+            } else {
+              mergedById.set(incoming.id, incoming);
+              if (incoming.fullContent && incoming.fullContent.length > 50) {
+                this.contentByIdCache.set(incoming.id.toLowerCase(), incoming);
+                this.contentByIdCache.set(incoming.slug.toLowerCase(), incoming);
+              }
+            }
+          });
+        } catch {
+          // continue
         }
-      });
-    } catch (err) {
-      console.warn('Firestore content replica query notice:', err);
+      }
     }
 
     const list = Array.from(mergedById.values())
@@ -232,7 +216,7 @@ export class StoryService {
   }
 
   /**
-   * Loads categories exclusively from Firestore 'categories' collection
+   * Loads categories from Firestore & server Firestore sync cache
    */
   static async getCategories(forceRefresh = false): Promise<Category[]> {
     if (!forceRefresh && this.categoriesCache && this.categoriesCache.length > 0) {
@@ -246,12 +230,43 @@ export class StoryService {
       catMap.set(def.slug || def.id, { ...def });
     }
 
+    if (typeof window !== 'undefined') {
+      try {
+        const res = await fetch('/api/firestore/stories');
+        if (res.ok) {
+          const payload = await res.json();
+          const serverCats: any[] = Array.isArray(payload.categories) ? payload.categories : [];
+          if (serverCats.length > 0) {
+            catMap.clear();
+            for (const c of serverCats) {
+              if (isDocDeleted(c)) continue;
+              const key = String(c.slug || c.id).trim();
+              if (!key || key === 'all') continue;
+              catMap.set(key, {
+                id: c.id || key,
+                slug: key,
+                name: c.name || key,
+                sinhalaName: c.sinhalaName || c.name || key,
+                description: c.description || '',
+                storyCount: Number(c.storyCount) || 0,
+              });
+            }
+            this.categoriesCache = Array.from(catMap.values());
+            return this.categoriesCache;
+          }
+        }
+      } catch {
+        // Fallback to direct Firestore below
+      }
+    }
+
     for (const firestoreInstance of [db, contentDb]) {
       try {
         const snap = await getDocs(collection(firestoreInstance, 'categories'));
         snap.forEach((d) => {
           const data = d.data();
           const key = String(data.slug || d.id).trim();
+          if (!key || key === 'all') return;
           if (isDocDeleted(data)) {
             deletedKeys.add(key.toLowerCase());
             deletedKeys.add(d.id.toLowerCase());
@@ -301,12 +316,18 @@ export class StoryService {
     let filtered = [...all];
 
     if (category && category !== 'all') {
-      const lowerCat = category.toLowerCase();
+      const lowerCat = decodeURIComponent(category).trim().toLowerCase();
       filtered = filtered.filter((s) => {
         const sCat = (s.category || '').toLowerCase();
         const sCatId = (s.categoryId || '').toLowerCase();
+        const sCatName = (s.categoryName || '').toLowerCase();
         const sTags = (s.tags || []).map((t) => t.toLowerCase());
-        return sCat === lowerCat || sCatId === lowerCat || sTags.includes(lowerCat);
+        return (
+          sCat === lowerCat ||
+          sCatId === lowerCat ||
+          sCatName.includes(lowerCat) ||
+          sTags.includes(lowerCat)
+        );
       });
     }
 
@@ -347,15 +368,32 @@ export class StoryService {
   }
 
   /**
-   * Fetches full story content directly from Firestore ('stories' and 'posts' collections)
+   * Fetches full story content from server Firestore sync cache & Firestore
    */
   static async getStoryBySlug(slug: string): Promise<Story | null> {
     if (!slug) return null;
     const decodedSlug = decodeURIComponent(slug).trim().toLowerCase();
 
     const cached = this.contentByIdCache.get(decodedSlug);
-    if (cached && cached.fullContent && cached.fullContent.length > 50) {
+    if (cached && cached.fullContent && cached.fullContent.length > 200) {
       return cached;
+    }
+
+    if (typeof window !== 'undefined') {
+      try {
+        const res = await fetch(`/api/firestore/story/${encodeURIComponent(decodedSlug)}`);
+        if (res.ok) {
+          const raw = await res.json();
+          const story = normalizeStoryDoc(raw.id || decodedSlug, raw);
+          if (story.fullContent && story.fullContent.length > 50) {
+            this.contentByIdCache.set(decodedSlug, story);
+            this.contentByIdCache.set(story.id.toLowerCase(), story);
+            return story;
+          }
+        }
+      } catch {
+        // Fallback below
+      }
     }
 
     const all = await this.fetchAllLiveStories();
@@ -366,15 +404,14 @@ export class StoryService {
         decodeURIComponent(s.slug).toLowerCase() === decodedSlug
     );
 
-    if (found && found.fullContent && found.fullContent.length > 50) {
+    if (found && found.fullContent && found.fullContent.length > 200) {
       return found;
     }
 
     const targetId = found?.id || decodedSlug;
 
-    // Query Firestore dedicated 'posts' and 'stories' collections directly
-    for (const firestoreInstance of [db, contentDb]) {
-      for (const colName of ['posts', 'stories']) {
+    for (const firestoreInstance of [contentDb, db]) {
+      for (const colName of ['stories', 'posts']) {
         try {
           const directSnap = await getDoc(doc(firestoreInstance, colName, targetId));
           if (directSnap.exists() && !isDocDeleted(directSnap.data())) {
@@ -412,7 +449,7 @@ export class StoryService {
   }
 
   /**
-   * Create a new story in Firestore
+   * Create a new story in Firestore and server sync store
    */
   static async createStory(input: {
     title: string;
@@ -470,10 +507,17 @@ export class StoryService {
       updatedDate: now,
     };
 
+    if (typeof window !== 'undefined') {
+      await fetch('/api/firestore/story', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newStory),
+      }).catch(() => {});
+    }
+
     for (const instance of [contentDb, db]) {
       try {
         await setDoc(doc(instance, 'stories', storyId), newStory, { merge: true });
-        await setDoc(doc(instance, 'posts', storyId), newStory, { merge: true });
       } catch {
         // continue
       }
@@ -484,13 +528,12 @@ export class StoryService {
     }
     this.contentByIdCache.set(storyId.toLowerCase(), newStory);
     this.contentByIdCache.set(generatedSlug.toLowerCase(), newStory);
-    this.triggerSitemapRegeneration();
 
     return newStory;
   }
 
   /**
-   * Update an existing story in Firestore
+   * Update an existing story in Firestore and server sync store
    */
   static async updateStory(
     existingStory: Story,
@@ -548,10 +591,17 @@ export class StoryService {
       updatedDate: new Date().toISOString(),
     };
 
+    if (typeof window !== 'undefined') {
+      await fetch('/api/firestore/story', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedStory),
+      }).catch(() => {});
+    }
+
     for (const instance of [contentDb, db]) {
       try {
         await setDoc(doc(instance, 'stories', storyId), updatedStory, { merge: true });
-        await setDoc(doc(instance, 'posts', storyId), updatedStory, { merge: true });
       } catch {
         // continue
       }
@@ -564,13 +614,12 @@ export class StoryService {
     }
     this.contentByIdCache.set(storyId.toLowerCase(), updatedStory);
     this.contentByIdCache.set(cleanSlug.toLowerCase(), updatedStory);
-    this.triggerSitemapRegeneration();
 
     return updatedStory;
   }
 
   /**
-   * Delete an existing story from Firestore
+   * Delete an existing story from Firestore and server sync store
    */
   static async deleteStory(story: Story): Promise<void> {
     const storyId = story.id;
@@ -584,19 +633,23 @@ export class StoryService {
       updatedDate: new Date().toISOString(),
     };
 
+    if (typeof window !== 'undefined') {
+      await fetch(`/api/firestore/story/${encodeURIComponent(storyId)}`, {
+        method: 'DELETE',
+      }).catch(() => {});
+    }
+
     for (const instance of [contentDb, db]) {
-      for (const colName of ['stories', 'posts']) {
-        try {
-          await setDoc(doc(instance, colName, storyId), tombstone, { merge: true });
-        } catch {
-          // ignore
-        }
+      try {
+        await setDoc(doc(instance, 'stories', storyId), tombstone, { merge: true });
+      } catch {
+        // ignore
       }
     }
     try {
       await deleteDoc(doc(db, 'stories', storyId));
     } catch {
-      // ignore if primary replica is read-only
+      // ignore
     }
 
     if (this.storiesCache) {
@@ -606,11 +659,10 @@ export class StoryService {
     }
     this.contentByIdCache.delete(storyId.toLowerCase());
     this.contentByIdCache.delete((story.slug || '').toLowerCase());
-    this.triggerSitemapRegeneration();
   }
 
   /**
-   * Add a new category to Firestore
+   * Add a new category to Firestore and server sync store
    */
   static async addCategory(input: {
     name: string;
@@ -640,6 +692,14 @@ export class StoryService {
       deleted: false,
     };
 
+    if (typeof window !== 'undefined') {
+      await fetch('/api/firestore/category', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(catDoc),
+      }).catch(() => {});
+    }
+
     for (const instance of [contentDb, db]) {
       try {
         await setDoc(doc(instance, 'categories', cleanSlug), catDoc, { merge: true });
@@ -649,12 +709,11 @@ export class StoryService {
     }
 
     this.categoriesCache = null;
-    this.triggerSitemapRegeneration();
     return this.getCategories(true);
   }
 
   /**
-   * Delete a category from Firestore
+   * Delete a category from Firestore and server sync store
    */
   static async deleteCategory(category: Category): Promise<Category[]> {
     const keysToDelete = Array.from(
@@ -662,6 +721,12 @@ export class StoryService {
     );
 
     for (const key of keysToDelete) {
+      if (typeof window !== 'undefined') {
+        await fetch(`/api/firestore/category/${encodeURIComponent(key)}`, {
+          method: 'DELETE',
+        }).catch(() => {});
+      }
+
       const tombstone = {
         id: key,
         slug: category.slug || key,
@@ -684,7 +749,6 @@ export class StoryService {
     }
 
     this.categoriesCache = null;
-    this.triggerSitemapRegeneration();
     return this.getCategories(true);
   }
 

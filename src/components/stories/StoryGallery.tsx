@@ -22,6 +22,7 @@ interface StoryGalleryProps {
 
 export const StoryGallery: React.FC<StoryGalleryProps> = ({
   stories,
+  totalStories,
   selectedCategory,
   onSelectCategory,
   onSelectStory,
@@ -33,12 +34,29 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
   onPageChange,
   isLoading,
 }) => {
-  const pageNumbers: number[] = [];
-  const startPage = Math.max(1, currentPage - 2);
-  const endPage = Math.min(totalPages, currentPage + 2);
-  for (let i = startPage; i <= endPage; i++) {
-    pageNumbers.push(i);
-  }
+  // Build full pagination list with first page, surrounding pages, and last page
+  const getVisiblePages = (): (number | 'ellipsis-start' | 'ellipsis-end')[] => {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+    const items: (number | 'ellipsis-start' | 'ellipsis-end')[] = [1];
+    const start = Math.max(2, currentPage - 2);
+    const end = Math.min(totalPages - 1, currentPage + 2);
+
+    if (start > 2) {
+      items.push('ellipsis-start');
+    }
+    for (let i = start; i <= end; i++) {
+      items.push(i);
+    }
+    if (end < totalPages - 1) {
+      items.push('ellipsis-end');
+    }
+    items.push(totalPages);
+    return items;
+  };
+
+  const visiblePages = getVisiblePages();
 
   const getPageUrl = (page: number) => {
     const base =
@@ -52,16 +70,23 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
     <div className="space-y-5">
       <h1 className="sr-only">සිංහල වැල කතා | වල් කතා සහ වැල කතා 2026</h1>
 
-      {/* Sorting option & Smart Link below header */}
+      {/* Sorting option, Story Count & Smart Link below header */}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <a
-          href={SMART_LINK_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs font-semibold text-blue-700 dark:text-blue-400 hover:underline"
-        >
-          🔥 විශේෂ සිංහල වැල කතා එකතුව (Special Stories) →
-        </a>
+        <div className="flex flex-wrap items-center gap-3">
+          <a
+            href={SMART_LINK_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs font-semibold text-blue-700 dark:text-blue-400 hover:underline"
+          >
+            🔥 විශේෂ සිංහල වැල කතා එකතුව (Special Stories) →
+          </a>
+          {totalStories > 0 && (
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              • සම්පූර්ණ කතා {totalStories} (පිටුව {currentPage}/{totalPages})
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           <label htmlFor="sort-select" className="text-xs font-medium text-slate-600 dark:text-slate-400">
             පෙළගැස්ම:
@@ -136,7 +161,7 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
         </div>
       )}
 
-      {/* Crawlable Pagination */}
+      {/* Crawlable Pagination showing all pages up to totalPages */}
       {totalPages > 1 && (
         <nav
           aria-label="පිටු අංකනය"
@@ -158,26 +183,35 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
             </a>
           )}
 
-          {pageNumbers.map((page) => (
-            <a
-              key={page}
-              href={getPageUrl(page)}
-              onClick={(e) => {
-                if (!e.ctrlKey && !e.metaKey) {
-                  e.preventDefault();
-                  onPageChange(page);
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }
-              }}
-              className={`px-3 py-1.5 rounded-md text-xs font-semibold border transition-colors ${
-                page === currentPage
-                  ? 'bg-[#1e3a8a] text-white border-[#1e3a8a]'
-                  : 'bg-white dark:bg-[#111a33] border-slate-200 dark:border-[#1e2d52] text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#162347]'
-              }`}
-            >
-              {page}
-            </a>
-          ))}
+          {visiblePages.map((item) =>
+            typeof item === 'string' ? (
+              <span
+                key={item}
+                className="px-2 py-1.5 text-xs text-slate-400 select-none"
+              >
+                ...
+              </span>
+            ) : (
+              <a
+                key={item}
+                href={getPageUrl(item)}
+                onClick={(e) => {
+                  if (!e.ctrlKey && !e.metaKey) {
+                    e.preventDefault();
+                    onPageChange(item);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }
+                }}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold border transition-colors ${
+                  item === currentPage
+                    ? 'bg-[#1e3a8a] text-white border-[#1e3a8a]'
+                    : 'bg-white dark:bg-[#111a33] border-slate-200 dark:border-[#1e2d52] text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#162347]'
+                }`}
+              >
+                {item}
+              </a>
+            )
+          )}
 
           {currentPage < totalPages && (
             <a

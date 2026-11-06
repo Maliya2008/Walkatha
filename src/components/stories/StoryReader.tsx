@@ -103,9 +103,9 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
   }[fontSize] || 'text-[18px] sm:text-[19px] leading-[1.85] sm:leading-[1.95]';
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors">
+    <div className="min-h-screen bg-[#070e1e] text-white transition-colors">
       {/* Top Reading Progress Bar */}
-      <div className="fixed top-0 left-0 right-0 h-1 bg-slate-200 dark:bg-slate-800 z-50">
+      <div className="fixed top-0 left-0 right-0 h-1 bg-[#16264c] z-50">
         <div
           className="h-full bg-rose-600 transition-all duration-150"
           style={{ width: `${scrollProgress}%` }}
@@ -119,22 +119,22 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
           <button
             type="button"
             onClick={onBack}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer shadow-xs"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold bg-[#0a142c] border border-[#182a55] text-white hover:bg-[#122045] transition-colors cursor-pointer shadow-xs"
           >
-            <ArrowLeft className="w-4 h-4" />
+            <ArrowLeft className="w-4 h-4 text-rose-400" />
             <span>මුල් පිටුවට</span>
           </button>
 
           {/* Reading Font Size Adjustment */}
-          <div className="flex items-center gap-1 bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-1 rounded-lg shadow-xs text-xs">
-            <span className="px-1 text-[11px] font-medium text-slate-400">අකුරු:</span>
+          <div className="flex items-center gap-1 bg-[#0a142c] border border-[#182a55] p-1 rounded-lg shadow-xs text-xs">
+            <span className="px-1 text-[11px] font-medium text-blue-200/70">අකුරු:</span>
             <button
               type="button"
               onClick={() => onFontSizeChange('sm')}
               className={`px-2 py-0.5 rounded font-semibold cursor-pointer ${
                 fontSize === 'sm'
                   ? 'bg-rose-600 text-white'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  : 'text-blue-200/80 hover:bg-[#122045]'
               }`}
             >
               A-
@@ -145,7 +145,7 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
               className={`px-2 py-0.5 rounded font-semibold cursor-pointer ${
                 fontSize === 'md'
                   ? 'bg-rose-600 text-white'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  : 'text-blue-200/80 hover:bg-[#122045]'
               }`}
             >
               A
@@ -156,7 +156,7 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
               className={`px-2 py-0.5 rounded font-semibold cursor-pointer ${
                 fontSize === 'lg'
                   ? 'bg-rose-600 text-white'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  : 'text-blue-200/80 hover:bg-[#122045]'
               }`}
             >
               A+
@@ -165,9 +165,9 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
         </div>
 
         {/* Story Article Container */}
-        <article className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-xl p-5 sm:p-7 shadow-xs">
+        <article className="bg-[#0a142c] border border-[#182a55] rounded-xl p-5 sm:p-7 shadow-xl">
           {/* Breadcrumbs for Discoverability & Internal Linking */}
-          <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 mb-3 flex-wrap">
+          <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-xs text-blue-200/80 mb-3 flex-wrap">
             <a
               href="/"
               onClick={(e) => {
@@ -176,7 +176,7 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
                   onBack();
                 }
               }}
-              className="hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer"
+              className="hover:text-rose-400 text-blue-200/80 transition-colors cursor-pointer"
             >
               මුල් පිටුව
             </a>
@@ -189,12 +189,12 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
                   onSelectCategory(canonicalCategorySlug);
                 }
               }}
-              className="hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer"
+              className="hover:text-rose-400 text-blue-200/80 transition-colors cursor-pointer"
             >
               {categoryName}
             </a>
             <span>/</span>
-            <span className="text-slate-700 dark:text-slate-300 font-medium truncate max-w-[200px] sm:max-w-xs">{story.title}</span>
+            <span className="text-white font-medium truncate max-w-[200px] sm:max-w-xs">{story.title}</span>
           </nav>
 
           {/* Header Metadata */}
@@ -276,23 +276,23 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
 
           {/* Story Introduction / Description if available */}
           {(story.shortDescription || story.description) && (
-            <div className="my-5 p-3.5 bg-slate-50 dark:bg-slate-950/60 rounded-lg border-l-4 border-rose-500 text-sm sm:text-base text-slate-600 dark:text-slate-300 italic leading-relaxed">
+            <div className="my-5 p-3.5 bg-[#070e1e]/90 rounded-lg border-l-4 border-rose-500 text-sm sm:text-base text-blue-100 italic leading-relaxed">
               {story.shortDescription || story.description}
             </div>
           )}
 
-          {/* Distraction-Free Story Body */}
-          <div className={`mt-6 text-slate-800 dark:text-slate-200 space-y-5 ${fontClass}`}>
+          {/* Distraction-Free Story Body with Pure White Text */}
+          <div className={`mt-6 text-white space-y-6 font-normal ${fontClass}`}>
             {paragraphs.map((para, idx) => (
-              <p key={idx} className="break-words">
+              <p key={idx} className="break-words text-white">
                 {para}
               </p>
             ))}
           </div>
 
           {/* Story End Marker */}
-          <div className="mt-10 pt-6 border-t border-slate-100 dark:border-slate-800/80 text-center">
-            <span className="text-xs sm:text-sm font-semibold text-slate-400 dark:text-slate-500 tracking-wider">
+          <div className="mt-10 pt-6 border-t border-[#182a55] text-center">
+            <span className="text-xs sm:text-sm font-semibold text-blue-300/70 tracking-wider">
               ~ කතාව නිමි ~
             </span>
           </div>
@@ -309,14 +309,14 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
                   onSelectStory(prevStory.slug);
                 }
               }}
-              className="flex items-center gap-3 p-3.5 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 text-left hover:border-slate-300 dark:hover:border-slate-700 transition-colors cursor-pointer group shadow-xs"
+              className="flex items-center gap-3 p-3.5 rounded-xl border border-[#182a55] bg-[#0a142c] text-left hover:border-blue-500/50 transition-colors cursor-pointer group shadow-xs"
             >
-              <ChevronLeft className="w-5 h-5 text-slate-400 group-hover:text-rose-600 transition-colors shrink-0" />
+              <ChevronLeft className="w-5 h-5 text-blue-300 group-hover:text-rose-400 transition-colors shrink-0" />
               <div className="overflow-hidden">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                <span className="text-[10px] font-bold text-blue-300/70 uppercase tracking-wider block">
                   කලින් කතාව
                 </span>
-                <span className="text-sm font-bold text-slate-900 dark:text-white truncate block group-hover:text-rose-600">
+                <span className="text-sm font-bold text-white truncate block group-hover:text-rose-400">
                   {prevStory.title}
                 </span>
               </div>
@@ -332,17 +332,17 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
                   onSelectStory(nextStory.slug);
                 }
               }}
-              className="flex items-center justify-between gap-3 p-3.5 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 text-right hover:border-slate-300 dark:hover:border-slate-700 transition-colors cursor-pointer group shadow-xs sm:col-start-2"
+              className="flex items-center justify-between gap-3 p-3.5 rounded-xl border border-[#182a55] bg-[#0a142c] text-right hover:border-blue-500/50 transition-colors cursor-pointer group shadow-xs sm:col-start-2"
             >
               <div className="overflow-hidden text-right w-full">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                <span className="text-[10px] font-bold text-blue-300/70 uppercase tracking-wider block">
                   ඊළඟ කතාව
                 </span>
-                <span className="text-sm font-bold text-slate-900 dark:text-white truncate block group-hover:text-rose-600">
+                <span className="text-sm font-bold text-white truncate block group-hover:text-rose-400">
                   {nextStory.title}
                 </span>
               </div>
-              <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-rose-600 transition-colors shrink-0" />
+              <ChevronRight className="w-5 h-5 text-blue-300 group-hover:text-rose-400 transition-colors shrink-0" />
             </a>
           ) : null}
         </div>

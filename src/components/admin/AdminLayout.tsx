@@ -50,15 +50,15 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-indigo-500 selection:text-white">
+    <div className="min-h-screen bg-[#070e1e] text-white flex flex-col selection:bg-rose-600 selection:text-white">
       {/* Top Navbar */}
-      <header className="sticky top-0 z-40 bg-slate-900/90 backdrop-blur-md border-b border-slate-800">
+      <header className="sticky top-0 z-40 bg-[#070e1e]/95 backdrop-blur-md border-b border-[#16264c]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           {/* Brand */}
           <div className="flex items-center gap-3">
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="md:hidden p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+              className="md:hidden p-2 rounded-lg text-slate-400 hover:text-white hover:bg-[#111f44] cursor-pointer"
             >
               {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
@@ -67,14 +67,14 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
               onClick={() => onTabChange('dashboard')}
               className="flex items-center gap-2.5 cursor-pointer select-none"
             >
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-700 flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
                 <BookOpen className="w-4 h-4" />
               </div>
               <div className="flex items-center gap-2">
                 <span className="font-extrabold text-base text-white tracking-tight font-serif">
-                  StoryHub
+                  Walkathawa
                 </span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-rose-500/20 text-rose-400 border border-rose-500/30">
                   ADMIN
                 </span>
               </div>
@@ -92,8 +92,8 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
                   onClick={() => handleNavClick(item.id)}
                   className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                     isActive
-                      ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                      ? 'bg-rose-600 text-white shadow-md shadow-rose-600/20'
+                      : 'text-blue-200/80 hover:text-white hover:bg-[#111f44]'
                   }`}
                 >
                   <Icon className="w-3.5 h-3.5" />
@@ -108,16 +108,16 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
             {/* View Public Site button */}
             <button
               onClick={onViewPublicSite}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold border border-slate-700 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#0b1633] hover:bg-[#111f44] text-white text-xs font-semibold border border-[#182a55] transition-colors cursor-pointer"
               title="Open public story reader"
             >
-              <ExternalLink className="w-3.5 h-3.5 text-indigo-400" />
+              <ExternalLink className="w-3.5 h-3.5 text-blue-300" />
               <span className="hidden sm:inline">View Public Site</span>
             </button>
 
             {/* User details badge */}
-            <div className="hidden lg:flex items-center gap-2 pl-2 border-l border-slate-800 text-xs text-slate-400">
-              <div className="w-7 h-7 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-300">
+            <div className="hidden lg:flex items-center gap-2 pl-2 border-l border-[#16264c] text-xs text-blue-200/80">
+              <div className="w-7 h-7 rounded-full bg-[#0b1633] border border-[#182a55] flex items-center justify-center text-white">
                 <UserIcon className="w-3.5 h-3.5" />
               </div>
               <span className="truncate max-w-[120px]">{user.email}</span>
@@ -127,7 +127,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
             <button
               id="admin-logout-btn"
               onClick={onLogout}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 border border-slate-700 hover:border-rose-500/30 transition-colors cursor-pointer text-xs font-semibold"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#0b1633] hover:bg-rose-500/20 text-white hover:text-rose-400 border border-[#182a55] hover:border-rose-500/30 transition-colors cursor-pointer text-xs font-semibold"
               title="Sign Out of Admin"
             >
               <LogOut className="w-3.5 h-3.5" />
@@ -138,7 +138,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
 
         {/* Mobile Dropdown Nav */}
         {isMobileMenuOpen && (
-          <div className="md:hidden border-t border-slate-800 bg-slate-900 px-4 py-3 space-y-1 animate-in slide-in-from-top-2 duration-150">
+          <div className="md:hidden border-t border-[#16264c] bg-[#070e1e] px-4 py-3 space-y-1 animate-in slide-in-from-top-2 duration-150">
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
@@ -146,8 +146,8 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
                 <button
                   key={item.id}
                   onClick={() => handleNavClick(item.id)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all ${
-                    isActive ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                    isActive ? 'bg-rose-600 text-white' : 'text-blue-200/80 hover:bg-[#111f44] hover:text-white'
                   }`}
                 >
                   <Icon className="w-4 h-4" />
@@ -157,7 +157,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
             })}
             <button
               onClick={onLogout}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-rose-400 hover:bg-rose-500/10 transition-all"
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-rose-400 hover:bg-rose-500/10 transition-all cursor-pointer"
             >
               <LogOut className="w-4 h-4" />
               <span>Logout</span>
@@ -172,7 +172,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({
       </main>
 
       {/* Admin Footer */}
-      <footer className="border-t border-slate-900 bg-slate-950 text-slate-500 text-[11px] py-6 text-center">
+      <footer className="border-t border-[#16264c] bg-[#050b18] text-blue-200/70 text-[11px] py-6 text-center">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
           <div className="flex items-center gap-1.5">
             <ShieldCheck className="w-4 h-4 text-emerald-400" />

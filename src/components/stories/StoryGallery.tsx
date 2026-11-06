@@ -88,20 +88,20 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
       {/* Search Input (Expandable or toggleable) */}
       {(isSearchOpen || searchTerm) && (
         <div className="relative">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-300" />
           <input
             ref={searchInputRef}
             type="text"
             value={searchTerm}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="කතා මාතෘකා හෝ වර්ගීකරණ සොයන්න..."
-            className="w-full pl-10 pr-9 py-2 rounded-xl text-sm bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 focus:outline-hidden focus:border-rose-500 dark:focus:border-rose-400 text-slate-900 dark:text-white shadow-xs transition-colors"
+            className="w-full pl-10 pr-9 py-2 rounded-xl text-sm bg-[#0a142c] border border-[#182a55] focus:outline-hidden focus:border-blue-400 text-white placeholder-slate-400 shadow-xs transition-colors"
           />
           {searchTerm && (
             <button
               type="button"
               onClick={() => onSearchChange('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer p-0.5"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white cursor-pointer p-0.5"
               aria-label="සෙවුම මකන්න"
             >
               <X className="w-4 h-4" />
@@ -111,13 +111,13 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
       )}
 
       {/* 3. Section Heading & Sort Controls */}
-      <div className="flex items-center justify-between gap-3 pt-1 border-b border-slate-200/60 dark:border-slate-800/60 pb-2.5">
+      <div className="flex items-center justify-between gap-3 pt-1 border-b border-[#16264c] pb-2.5">
         <div className="flex items-baseline gap-2">
-          <h1 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+          <h1 className="text-base sm:text-lg font-bold text-white">
             {sectionTitle}
           </h1>
           {total > 0 && (
-            <span className="text-xs text-slate-500 dark:text-slate-400">
+            <span className="text-xs text-blue-200/70">
               ({total})
             </span>
           )}
@@ -125,15 +125,15 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
 
         {/* Sort selector */}
         <div className="flex items-center gap-1.5 text-xs">
-          <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+          <ArrowUpDown className="w-3.5 h-3.5 text-blue-300 shrink-0" />
           <select
             value={sortBy === 'popular' ? 'latest' : sortBy}
             onChange={(e) => onSortChange(e.target.value as any)}
-            className="bg-transparent text-xs font-semibold text-slate-700 dark:text-slate-300 focus:outline-hidden cursor-pointer"
+            className="bg-[#0a142c] text-xs font-semibold text-white border border-[#182a55] px-2.5 py-1 rounded-lg focus:outline-hidden cursor-pointer"
             aria-label="අනුපිළිවෙල"
           >
-            <option value="latest" className="dark:bg-slate-900">අලුත්ම (Latest)</option>
-            <option value="oldest" className="dark:bg-slate-900">පැරණිම (Oldest)</option>
+            <option value="latest" className="bg-[#0a142c] text-white">අලුත්ම (Latest)</option>
+            <option value="oldest" className="bg-[#0a142c] text-white">පැරණිම (Oldest)</option>
           </select>
         </div>
       </div>
@@ -147,15 +147,15 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
           {Array.from({ length: 12 }).map((_, i) => (
             <div
               key={i}
-              className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-xl overflow-hidden animate-pulse flex flex-col h-72"
+              className="bg-[#0b1633] border border-[#16264c] rounded-xl overflow-hidden animate-pulse flex flex-col h-72"
             >
-              <div className="h-28 bg-slate-200 dark:bg-slate-800 w-full shrink-0" />
+              <div className="h-28 bg-[#111f44] w-full shrink-0" />
               <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
                 <div className="space-y-2">
-                  <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded-md w-3/4" />
-                  <div className="h-3 bg-slate-200 dark:bg-slate-800 rounded-md w-full" />
+                  <div className="h-4 bg-[#111f44] rounded-md w-3/4" />
+                  <div className="h-3 bg-[#111f44] rounded-md w-full" />
                 </div>
-                <div className="h-3 bg-slate-200 dark:bg-slate-800 rounded-md w-1/2 pt-2 border-t border-slate-100 dark:border-slate-800" />
+                <div className="h-3 bg-[#111f44] rounded-md w-1/2 pt-2 border-t border-[#16264c]" />
               </div>
             </div>
           ))}
@@ -174,12 +174,12 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
         </div>
       ) : (
         /* Empty State */
-        <div className="text-center py-16 px-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/90 dark:border-slate-800 my-4 space-y-3">
-          <BookOpen className="w-10 h-10 text-slate-400 mx-auto opacity-50" />
-          <h3 className="text-base font-bold text-slate-900 dark:text-white">
+        <div className="text-center py-16 px-4 bg-[#0b1633] rounded-xl border border-[#16264c] my-4 space-y-3">
+          <BookOpen className="w-10 h-10 text-blue-300 mx-auto opacity-50" />
+          <h3 className="text-base font-bold text-white">
             කතා කිසිවක් හමු නොවීය
           </h3>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+          <p className="text-xs sm:text-sm text-slate-300 max-w-sm mx-auto">
             වෙනත් වචනයක් යොදා සොයන්න හෝ වෙනත් වර්ගීකරණයක් තෝරන්න.
           </p>
           {(searchTerm || selectedCategory !== 'all') && (
@@ -227,7 +227,7 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }
               }}
-              className="flex items-center gap-1 min-h-[44px] px-3 rounded-lg text-xs sm:text-sm font-semibold border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              className="flex items-center gap-1 min-h-[44px] px-3 rounded-lg text-xs sm:text-sm font-semibold border border-[#182a55] bg-[#0b1633] text-white hover:bg-[#111f44] transition-colors cursor-pointer"
             >
               <ChevronLeft className="w-4 h-4" />
               <span className="hidden xs:inline">කලින්</span>
@@ -236,7 +236,7 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
             <button
               type="button"
               disabled
-              className="flex items-center gap-1 min-h-[44px] px-3 rounded-lg text-xs sm:text-sm font-semibold border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 opacity-40 cursor-not-allowed"
+              className="flex items-center gap-1 min-h-[44px] px-3 rounded-lg text-xs sm:text-sm font-semibold border border-[#16264c] bg-[#0a142c] text-slate-500 opacity-40 cursor-not-allowed"
             >
               <ChevronLeft className="w-4 h-4" />
               <span className="hidden xs:inline">කලින්</span>
@@ -280,7 +280,7 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
                   className={`min-w-[40px] min-h-[44px] px-2 rounded-lg text-xs sm:text-sm font-bold flex items-center justify-center transition-colors cursor-pointer ${
                     isActive
                       ? 'bg-rose-600 text-white shadow-xs'
-                      : 'border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+                      : 'border border-[#182a55] bg-[#0b1633] text-white hover:bg-[#111f44]'
                   }`}
                 >
                   {p}
@@ -303,7 +303,7 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }
               }}
-              className="flex items-center gap-1 min-h-[44px] px-3 rounded-lg text-xs sm:text-sm font-semibold border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              className="flex items-center gap-1 min-h-[44px] px-3 rounded-lg text-xs sm:text-sm font-semibold border border-[#182a55] bg-[#0b1633] text-white hover:bg-[#111f44] transition-colors cursor-pointer"
             >
               <span className="hidden xs:inline">ඊළඟ</span>
               <ChevronRight className="w-4 h-4" />
@@ -312,7 +312,7 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
             <button
               type="button"
               disabled
-              className="flex items-center gap-1 min-h-[44px] px-3 rounded-lg text-xs sm:text-sm font-semibold border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 opacity-40 cursor-not-allowed"
+              className="flex items-center gap-1 min-h-[44px] px-3 rounded-lg text-xs sm:text-sm font-semibold border border-[#16264c] bg-[#0a142c] text-slate-500 opacity-40 cursor-not-allowed"
             >
               <span className="hidden xs:inline">ඊළඟ</span>
               <ChevronRight className="w-4 h-4" />

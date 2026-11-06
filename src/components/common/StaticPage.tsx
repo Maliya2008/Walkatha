@@ -115,10 +115,10 @@ export const StaticPage: React.FC<StaticPageProps> = ({
               <p className="leading-relaxed">
                 We value feedback, story contributions, partnerships, and editorial inquiries.
               </p>
-              <div className="p-4 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 mt-4 space-y-2">
-                <p className="text-sm font-semibold text-slate-900 dark:text-white">Email Address:</p>
-                <p className="font-mono text-rose-600 dark:text-rose-400 text-sm">mchethiyabandara@gmail.com</p>
-                <p className="text-xs text-slate-500 mt-2">
+              <div className="p-4 rounded-xl bg-[#070e1e] border border-[#16264c] mt-4 space-y-2">
+                <p className="text-sm font-semibold text-white">Email Address:</p>
+                <p className="font-mono text-rose-400 text-sm">mchethiyabandara@gmail.com</p>
+                <p className="text-xs text-blue-200/70 mt-2">
                   Responses typically sent within 24 to 48 business hours.
                 </p>
               </div>
@@ -151,36 +151,36 @@ export const StaticPage: React.FC<StaticPageProps> = ({
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 animate-fadeIn">
       {/* Breadcrumbs */}
-      <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-xs sm:text-sm text-slate-500 dark:text-slate-400 mb-6">
+      <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-xs sm:text-sm text-blue-200/70 mb-6">
         <button
           type="button"
           onClick={onNavigateHome}
-          className="hover:text-rose-600 dark:hover:text-rose-400 flex items-center gap-1 transition-colors cursor-pointer"
+          className="hover:text-rose-400 flex items-center gap-1 transition-colors cursor-pointer"
         >
           <Home className="w-4 h-4" />
           <span>මුල් පිටුව (Home)</span>
         </button>
         <span>/</span>
-        <span className="text-slate-900 dark:text-slate-100 font-medium">{config.sinhalaTitle}</span>
+        <span className="text-white font-medium">{config.sinhalaTitle}</span>
       </nav>
 
       {/* Header */}
-      <div className="flex items-center gap-3.5 pb-6 border-b border-slate-200 dark:border-slate-800 mb-8">
-        <div className="p-3 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+      <div className="flex items-center gap-3.5 pb-6 border-b border-[#16264c] mb-8">
+        <div className="p-3 rounded-2xl bg-[#0b1633] border border-[#16264c]">
           {config.icon}
         </div>
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
             {config.title}
           </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+          <p className="text-sm text-blue-200/80 mt-0.5">
             {config.sinhalaTitle} · Walkathawa (වල් කතාව)
           </p>
         </div>
       </div>
 
       {/* Body */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-10 shadow-xs text-sm sm:text-base text-slate-700 dark:text-slate-300 space-y-4">
+      <div className="bg-[#0a142c] border border-[#182a55] rounded-2xl p-6 sm:p-10 shadow-lg text-sm sm:text-base text-slate-100 space-y-4">
         {config.content}
       </div>
 
@@ -189,7 +189,7 @@ export const StaticPage: React.FC<StaticPageProps> = ({
         <button
           type="button"
           onClick={onNavigateHome}
-          className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 font-semibold text-sm transition-all cursor-pointer shadow-xs"
+          className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-white hover:bg-slate-100 text-slate-950 font-semibold text-sm transition-all cursor-pointer shadow-xs"
         >
           <Home className="w-4 h-4" />
           <span>මුල් පිටුවට යන්න (Return to Home)</span>

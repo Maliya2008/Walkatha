@@ -60,6 +60,6 @@ export interface StoryFilterParams {
   sortBy?: 'latest' | 'popular' | 'oldest';
 }
 
-export type ReadingTheme = 'dark' | 'light' | 'sepia';
+export type ReadingTheme = 'navy' | 'dark' | 'light' | 'sepia';
 export type FontSize = 'sm' | 'md' | 'lg' | 'xl';
 export type FontFamily = 'sans' | 'serif' | 'sinhala';

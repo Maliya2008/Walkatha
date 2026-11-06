@@ -38,7 +38,15 @@ export function App() {
   // Modals & UI States
   const [isSitemapOpen, setIsSitemapOpen] = useState<boolean>(false);
   const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
-  const [theme, setTheme] = useState<ReadingTheme>('dark');
+  const [theme, setTheme] = useState<ReadingTheme>(() => {
+    try {
+      const stored = localStorage.getItem('walkathawa_theme');
+      if (stored === 'light' || stored === 'dark') return stored;
+    } catch {
+      // LocalStorage unavailable
+    }
+    return 'dark';
+  });
   const [fontSize, setFontSize] = useState<FontSize>('md');
 
   // Handle URL Location Routing
@@ -59,13 +67,25 @@ export function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Theme Class Toggle on <html>
+  // Theme Class Toggle on <html> & LocalStorage Sync
   useEffect(() => {
     const root = document.documentElement;
     if (theme === 'dark') {
       root.classList.add('dark');
+      root.classList.remove('light');
     } else {
       root.classList.remove('dark');
+      root.classList.add('light');
+    }
+    try {
+      localStorage.setItem('walkathawa_theme', theme);
+    } catch {
+      // Storage quota or error
+    }
+
+    const metaTheme = document.querySelector('meta[name="theme-color"]');
+    if (metaTheme) {
+      metaTheme.setAttribute('content', theme === 'dark' ? '#0f172a' : '#ffffff');
     }
   }, [theme]);
 

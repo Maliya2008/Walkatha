@@ -19,11 +19,11 @@ export const PrivacyTermsModal: React.FC<PrivacyTermsModalProps> = ({
       id="compliance-modal-overlay"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in"
     >
-      <div className="relative w-full max-w-2xl max-h-[80vh] flex flex-col rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden">
+      <div className="relative w-full max-w-2xl max-h-[80vh] flex flex-col rounded-2xl bg-[#0a142c] border border-[#182a55] shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800">
-          <div className="flex items-center gap-2 text-slate-900 dark:text-white font-bold text-base">
-            <ShieldCheck className="w-5 h-5 text-indigo-500" />
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#16264c]">
+          <div className="flex items-center gap-2 text-white font-bold text-base">
+            <ShieldCheck className="w-5 h-5 text-blue-400" />
             <span>
               {type === 'privacy' && 'Privacy Policy & Cookie Policy'}
               {type === 'terms' && 'Terms of Service'}
@@ -33,29 +33,29 @@ export const PrivacyTermsModal: React.FC<PrivacyTermsModalProps> = ({
           <button
             onClick={onClose}
             aria-label="Close modal"
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="p-6 overflow-y-auto space-y-4 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+        <div className="p-6 overflow-y-auto space-y-4 text-xs text-blue-100/90 leading-relaxed">
           {type === 'privacy' && (
             <>
               <p>
-                <strong>Effective Date:</strong> August 31, 2026
+                <strong className="text-white">Effective Date:</strong> August 31, 2026
               </p>
               <p>
                 We respect your personal privacy. When you access and read short stories on this platform, we do not collect personal identifying information unless you explicitly provide it.
               </p>
-              <h5 className="font-bold text-slate-900 dark:text-slate-100 text-sm mt-3">
+              <h5 className="font-bold text-white text-sm mt-3">
                 Cookies and Local Storage
               </h5>
               <p>
-                We use browser localStorage and cookies solely to preserve your reading preferences (e.g., dark/sepia mode, comfortable font sizes) and to record read counts anonymously.
+                We use browser localStorage and cookies solely to preserve your reading preferences (e.g., navy/dark mode, comfortable font sizes) and to record read counts anonymously.
               </p>
-              <h5 className="font-bold text-slate-900 dark:text-slate-100 text-sm mt-3">
+              <h5 className="font-bold text-white text-sm mt-3">
                 Third-Party Advertising Partners
               </h5>
               <p>
@@ -67,15 +67,15 @@ export const PrivacyTermsModal: React.FC<PrivacyTermsModalProps> = ({
           {type === 'terms' && (
             <>
               <p>
-                <strong>Welcome to Short Stories.</strong> By accessing our website, you agree to comply with these terms of use.
+                <strong className="text-white">Welcome to Short Stories.</strong> By accessing our website, you agree to comply with these terms of use.
               </p>
-              <h5 className="font-bold text-slate-900 dark:text-slate-100 text-sm mt-3">
+              <h5 className="font-bold text-white text-sm mt-3">
                 Intellectual Property & Authorship
               </h5>
               <p>
                 All short stories, characters, lore, and text published on this website are the intellectual property of their respective creators. You may not republish, scrape, or distribute story content without explicit permission.
               </p>
-              <h5 className="font-bold text-slate-900 dark:text-slate-100 text-sm mt-3">
+              <h5 className="font-bold text-white text-sm mt-3">
                 Availability
               </h5>
               <p>
@@ -86,13 +86,13 @@ export const PrivacyTermsModal: React.FC<PrivacyTermsModalProps> = ({
 
           {type === 'ads' && (
             <>
-              <h5 className="font-bold text-slate-900 dark:text-slate-100 text-sm">
+              <h5 className="font-bold text-white text-sm">
                 Advertising Guidelines & Disclosures
               </h5>
               <p>
                 This platform is structured to ensure high readability while supporting content creators through ad monetization:
               </p>
-              <ul className="list-disc pl-5 space-y-1 mt-2 text-slate-600 dark:text-slate-400">
+              <ul className="list-disc pl-5 space-y-1 mt-2 text-blue-200/80">
                 <li>Advertisements comply with standard digital publishing policies</li>
                 <li>Popunders and direct sponsorships trigger responsibly with frequency limits</li>
                 <li>Content reading areas remain uninterrupted for optimal user experience</li>
@@ -101,10 +101,10 @@ export const PrivacyTermsModal: React.FC<PrivacyTermsModalProps> = ({
           )}
         </div>
 
-        <div className="px-6 py-3 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-800 flex justify-end">
+        <div className="px-6 py-3 bg-[#070e1e] border-t border-[#16264c] flex justify-end">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-xs font-semibold"
+            className="px-4 py-2 rounded-xl bg-white text-slate-950 hover:bg-slate-100 text-xs font-semibold cursor-pointer"
           >
             I Understand
           </button>

@@ -58,13 +58,13 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess, onBackToSite 
   };
 
   return (
-    <div className="min-h-screen flex flex-col justify-center items-center py-12 px-4 sm:px-6 lg:px-8 bg-slate-900 text-slate-100 selection:bg-indigo-500 selection:text-white">
+    <div className="min-h-screen flex flex-col justify-center items-center py-12 px-4 sm:px-6 lg:px-8 bg-[#070e1e] text-white selection:bg-rose-600 selection:text-white">
       {/* Return to public site link */}
       <div className="absolute top-6 left-6">
         <button
           type="button"
           onClick={onBackToSite}
-          className="flex items-center gap-2 text-xs font-medium text-slate-400 hover:text-white transition-colors px-3 py-2 rounded-lg bg-slate-800/80 border border-slate-700 hover:border-slate-600"
+          className="flex items-center gap-2 text-xs font-medium text-white transition-colors px-3 py-2 rounded-lg bg-[#0b1633] border border-[#16264c] hover:bg-[#111f44] cursor-pointer"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
           <span>Return to Story Website</span>
@@ -74,19 +74,19 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess, onBackToSite 
       <div className="w-full max-w-md space-y-8">
         {/* Logo & Header */}
         <div className="text-center">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-700 text-white shadow-lg shadow-indigo-500/25 mb-4">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white shadow-lg shadow-blue-500/25 mb-4">
             <BookOpen className="w-7 h-7" />
           </div>
           <h2 className="text-2xl font-black tracking-tight text-white font-serif">
-            Walkathawa <span className="text-indigo-400 font-sans text-xl">(වල් කතාව)</span>
+            Walkathawa <span className="text-rose-400 font-sans text-xl">(වල් කතාව)</span>
           </h2>
-          <p className="mt-2 text-xs text-slate-400">
+          <p className="mt-2 text-xs text-blue-200/80">
             Secure administrative access for managing Sinhala stories, SEO, and ad monetization
           </p>
         </div>
 
         {/* Login Box */}
-        <div className="bg-slate-800/90 backdrop-blur-md rounded-2xl p-8 border border-slate-700/80 shadow-2xl">
+        <div className="bg-[#0a142c] backdrop-blur-md rounded-2xl p-8 border border-[#182a55] shadow-2xl">
           {error && (
             <div className="mb-6 p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-start gap-3 text-rose-400 text-xs animate-in fade-in duration-200">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -97,11 +97,11 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess, onBackToSite 
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* Email Input */}
             <div>
-              <label htmlFor="admin-email" className="block text-xs font-semibold text-slate-300 mb-1.5 uppercase tracking-wider">
+              <label htmlFor="admin-email" className="block text-xs font-semibold text-white mb-1.5 uppercase tracking-wider">
                 Admin Email
               </label>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-blue-300">
                   <Mail className="w-4 h-4" />
                 </div>
                 <input
@@ -111,8 +111,8 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess, onBackToSite 
                   autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@walkathawa.com"
-                  className="block w-full pl-10 pr-3.5 py-2.5 bg-slate-900/90 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                  placeholder="admin@walkathawa.site"
+                  className="block w-full pl-10 pr-3.5 py-2.5 bg-[#070e1e] border border-[#16264c] rounded-xl text-xs text-white placeholder-slate-400 focus:outline-hidden focus:border-blue-400 transition-all"
                 />
               </div>
             </div>
@@ -120,7 +120,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess, onBackToSite 
             {/* Password Input */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label htmlFor="admin-password" className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                <label htmlFor="admin-password" className="block text-xs font-semibold text-white uppercase tracking-wider">
                   Password
                 </label>
                 <button
@@ -130,13 +130,13 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess, onBackToSite 
                     setResetStatus('idle');
                     setResetMessage('');
                   }}
-                  className="text-[11px] text-indigo-400 hover:text-indigo-300 transition-colors"
+                  className="text-[11px] text-blue-400 hover:text-blue-300 transition-colors cursor-pointer"
                 >
                   Forgot password?
                 </button>
               </div>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-blue-300">
                   <Lock className="w-4 h-4" />
                 </div>
                 <input
@@ -147,12 +147,12 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess, onBackToSite 
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••••••"
-                  className="block w-full pl-10 pr-10 py-2.5 bg-slate-900/90 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all font-mono"
+                  className="block w-full pl-10 pr-10 py-2.5 bg-[#070e1e] border border-[#16264c] rounded-xl text-xs text-white placeholder-slate-400 focus:outline-hidden focus:border-blue-400 transition-all font-mono"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-200"
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-blue-300 hover:text-white cursor-pointer"
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -161,12 +161,12 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess, onBackToSite 
 
             {/* Remember Me */}
             <div className="flex items-center justify-between pt-1">
-              <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-400 select-none">
+              <label className="flex items-center gap-2 cursor-pointer text-xs text-blue-200/80 select-none">
                 <input
                   type="checkbox"
                   checked={remember}
                   onChange={(e) => setRemember(e.target.checked)}
-                  className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-slate-900"
+                  className="w-4 h-4 rounded border-[#16264c] bg-[#070e1e] text-blue-600 focus:ring-blue-500"
                 />
                 <span>Remember session for 30 days</span>
               </label>
@@ -177,7 +177,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onSuccess, onBackToSite 
               id="admin-login-submit-btn"
               type="submit"
               disabled={isLoading}
-              className="w-full mt-2 py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white text-xs font-bold uppercase tracking-wider shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+              className="w-full mt-2 py-3 px-4 rounded-xl bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-white text-xs font-bold uppercase tracking-wider shadow-lg shadow-rose-600/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
             >
               {isLoading ? (
                 <>

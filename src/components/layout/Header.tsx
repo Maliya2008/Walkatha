@@ -108,14 +108,14 @@ export const Header: React.FC<HeaderProps> = ({
             type="button"
             id="header-theme-toggle-btn"
             onClick={onToggleTheme}
-            aria-label="Toggle Color Theme"
-            className="p-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-            title={theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+            aria-label={theme === 'dark' ? 'ආලෝක තේමාවට මාරු වන්න (Switch to Light Mode)' : 'අඳුරු තේමාවට මාරු වන්න (Switch to Dark Mode)'}
+            className="p-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-all cursor-pointer"
+            title={theme === 'dark' ? 'ආලෝක තේමාව (Light Mode)' : 'අඳුරු තේමාව (Dark Mode)'}
           >
             {theme === 'dark' ? (
-              <Sun className="w-4 h-4 text-amber-400" />
+              <Sun className="w-4 h-4 text-amber-400 pointer-events-none transition-transform duration-200" />
             ) : (
-              <Moon className="w-4 h-4 text-slate-700" />
+              <Moon className="w-4 h-4 text-slate-700 dark:text-slate-300 pointer-events-none transition-transform duration-200" />
             )}
           </button>
 

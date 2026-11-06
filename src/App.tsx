@@ -11,6 +11,11 @@ import { Story, Category } from './types/story';
 import { StoryService } from './services/storyService';
 import { SeoService } from './services/seoService';
 import { testConnection } from './firebase';
+import {
+  SideBannerColumn,
+  PopunderLoader,
+  triggerSmartLinkOnInteraction,
+} from './components/common/AdUnits';
 
 type ViewMode =
   | 'home'
@@ -191,6 +196,7 @@ export function App() {
   };
 
   const handleSelectStory = (slug: string) => {
+    triggerSmartLinkOnInteraction();
     navigateTo(`/story/${encodeURIComponent(slug)}`);
   };
 
@@ -233,6 +239,7 @@ export function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-[#f8fafc] dark:bg-[#090e1d] text-[#0f172a] dark:text-slate-100 transition-colors duration-200">
+      <PopunderLoader routeKey={`${viewMode}-${selectedCategory}-${selectedStorySlug || ''}-${currentPage}`} />
       <Header
         categories={categories}
         selectedCategory={selectedCategory}
@@ -248,7 +255,10 @@ export function App() {
         onOpenCategoriesPage={() => navigateTo('/categories')}
       />
 
-      <main className="flex-1 w-full max-w-6xl mx-auto px-4 sm:px-6 py-6">
+      <div className="flex-1 w-full max-w-[1540px] mx-auto px-2 sm:px-4 py-6 flex items-start justify-center gap-4">
+        <SideBannerColumn side="left" count={3} />
+
+        <main className="flex-1 min-w-0 max-w-6xl">
         {viewMode === 'home' && (
           <StoryGallery
             stories={stories}
@@ -301,7 +311,10 @@ export function App() {
             onBrowseCategories={() => navigateTo('/categories')}
           />
         )}
-      </main>
+        </main>
+
+        <SideBannerColumn side="right" count={3} />
+      </div>
 
       <Footer
         categories={categories}

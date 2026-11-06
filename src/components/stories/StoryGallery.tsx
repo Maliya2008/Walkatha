@@ -1,6 +1,7 @@
 import React from 'react';
 import { Story, Category } from '../../types/story';
 import { StoryCard } from './StoryCard';
+import { TripleInlineBanners320x50, SMART_LINK_URL } from '../common/AdUnits';
 
 interface StoryGalleryProps {
   stories: Story[];
@@ -51,21 +52,31 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
     <div className="space-y-5">
       <h1 className="sr-only">සිංහල වැල කතා | වල් කතා සහ වැල කතා 2026</h1>
 
-      {/* Sorting option below header */}
-      <div className="flex items-center justify-end gap-2">
-        <label htmlFor="sort-select" className="text-xs font-medium text-slate-600 dark:text-slate-400">
-          පෙළගැස්ම:
-        </label>
-        <select
-          id="sort-select"
-          value={sortBy}
-          onChange={(e) => onSortChange(e.target.value as 'latest' | 'popular' | 'oldest')}
-          className="px-3 py-1.5 text-xs font-medium rounded-md border border-slate-200 dark:border-[#243763] bg-white dark:bg-[#111a33] text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer"
+      {/* Sorting option & Smart Link below header */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <a
+          href={SMART_LINK_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs font-semibold text-blue-700 dark:text-blue-400 hover:underline"
         >
-          <option value="latest">අලුත්ම කතා (Latest)</option>
-          <option value="popular">ජනප්‍රියම (Popular)</option>
-          <option value="oldest">පැරණිම (Oldest)</option>
-        </select>
+          🔥 විශේෂ සිංහල වැල කතා එකතුව (Special Stories) →
+        </a>
+        <div className="flex items-center gap-2">
+          <label htmlFor="sort-select" className="text-xs font-medium text-slate-600 dark:text-slate-400">
+            පෙළගැස්ම:
+          </label>
+          <select
+            id="sort-select"
+            value={sortBy}
+            onChange={(e) => onSortChange(e.target.value as 'latest' | 'popular' | 'oldest')}
+            className="px-3 py-1.5 text-xs font-medium rounded-md border border-slate-200 dark:border-[#243763] bg-white dark:bg-[#111a33] text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer"
+          >
+            <option value="latest">අලුත්ම කතා (Latest)</option>
+            <option value="popular">ජනප්‍රියම (Popular)</option>
+            <option value="oldest">පැරණිම (Oldest)</option>
+          </select>
+        </div>
       </div>
 
       {/* Stories Grid: 3 columns, max 10 rows (30 cards) per page */}
@@ -95,15 +106,33 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {stories.slice(0, 30).map((story) => (
-            <StoryCard
-              key={story.id}
-              story={story}
-              onSelect={onSelectStory}
-              onSelectCategory={onSelectCategory}
-            />
-          ))}
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {stories.slice(0, 15).map((story) => (
+              <StoryCard
+                key={story.id}
+                story={story}
+                onSelect={onSelectStory}
+                onSelectCategory={onSelectCategory}
+              />
+            ))}
+          </div>
+
+          {/* Three 320x50 Banners inline in the middle of stories */}
+          <TripleInlineBanners320x50 label="gallery-middle" />
+
+          {stories.length > 15 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {stories.slice(15, 30).map((story) => (
+                <StoryCard
+                  key={story.id}
+                  story={story}
+                  onSelect={onSelectStory}
+                  onSelectCategory={onSelectCategory}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
 

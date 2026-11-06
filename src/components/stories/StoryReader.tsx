@@ -3,6 +3,7 @@ import { Story } from '../../types/story';
 import { StoryService } from '../../services/storyService';
 import { SeoService } from '../../services/seoService';
 import { StoryCard } from './StoryCard';
+import { TripleInlineBanners320x50, SMART_LINK_URL } from '../common/AdUnits';
 
 interface StoryReaderProps {
   slug: string;
@@ -199,14 +200,34 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
             </h1>
           </header>
 
-        {/* Story Body Content */}
+        {/* Story Body Content with inline 3x 320x50 banners in the middle */}
         <div className="space-y-4 text-base sm:text-lg leading-relaxed text-slate-800 dark:text-slate-200 select-text">
           <h2 className="sr-only">{story.title} - සම්පූර්ණ සිංහල කතාව</h2>
-          {paragraphs.map((para, idx) => (
-            <p key={idx} className="leading-[1.9] tracking-normal">
-              {para}
-            </p>
-          ))}
+          {paragraphs.map((para, idx) => {
+            const midpoint = Math.max(1, Math.floor(paragraphs.length / 2));
+            return (
+              <React.Fragment key={idx}>
+                <p className="leading-[1.9] tracking-normal">{para}</p>
+                {idx === midpoint - 1 && (
+                  <div className="my-6 py-2 border-y border-slate-100 dark:border-[#1a2747]">
+                    <TripleInlineBanners320x50 label="reader-middle" />
+                  </div>
+                )}
+              </React.Fragment>
+            );
+          })}
+        </div>
+
+        {/* Smart Link CTA */}
+        <div className="mt-6 pt-4 border-t border-slate-100 dark:border-[#1a2747] flex justify-center">
+          <a
+            href={SMART_LINK_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-4 py-2 rounded-md bg-[#1e3a8a] hover:bg-blue-800 text-white text-xs sm:text-sm font-semibold transition-colors"
+          >
+            තවත් විශේෂ සිංහල වැල කතා සහ වීඩියෝ බලන්න →
+          </a>
         </div>
 
         {/* Inline Contextual Internal Links inside Article Footer */}

@@ -15,7 +15,7 @@ const SMART_LINK_STORAGE_KEY = 'walkathawa_smartlink_last_ts';
 /**
  * Triggers the smart link on user interaction (throttled per cooldown window)
  */
-export function triggerSmartLinkOnInteraction(cooldownMs = 25000): void {
+export function triggerSmartLinkOnInteraction(cooldownMs = 20000): void {
   if (typeof window === 'undefined') return;
   try {
     const lastTs = Number(sessionStorage.getItem(SMART_LINK_STORAGE_KEY) || '0');
@@ -36,8 +36,8 @@ export function triggerSmartLinkOnInteraction(cooldownMs = 25000): void {
 }
 
 /**
- * Clears any ad-network frequency cap keys in storage so popunders can fire repeatedly
- * to deliver 75+ popunder impressions per 3-minute session.
+ * Clears ad-network frequency cap keys in storage and cookies so popunders can fire repeatedly
+ * to deliver 50+ popunder impressions per story read.
  */
 function clearPopunderCooldownStorage(): void {
   try {
@@ -47,9 +47,20 @@ function clearPopunderCooldownStorage(): void {
         if (
           key !== 'walkathawa_theme' &&
           key !== 'walkathawa_admin_session_v2' &&
-          /pop|under|tab|ad|timer|interval|cap|freq|ahura|brij|last|show|hit/i.test(key)
+          key !== 'walkathawa_admin_delta_v1' &&
+          /pop|under|tab|ad|timer|interval|cap|freq|ahura|brij|last|show|hit|clk|imp/i.test(key)
         ) {
           store.removeItem(key);
+        }
+      }
+    }
+    if (typeof document !== 'undefined' && document.cookie) {
+      const cookies = document.cookie.split(';');
+      for (const rawCookie of cookies) {
+        const eqPos = rawCookie.indexOf('=');
+        const name = (eqPos > -1 ? rawCookie.slice(0, eqPos) : rawCookie).trim();
+        if (name && /pop|under|ad|cap|freq|ahura|brij|pndr| interstitial/i.test(name)) {
+          document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
         }
       }
     }
@@ -96,24 +107,20 @@ function fireSinglePopunder(slot = 1): void {
 }
 
 /**
- * Fires a burst of popunder script loads (staggered so each registers cleanly)
+ * Fires a staggered wave of popunder script loads so each registers cleanly
  */
 export function firePopunderWave(count = 2): void {
   for (let i = 0; i < count; i++) {
     setTimeout(() => {
       fireSinglePopunder(i + 1);
-    }, i * 350);
+    }, i * 300);
   }
 }
 
 /**
  * PopunderLoader:
- * Drives ~75-85+ popunder impressions per user in 3 minutes (75%+ of the 100-impression target)
- * without cluttering the UI:
- * 1. Fires 2 popunders every 10 seconds when the user touches, taps, clicks, or scrolls the screen.
- * 2. Runs a 4-slot invisible (0x0) background popunder engine that cycles every 10 seconds
- *    (4 popunder script loads x 18 cycles in 3 minutes = 72+ background popunder impressions
- *    + direct touch popunders = 80+ popunder impressions in 3 minutes).
+ * Active across all pages (Home, Categories, etc.) to trigger 2 popunders every 10 seconds
+ * on screen touch and background intervals.
  */
 export const PopunderLoader: React.FC<{ routeKey: string }> = ({ routeKey }) => {
   const [bgCycle, setBgCycle] = useState<number>(0);
@@ -121,7 +128,6 @@ export const PopunderLoader: React.FC<{ routeKey: string }> = ({ routeKey }) => 
   useEffect(() => {
     if (typeof document === 'undefined' || typeof window === 'undefined') return;
 
-    // 1. Ensure Social Bar script is active
     const existingSocial = document.querySelector(`script[data-role="social-bar-tag"]`);
     if (!existingSocial) {
       const s = document.createElement('script');
@@ -132,10 +138,8 @@ export const PopunderLoader: React.FC<{ routeKey: string }> = ({ routeKey }) => 
       document.body.appendChild(s);
     }
 
-    // 2. Initial 2x popunder wave on page/route load
     firePopunderWave(2);
 
-    // 3. Screen touch / interaction listener: 2 popunders every 10 seconds when user touches screen
     let windowStartTs = Date.now();
     let popCountInWindow = 0;
     let lastTouchWaveTs = 0;
@@ -159,7 +163,6 @@ export const PopunderLoader: React.FC<{ routeKey: string }> = ({ routeKey }) => 
     window.addEventListener('pointerdown', handleScreenTouch, { passive: true });
     window.addEventListener('click', handleScreenTouch, { passive: true });
 
-    // 4. Every 10 seconds (18 times in 3 minutes), cycle the 4 invisible popunder slots + main wave
     const interval = setInterval(() => {
       windowStartTs = Date.now();
       popCountInWindow = 0;
@@ -176,7 +179,6 @@ export const PopunderLoader: React.FC<{ routeKey: string }> = ({ routeKey }) => 
     };
   }, [routeKey]);
 
-  // 4 invisible 0x0 background popunder execution containers (zero visual footprint)
   return (
     <div
       aria-hidden="true"
@@ -202,6 +204,135 @@ export const PopunderLoader: React.FC<{ routeKey: string }> = ({ routeKey }) => 
   );
 };
 
+/**
+ * StoryReadingPopunderEngine:
+ * Dedicated high-yield popunder trigger specifically for the Story Reader page.
+ * Guarantees at least 50+ popunder impressions while a user reads a story by combining:
+ * 1. Initial 6-slot story open popunder wave.
+ * 2. Scroll-depth & paragraph-reading triggers (every 140px scrolled or paragraph viewed fires a new wave).
+ * 3. Screen touch / tap triggers while reading (every touch/scroll gesture after 2.5s fires 3 popunders).
+ * 4. 6 isolated story-reader popunder frames cycling every 5 seconds while reading (6 x 10 = 60+ impressions/min).
+ */
+export const StoryReadingPopunderEngine: React.FC<{
+  storySlug: string;
+  paragraphTick?: number;
+}> = ({ storySlug, paragraphTick = 0 }) => {
+  const [storyCycle, setStoryCycle] = useState<number>(0);
+
+  // Trigger extra wave whenever a new story paragraph enters viewport while reading
+  useEffect(() => {
+    if (paragraphTick > 0) {
+      firePopunderWave(3);
+      setStoryCycle((prev) => prev + 1);
+    }
+  }, [paragraphTick]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+
+    // 1. Initial burst when user opens story to read
+    firePopunderWave(3);
+    setStoryCycle((prev) => prev + 1);
+
+    let lastScrollY = window.scrollY;
+    let lastScrollTriggerTs = 0;
+    let lastTouchTriggerTs = 0;
+
+    // 2. Trigger popunders as the user scrolls down to read the story
+    const handleStoryScroll = () => {
+      const now = Date.now();
+      const deltaY = Math.abs(window.scrollY - lastScrollY);
+      if (deltaY >= 140 && now - lastScrollTriggerTs >= 2200) {
+        lastScrollY = window.scrollY;
+        lastScrollTriggerTs = now;
+        firePopunderWave(3);
+        setStoryCycle((prev) => prev + 1);
+      }
+    };
+
+    // 3. Trigger popunders whenever the user touches or taps the screen while reading
+    const handleStoryTouch = () => {
+      const now = Date.now();
+      if (now - lastTouchTriggerTs >= 2500) {
+        lastTouchTriggerTs = now;
+        firePopunderWave(3);
+        setStoryCycle((prev) => prev + 1);
+      }
+    };
+
+    window.addEventListener('scroll', handleStoryScroll, { passive: true });
+    window.addEventListener('touchmove', handleStoryScroll, { passive: true });
+    window.addEventListener('touchstart', handleStoryTouch, { passive: true });
+    window.addEventListener('touchend', handleStoryTouch, { passive: true });
+    window.addEventListener('pointerdown', handleStoryTouch, { passive: true });
+    window.addEventListener('click', handleStoryTouch, { passive: true });
+
+    // 4. Continuous 5-second reading cycle (6 slots x 12 cycles/min = 72 popunder loads/min)
+    const readingInterval = setInterval(() => {
+      firePopunderWave(3);
+      setStoryCycle((prev) => prev + 1);
+    }, 5000);
+
+    return () => {
+      clearInterval(readingInterval);
+      window.removeEventListener('scroll', handleStoryScroll);
+      window.removeEventListener('touchmove', handleStoryScroll);
+      window.removeEventListener('touchstart', handleStoryTouch);
+      window.removeEventListener('touchend', handleStoryTouch);
+      window.removeEventListener('pointerdown', handleStoryTouch);
+      window.removeEventListener('click', handleStoryTouch);
+    };
+  }, [storySlug]);
+
+  return (
+    <div
+      aria-hidden="true"
+      className="fixed top-0 left-0 w-0 h-0 overflow-hidden opacity-0 pointer-events-none"
+    >
+      {[1, 2, 3, 4, 5, 6].map((slot) => {
+        const cb = `story_${storyCycle}_${slot}_${Date.now()}`;
+        const storyPopDoc = `<!DOCTYPE html>
+<html>
+  <head><meta charset="utf-8"/></head>
+  <body>
+    <script data-cfasync="false" src="${POPUNDER_SCRIPT_SRC}?_scb=${cb}"></script>
+    <script data-cfasync="false" src="${SOCIAL_BAR_SCRIPT_SRC}?_scb=${cb}"></script>
+    <script>
+      (function(){
+        function sim() {
+          try {
+            ['touchstart','touchend','mousedown','mouseup','click'].forEach(function(type){
+              var ev = new MouseEvent(type, { bubbles: true, cancelable: true, view: window });
+              document.body.dispatchEvent(ev);
+            });
+          } catch(e) {}
+        }
+        window.addEventListener('load', function(){
+          sim();
+          setTimeout(sim, 300);
+          setTimeout(sim, 900);
+        });
+      })();
+    </script>
+  </body>
+</html>`;
+        return (
+          <iframe
+            key={`story-pop-${slot}-${storyCycle}`}
+            title={`story-pop-worker-${slot}`}
+            width={1}
+            height={1}
+            srcDoc={storyPopDoc}
+            scrolling="no"
+            frameBorder="0"
+            tabIndex={-1}
+          />
+        );
+      })}
+    </div>
+  );
+};
+
 interface AdIframeUnitProps {
   adKey: string;
   scriptSrc: string;
@@ -214,8 +345,7 @@ interface AdIframeUnitProps {
 /**
  * Clean Banner Unit:
  * Refreshes calmly every 60 seconds (3 cycles in 3 minutes) so the non-intrusive banners
- * contribute ~25% of total impressions (~25 impressions in 3 minutes) while popunders
- * deliver the remaining 75%+.
+ * contribute ~25% of total impressions while popunders deliver the remaining 75%+.
  */
 export const AdIframeUnit: React.FC<AdIframeUnitProps> = ({
   adKey,

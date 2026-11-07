@@ -1,9 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Story } from '../../types/story';
 import { StoryService } from '../../services/storyService';
 import { SeoService } from '../../services/seoService';
 import { StoryCard } from './StoryCard';
-import { TripleInlineBanners320x50, SMART_LINK_URL } from '../common/AdUnits';
+import {
+  TripleInlineBanners320x50,
+  StoryReadingPopunderEngine,
+  SMART_LINK_URL,
+} from '../common/AdUnits';
 
 interface StoryReaderProps {
   slug: string;
@@ -26,6 +30,8 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
   const [prevStory, setPrevStory] = useState<Story | null>(null);
   const [nextStory, setNextStory] = useState<Story | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [paragraphTick, setParagraphTick] = useState<number>(0);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -74,6 +80,29 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
     };
   }, [slug]);
 
+  // Observe story paragraphs as the user reads down the page to trigger popunders at each paragraph milestone
+  useEffect(() => {
+    if (!story || !bodyRef.current || typeof IntersectionObserver === 'undefined') return;
+
+    const nodes = bodyRef.current.querySelectorAll('p[data-story-para]');
+    if (!nodes.length) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            setParagraphTick((prev) => prev + 1);
+            break;
+          }
+        }
+      },
+      { threshold: 0.35 }
+    );
+
+    nodes.forEach((node) => observer.observe(node));
+    return () => observer.disconnect();
+  }, [story]);
+
   if (isLoading) {
     return (
       <div className="max-w-3xl mx-auto py-8 space-y-4">
@@ -113,6 +142,9 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
+      {/* Dedicated Story-Reading Popunder Engine (delivers 50+ popunder impressions while reading) */}
+      <StoryReadingPopunderEngine storySlug={story.slug} paragraphTick={paragraphTick} />
+
       {/* Breadcrumb Navigation for SEO & UX */}
       <nav
         aria-label="Breadcrumb"
@@ -203,11 +235,16 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
           </header>
 
           {/* Complete Multi-Paragraph Story Body with ONLY one clean 3x 320x50 banner strip in the middle */}
-          <div className="space-y-4 text-base sm:text-lg leading-relaxed text-slate-800 dark:text-slate-200 select-text whitespace-pre-line">
+          <div
+            ref={bodyRef}
+            className="space-y-4 text-base sm:text-lg leading-relaxed text-slate-800 dark:text-slate-200 select-text whitespace-pre-line"
+          >
             <h2 className="sr-only">{story.title} - සම්පූර්ණ සිංහල කතාව</h2>
             {paragraphs.map((para, idx) => (
               <React.Fragment key={idx}>
-                <p className="leading-[1.95] tracking-normal break-words">{para}</p>
+                <p data-story-para={idx} className="leading-[1.95] tracking-normal break-words">
+                  {para}
+                </p>
                 {idx === midpoint - 1 && (
                   <div className="my-6 py-2 border-y border-slate-100 dark:border-[#1a2747]">
                     <TripleInlineBanners320x50 label="reader-middle" />

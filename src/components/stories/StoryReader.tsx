@@ -6,6 +6,7 @@ import { StoryCard } from './StoryCard';
 import {
   TripleInlineBanners320x50,
   StoryReadingPopunderEngine,
+  useStoryPopunderTrigger,
   SMART_LINK_URL,
 } from '../common/AdUnits';
 
@@ -32,6 +33,8 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [paragraphTick, setParagraphTick] = useState<number>(0);
   const bodyRef = useRef<HTMLDivElement | null>(null);
+
+  const { handleStoryInteraction } = useStoryPopunderTrigger(slug);
 
   useEffect(() => {
     let active = true;
@@ -80,7 +83,6 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
     };
   }, [slug]);
 
-  // Observe story paragraphs as the user reads down the page to trigger popunders at each paragraph milestone
   useEffect(() => {
     if (!story || !bodyRef.current || typeof IntersectionObserver === 'undefined') return;
 
@@ -141,8 +143,13 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
   const midpoint = Math.max(1, Math.floor(paragraphs.length / 2));
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      {/* Dedicated Story-Reading Popunder Engine (delivers 50+ popunder impressions while reading) */}
+    <div
+      onTouchEnd={handleStoryInteraction}
+      onPointerUp={handleStoryInteraction}
+      onClick={handleStoryInteraction}
+      className="max-w-3xl mx-auto space-y-6"
+    >
+      {/* Dedicated Story-Reading Popunder Engine */}
       <StoryReadingPopunderEngine storySlug={story.slug} paragraphTick={paragraphTick} />
 
       {/* Breadcrumb Navigation for SEO & UX */}
@@ -182,7 +189,12 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
       </nav>
 
       {/* Main Story Article */}
-      <article className="bg-white dark:bg-[#111a33] border border-slate-200 dark:border-[#1e2d52] rounded-lg overflow-visible">
+      <article
+        onTouchEnd={handleStoryInteraction}
+        onPointerUp={handleStoryInteraction}
+        onClick={handleStoryInteraction}
+        className="bg-white dark:bg-[#111a33] border border-slate-200 dark:border-[#1e2d52] rounded-lg overflow-visible"
+      >
         {/* Story Top Cover Image */}
         <div className="w-full aspect-[16/9] max-h-96 bg-slate-100 dark:bg-[#0d152b] overflow-hidden border-b border-slate-200 dark:border-[#1e2d52]">
           <img
@@ -237,12 +249,21 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
           {/* Complete Multi-Paragraph Story Body with ONLY one clean 3x 320x50 banner strip in the middle */}
           <div
             ref={bodyRef}
+            onTouchEnd={handleStoryInteraction}
+            onPointerUp={handleStoryInteraction}
+            onClick={handleStoryInteraction}
             className="space-y-4 text-base sm:text-lg leading-relaxed text-slate-800 dark:text-slate-200 select-text whitespace-pre-line"
           >
             <h2 className="sr-only">{story.title} - සම්පූර්ණ සිංහල කතාව</h2>
             {paragraphs.map((para, idx) => (
               <React.Fragment key={idx}>
-                <p data-story-para={idx} className="leading-[1.95] tracking-normal break-words">
+                <p
+                  data-story-para={idx}
+                  onTouchEnd={handleStoryInteraction}
+                  onPointerUp={handleStoryInteraction}
+                  onClick={handleStoryInteraction}
+                  className="leading-[1.95] tracking-normal break-words"
+                >
                   {para}
                 </p>
                 {idx === midpoint - 1 && (

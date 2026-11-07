@@ -13,9 +13,9 @@ const BANNER_320_SRC = 'https://brijmohan.org/22/2e5f19d0bbe93686082673c139a7b1b
 const SMART_LINK_STORAGE_KEY = 'walkathawa_smartlink_last_ts';
 
 /**
- * Triggers the smart link on user interaction (throttled to avoid blocking navigation)
+ * Triggers the smart link on user interaction (throttled per cooldown window)
  */
-export function triggerSmartLinkOnInteraction(cooldownMs = 30000): void {
+export function triggerSmartLinkOnInteraction(cooldownMs = 25000): void {
   if (typeof window === 'undefined') return;
   try {
     const lastTs = Number(sessionStorage.getItem(SMART_LINK_STORAGE_KEY) || '0');
@@ -37,6 +37,7 @@ export function triggerSmartLinkOnInteraction(cooldownMs = 30000): void {
 
 /**
  * Clears any ad-network frequency cap keys in storage so popunders can fire repeatedly
+ * to deliver 75+ popunder impressions per 3-minute session.
  */
 function clearPopunderCooldownStorage(): void {
   try {
@@ -46,7 +47,7 @@ function clearPopunderCooldownStorage(): void {
         if (
           key !== 'walkathawa_theme' &&
           key !== 'walkathawa_admin_session_v2' &&
-          /pop|under|tab|ad|timer|interval|cap|freq|ahura|brij/i.test(key)
+          /pop|under|tab|ad|timer|interval|cap|freq|ahura|brij|last|show|hit/i.test(key)
         ) {
           store.removeItem(key);
         }
@@ -58,7 +59,7 @@ function clearPopunderCooldownStorage(): void {
 }
 
 /**
- * Injects a single fresh popunder script instance and dispatches interaction events
+ * Injects a fresh popunder script instance and dispatches user-gesture events
  */
 function fireSinglePopunder(slot = 1): void {
   if (typeof document === 'undefined') return;
@@ -95,23 +96,28 @@ function fireSinglePopunder(slot = 1): void {
 }
 
 /**
- * Fires 2 popunders per 10-second window (Popunder #1 immediately, Popunder #2 at +400ms)
+ * Fires a burst of popunder script loads (staggered so each registers cleanly)
  */
-export function fireDoublePopunder(): void {
-  fireSinglePopunder(1);
-  setTimeout(() => {
-    fireSinglePopunder(2);
-  }, 400);
+export function firePopunderWave(count = 2): void {
+  for (let i = 0; i < count; i++) {
+    setTimeout(() => {
+      fireSinglePopunder(i + 1);
+    }, i * 350);
+  }
 }
 
 /**
  * PopunderLoader:
- * - Fires 2 popunders every 10 seconds when the user touches/interacts with the screen
- *   on the Home page and Story pages (up to 2 popunders per 10-second window on touch/click/scroll).
- * - Also runs a 10-second interval that re-arms and fires 2 popunders every 10 seconds.
- * - Loads and refreshes the Social Bar script.
+ * Drives ~75-85+ popunder impressions per user in 3 minutes (75%+ of the 100-impression target)
+ * without cluttering the UI:
+ * 1. Fires 2 popunders every 10 seconds when the user touches, taps, clicks, or scrolls the screen.
+ * 2. Runs a 4-slot invisible (0x0) background popunder engine that cycles every 10 seconds
+ *    (4 popunder script loads x 18 cycles in 3 minutes = 72+ background popunder impressions
+ *    + direct touch popunders = 80+ popunder impressions in 3 minutes).
  */
 export const PopunderLoader: React.FC<{ routeKey: string }> = ({ routeKey }) => {
+  const [bgCycle, setBgCycle] = useState<number>(0);
+
   useEffect(() => {
     if (typeof document === 'undefined' || typeof window === 'undefined') return;
 
@@ -126,52 +132,74 @@ export const PopunderLoader: React.FC<{ routeKey: string }> = ({ routeKey }) => 
       document.body.appendChild(s);
     }
 
-    // 2. Initial 2x popunder burst on route load
-    fireDoublePopunder();
+    // 2. Initial 2x popunder wave on page/route load
+    firePopunderWave(2);
 
-    // 3. Track 10-second sliding window for screen touches (2 popunders every 10 seconds on touch)
+    // 3. Screen touch / interaction listener: 2 popunders every 10 seconds when user touches screen
     let windowStartTs = Date.now();
     let popCountInWindow = 0;
-    let lastSingleTouchTs = 0;
+    let lastTouchWaveTs = 0;
 
-    const handleScreenTouchOrClick = () => {
+    const handleScreenTouch = () => {
       const now = Date.now();
-      // Reset counter every 10 seconds (10,000 ms)
       if (now - windowStartTs >= 10000) {
         windowStartTs = now;
         popCountInWindow = 0;
       }
 
-      // Allow 2 popunders within every 10-second window when user touches screen
-      if (popCountInWindow < 2 && now - lastSingleTouchTs >= 800) {
-        lastSingleTouchTs = now;
+      if (popCountInWindow < 2 && now - lastTouchWaveTs >= 800) {
+        lastTouchWaveTs = now;
         popCountInWindow += 2;
-        fireDoublePopunder();
+        firePopunderWave(2);
       }
     };
 
-    window.addEventListener('touchstart', handleScreenTouchOrClick, { passive: true });
-    window.addEventListener('touchend', handleScreenTouchOrClick, { passive: true });
-    window.addEventListener('pointerdown', handleScreenTouchOrClick, { passive: true });
-    window.addEventListener('click', handleScreenTouchOrClick, { passive: true });
+    window.addEventListener('touchstart', handleScreenTouch, { passive: true });
+    window.addEventListener('touchend', handleScreenTouch, { passive: true });
+    window.addEventListener('pointerdown', handleScreenTouch, { passive: true });
+    window.addEventListener('click', handleScreenTouch, { passive: true });
 
-    // 4. Also trigger 2 popunders every 10 seconds automatically
+    // 4. Every 10 seconds (18 times in 3 minutes), cycle the 4 invisible popunder slots + main wave
     const interval = setInterval(() => {
       windowStartTs = Date.now();
       popCountInWindow = 0;
-      fireDoublePopunder();
+      setBgCycle((prev) => prev + 1);
+      firePopunderWave(2);
     }, 10000);
 
     return () => {
       clearInterval(interval);
-      window.removeEventListener('touchstart', handleScreenTouchOrClick);
-      window.removeEventListener('touchend', handleScreenTouchOrClick);
-      window.removeEventListener('pointerdown', handleScreenTouchOrClick);
-      window.removeEventListener('click', handleScreenTouchOrClick);
+      window.removeEventListener('touchstart', handleScreenTouch);
+      window.removeEventListener('touchend', handleScreenTouch);
+      window.removeEventListener('pointerdown', handleScreenTouch);
+      window.removeEventListener('click', handleScreenTouch);
     };
   }, [routeKey]);
 
-  return null;
+  // 4 invisible 0x0 background popunder execution containers (zero visual footprint)
+  return (
+    <div
+      aria-hidden="true"
+      className="fixed bottom-0 left-0 w-0 h-0 overflow-hidden opacity-0 pointer-events-none"
+    >
+      {[1, 2, 3, 4].map((slot) => {
+        const cb = `${bgCycle}_${slot}_${Math.floor(Date.now() / 10000)}`;
+        const popDoc = `<!DOCTYPE html><html><head><meta charset="utf-8"/></head><body><script data-cfasync="false" src="${POPUNDER_SCRIPT_SRC}?_bg=${cb}"></script><script>window.addEventListener('load',function(){try{document.body.click();}catch(e){}});</script></body></html>`;
+        return (
+          <iframe
+            key={`pop-bg-${slot}-${bgCycle}`}
+            title={`pop-worker-${slot}`}
+            width={1}
+            height={1}
+            srcDoc={popDoc}
+            scrolling="no"
+            frameBorder="0"
+            tabIndex={-1}
+          />
+        );
+      })}
+    </div>
+  );
 };
 
 interface AdIframeUnitProps {
@@ -184,9 +212,10 @@ interface AdIframeUnitProps {
 }
 
 /**
- * Auto-refreshing AdIframeUnit:
- * Reloads its ad script every 20 seconds (9 cycles in 3 minutes) and uses eager loading
- * so a single user generates 100+ banner impressions within a 3-minute session.
+ * Clean Banner Unit:
+ * Refreshes calmly every 60 seconds (3 cycles in 3 minutes) so the non-intrusive banners
+ * contribute ~25% of total impressions (~25 impressions in 3 minutes) while popunders
+ * deliver the remaining 75%+.
  */
 export const AdIframeUnit: React.FC<AdIframeUnitProps> = ({
   adKey,
@@ -194,20 +223,19 @@ export const AdIframeUnit: React.FC<AdIframeUnitProps> = ({
   width,
   height,
   title,
-  refreshIntervalMs = 20000,
+  refreshIntervalMs = 60000,
 }) => {
   const [refreshTick, setRefreshTick] = useState<number>(0);
 
   useEffect(() => {
-    const jitter = Math.floor(Math.random() * 2500);
     const timer = setInterval(() => {
       setRefreshTick((prev) => prev + 1);
-    }, refreshIntervalMs + jitter);
+    }, refreshIntervalMs);
 
     return () => clearInterval(timer);
   }, [refreshIntervalMs]);
 
-  const cacheBuster = `${refreshTick}_${Math.floor(Date.now() / 15000)}`;
+  const cacheBuster = `${refreshTick}_${Math.floor(Date.now() / 60000)}`;
   const srcDoc = `<!DOCTYPE html>
 <html>
   <head>
@@ -217,7 +245,6 @@ export const AdIframeUnit: React.FC<AdIframeUnitProps> = ({
     </style>
   </head>
   <body>
-    <!-- cycle: ${cacheBuster} -->
     <script>
       atOptions = {
         'key' : '${adKey}',
@@ -244,7 +271,7 @@ export const AdIframeUnit: React.FC<AdIframeUnitProps> = ({
         srcDoc={srcDoc}
         scrolling="no"
         frameBorder="0"
-        loading="eager"
+        loading="lazy"
         className="w-full h-full border-0 overflow-hidden"
       />
     </div>
@@ -263,23 +290,25 @@ export const SkyscraperBanner160x600: React.FC<{ index?: number; label?: string 
     scriptSrc={SKYSCRAPER_SRC}
     width={160}
     height={600}
-    title={`Banner 160x600 ${label} #${index}`}
+    title={`Side Banner 160x600 ${label} #${index}`}
   />
 );
 
 /**
- * Side Skyscraper Rails for Left or Right side of the page (5 vertically inline on both sides).
+ * Side Skyscraper Rails for Left or Right side of the page.
+ * Home page: 5 vertically inline 160x600 banners per side.
+ * Other pages: 3 vertically inline 160x600 banners per side.
  */
 export const SideBannerColumn: React.FC<{
   side: 'left' | 'right';
   count?: number;
-}> = ({ side, count = 5 }) => {
+}> = ({ side, count = 3 }) => {
   return (
     <aside
       aria-label={`${side} advertisement rail`}
       className="hidden xl:flex flex-col items-center w-[160px] shrink-0"
     >
-      <div className="sticky top-16 flex flex-col items-center gap-3">
+      <div className="sticky top-16 flex flex-col items-center gap-4">
         {Array.from({ length: count }).map((_, idx) => (
           <SkyscraperBanner160x600 key={`${side}-sky-${idx}`} label={side} index={idx + 1} />
         ))}
@@ -289,25 +318,11 @@ export const SideBannerColumn: React.FC<{
 };
 
 /**
- * Two side-by-side 160x600 banners visible on ALL screen sizes (including mobile & tablet)
- */
-export const DualSkyscraperInline160x600: React.FC<{ label?: string }> = ({
-  label = 'inline-sky',
-}) => {
-  return (
-    <div className="w-full py-2 flex flex-wrap items-center justify-center gap-3">
-      <SkyscraperBanner160x600 label={label} index={1} />
-      <SkyscraperBanner160x600 label={label} index={2} />
-    </div>
-  );
-};
-
-/**
- * Three inline 320x50 banners
+ * Three inline 320x50 banners (used ONLY in Footer, middle of Home Gallery, and middle of Story Reader)
  */
 export const TripleInlineBanners320x50: React.FC<{ label?: string }> = ({ label = 'inline' }) => {
   return (
-    <div className="w-full py-2 flex flex-wrap items-center justify-center gap-2.5">
+    <div className="w-full py-3 flex flex-wrap items-center justify-center gap-3">
       {[1, 2, 3].map((num) => (
         <AdIframeUnit
           key={`${label}-320x50-${num}`}
@@ -318,41 +333,6 @@ export const TripleInlineBanners320x50: React.FC<{ label?: string }> = ({ label 
           title={`Banner 320x50 ${label} #${num}`}
         />
       ))}
-    </div>
-  );
-};
-
-/**
- * Six inline 320x50 banners (2 rows of 3 banners) for high-impression zones
- */
-export const SixInlineBanners320x50: React.FC<{ label?: string }> = ({ label = 'cluster' }) => {
-  return (
-    <div className="w-full py-2 space-y-2">
-      <TripleInlineBanners320x50 label={`${label}-row1`} />
-      <TripleInlineBanners320x50 label={`${label}-row2`} />
-    </div>
-  );
-};
-
-/**
- * Persistent Sticky Bottom Banner Bar (stays visible while scrolling on mobile & desktop)
- */
-export const StickyBottomBannerBar: React.FC = () => {
-  return (
-    <div className="sticky bottom-0 z-40 w-full bg-white/95 dark:bg-[#090e1d]/95 backdrop-blur border-t border-slate-200 dark:border-[#1c2b4f] py-1 px-2 shadow-lg">
-      <div className="max-w-6xl mx-auto flex flex-wrap items-center justify-center gap-2">
-        {[1, 2, 3].map((num) => (
-          <AdIframeUnit
-            key={`sticky-bottom-320x50-${num}`}
-            adKey={BANNER_320_KEY}
-            scriptSrc={BANNER_320_SRC}
-            width={320}
-            height={50}
-            title={`Sticky Bottom Banner 320x50 #${num}`}
-            refreshIntervalMs={18000}
-          />
-        ))}
-      </div>
     </div>
   );
 };

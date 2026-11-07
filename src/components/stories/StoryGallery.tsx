@@ -1,12 +1,7 @@
 import React from 'react';
 import { Story, Category } from '../../types/story';
 import { StoryCard } from './StoryCard';
-import {
-  TripleInlineBanners320x50,
-  SixInlineBanners320x50,
-  DualSkyscraperInline160x600,
-  SMART_LINK_URL,
-} from '../common/AdUnits';
+import { TripleInlineBanners320x50, SMART_LINK_URL } from '../common/AdUnits';
 
 interface StoryGalleryProps {
   stories: Story[];
@@ -70,18 +65,9 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
     return page > 1 ? `${base}?page=${page}` : base;
   };
 
-  // Group stories into chunks of 6 (2 rows of 3 cards) so banners appear between every 2 rows
-  const storyGroups: Story[][] = [];
-  for (let i = 0; i < stories.length; i += 6) {
-    storyGroups.push(stories.slice(i, i + 6));
-  }
-
   return (
     <div className="space-y-5">
       <h1 className="sr-only">සිංහල වැල කතා | වල් කතා සහ වැල කතා 2026</h1>
-
-      {/* Top Banner Cluster above the fold */}
-      <SixInlineBanners320x50 label="gallery-top" />
 
       {/* Sorting option, Story Count & Smart Link below header */}
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -120,7 +106,7 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
         </div>
       </div>
 
-      {/* Stories Grid: 3 columns, max 10 rows (30 cards) per page with inline ad strips */}
+      {/* Stories Grid: 3 columns, max 10 rows (30 cards) per page */}
       {isLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {Array.from({ length: 9 }).map((_, idx) => (
@@ -147,32 +133,33 @@ export const StoryGallery: React.FC<StoryGalleryProps> = ({
           </button>
         </div>
       ) : (
-        <div className="space-y-5">
-          {storyGroups.map((group, groupIdx) => (
-            <React.Fragment key={`story-group-${groupIdx}`}>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {group.map((story) => (
-                  <StoryCard
-                    key={story.id}
-                    story={story}
-                    onSelect={onSelectStory}
-                    onSelectCategory={onSelectCategory}
-                  />
-                ))}
-              </div>
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {stories.slice(0, 15).map((story) => (
+              <StoryCard
+                key={story.id}
+                story={story}
+                onSelect={onSelectStory}
+                onSelectCategory={onSelectCategory}
+              />
+            ))}
+          </div>
 
-              {/* Inline 3x 320x50 Banners after every 6 stories (every 2 rows) */}
-              <TripleInlineBanners320x50 label={`gallery-row-${groupIdx + 1}`} />
+          {/* Three 320x50 Banners inline in the middle of stories only */}
+          <TripleInlineBanners320x50 label="gallery-middle" />
 
-              {/* Middle of gallery extra skyscraper + 320x50 banner cluster */}
-              {groupIdx === 2 && (
-                <div className="py-1">
-                  <DualSkyscraperInline160x600 label="gallery-mid-sky" />
-                  <TripleInlineBanners320x50 label="gallery-mid-extra" />
-                </div>
-              )}
-            </React.Fragment>
-          ))}
+          {stories.length > 15 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {stories.slice(15, 30).map((story) => (
+                <StoryCard
+                  key={story.id}
+                  story={story}
+                  onSelect={onSelectStory}
+                  onSelectCategory={onSelectCategory}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
 

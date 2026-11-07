@@ -50,6 +50,57 @@ const DEFAULT_CATEGORIES: Category[] = [
   },
 ];
 
+const ADMIN_DELTA_KEY = 'walkathawa_admin_delta_v1';
+
+interface AdminDeltaStore {
+  upsertedStories: Record<string, Story>;
+  deletedStoryKeys: string[];
+  upsertedCategories: Record<string, Category>;
+  deletedCategoryKeys: string[];
+}
+
+function readLocalDelta(): AdminDeltaStore {
+  if (typeof window === 'undefined') {
+    return {
+      upsertedStories: {},
+      deletedStoryKeys: [],
+      upsertedCategories: {},
+      deletedCategoryKeys: [],
+    };
+  }
+  try {
+    const raw = localStorage.getItem(ADMIN_DELTA_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return {
+        upsertedStories: parsed.upsertedStories || {},
+        deletedStoryKeys: Array.isArray(parsed.deletedStoryKeys) ? parsed.deletedStoryKeys : [],
+        upsertedCategories: parsed.upsertedCategories || {},
+        deletedCategoryKeys: Array.isArray(parsed.deletedCategoryKeys)
+          ? parsed.deletedCategoryKeys
+          : [],
+      };
+    }
+  } catch {
+    // ignore
+  }
+  return {
+    upsertedStories: {},
+    deletedStoryKeys: [],
+    upsertedCategories: {},
+    deletedCategoryKeys: [],
+  };
+}
+
+function writeLocalDelta(delta: AdminDeltaStore): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(ADMIN_DELTA_KEY, JSON.stringify(delta));
+  } catch {
+    // ignore
+  }
+}
+
 function stripZeroWidth(val: unknown): string {
   return String(val || '')
     .replace(/[\u200B-\u200D\uFEFF]/g, '')
@@ -119,6 +170,17 @@ async function fetchJsonSafe(url: string): Promise<any | null> {
   }
 }
 
+async function withTimeout<T>(promise: Promise<T>, ms = 3000): Promise<T | null> {
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
+    ]);
+  } catch {
+    return null;
+  }
+}
+
 export class StoryService {
   private static storiesCache: (Story & { chunkIndex?: number })[] | null = null;
   private static categoriesCache: Category[] | null = null;
@@ -133,7 +195,8 @@ export class StoryService {
   }
 
   /**
-   * Loads all published stories with complete fullContent across Express API, Cloudflare Pages static CDN, and Firestore
+   * Loads all published stories rapidly from Express API or Cloudflare Pages static catalog.json,
+   * without triggering slow 614-document Firestore WebChannel scans.
    */
   static async fetchAllLiveStories(forceRefresh = false): Promise<Story[]> {
     if (!forceRefresh && this.storiesCache && this.storiesCache.length > 0) {
@@ -144,12 +207,9 @@ export class StoryService {
     const deletedIds = new Set<string>();
     const deletedSlugs = new Set<string>();
 
-    // 1. Try server Express endpoint (/api/firestore/stories) OR Cloudflare Pages static dataset (/api-data/firestore-sync.json or /api-data/catalog.json)
+    // 1. Load from Express API (/api/firestore/stories) or Cloudflare Pages static catalog (/api-data/catalog.json)
     if (typeof window !== 'undefined') {
       let payload = await fetchJsonSafe('/api/firestore/stories');
-      if (!payload || !Array.isArray(payload.stories) || payload.stories.length === 0) {
-        payload = await fetchJsonSafe('/api-data/firestore-sync.json');
-      }
       if (!payload || !Array.isArray(payload.stories) || payload.stories.length === 0) {
         payload = await fetchJsonSafe('/api-data/catalog.json');
       }
@@ -173,10 +233,11 @@ export class StoryService {
       }
     }
 
-    // 2. Also overlay live Firestore changes (additions, edits, deletions from Admin Panel on Cloudflare Pages)
-    for (const firestoreInstance of [contentDb, db]) {
-      try {
-        const snap = await getDocs(collection(firestoreInstance, 'stories'));
+    // 2. Only scan Firestore directly if static/server catalog wasn't available
+    if (mergedById.size === 0) {
+      for (const firestoreInstance of [contentDb, db]) {
+        const snap = await withTimeout(getDocs(collection(firestoreInstance, 'stories')), 4000);
+        if (!snap) continue;
         snap.forEach((docSnap) => {
           const raw = docSnap.data();
           const docId = stripZeroWidth(raw.id || docSnap.id);
@@ -184,55 +245,34 @@ export class StoryService {
 
           if (isDocDeleted(raw)) {
             deletedIds.add(docId.toLowerCase());
-            deletedIds.add(stripZeroWidth(docSnap.id).toLowerCase());
             deletedSlugs.add(docSlug.toLowerCase());
             mergedById.delete(docId);
             return;
           }
 
           const incoming = normalizeStoryDoc(docSnap.id, raw);
-          if (
-            deletedIds.has(incoming.id.toLowerCase()) ||
-            deletedSlugs.has(incoming.slug.toLowerCase())
-          ) {
-            return;
-          }
-
-          const existing = mergedById.get(incoming.id);
-          if (existing) {
-            // Never let an empty or truncated fullContent in db overwrite full story text!
-            const incomingBody = incoming.fullContent || '';
-            const existingBody = existing.fullContent || '';
-            const bestBody =
-              incomingBody.length >= existingBody.length ? incomingBody : existingBody;
-
-            const merged: Story & { chunkIndex?: number } = {
-              ...existing,
-              ...incoming,
-              shortDescription: incoming.shortDescription || existing.shortDescription,
-              description: incoming.description || existing.description,
-              coverImage: incoming.coverImage || existing.coverImage,
-              fullContent: bestBody,
-              content: bestBody,
-              wordCount: Math.max(incoming.wordCount || 0, existing.wordCount || 0),
-              readingTime: Math.max(incoming.readingTime || 4, existing.readingTime || 4),
-              chunkIndex: existing.chunkIndex,
-            };
-            mergedById.set(incoming.id, merged);
-            if (bestBody.length > 500) {
-              this.contentByIdCache.set(merged.id.toLowerCase(), merged);
-              this.contentByIdCache.set(merged.slug.toLowerCase(), merged);
-            }
-          } else {
-            mergedById.set(incoming.id, incoming);
-            if (incoming.fullContent && incoming.fullContent.length > 500) {
-              this.contentByIdCache.set(incoming.id.toLowerCase(), incoming);
-              this.contentByIdCache.set(incoming.slug.toLowerCase(), incoming);
-            }
+          mergedById.set(incoming.id, incoming);
+          if (incoming.fullContent && incoming.fullContent.length > 500) {
+            this.contentByIdCache.set(incoming.id.toLowerCase(), incoming);
+            this.contentByIdCache.set(incoming.slug.toLowerCase(), incoming);
           }
         });
-      } catch {
-        // continue if offline or rules restrict collection scan
+      }
+    }
+
+    // 3. Apply any Admin Panel delta changes saved locally
+    const delta = readLocalDelta();
+    for (const delKey of delta.deletedStoryKeys) {
+      const k = delKey.toLowerCase();
+      deletedIds.add(k);
+      deletedSlugs.add(k);
+    }
+    for (const upserted of Object.values(delta.upsertedStories)) {
+      const norm = normalizeStoryDoc(upserted.id, upserted);
+      mergedById.set(norm.id, norm);
+      if (norm.fullContent && norm.fullContent.length > 50) {
+        this.contentByIdCache.set(norm.id.toLowerCase(), norm);
+        this.contentByIdCache.set(norm.slug.toLowerCase(), norm);
       }
     }
 
@@ -250,7 +290,7 @@ export class StoryService {
   }
 
   /**
-   * Loads categories from Express, Cloudflare Pages static CDN, and Firestore
+   * Loads categories from Express or Cloudflare Pages static catalog.json
    */
   static async getCategories(forceRefresh = false): Promise<Category[]> {
     if (!forceRefresh && this.categoriesCache && this.categoriesCache.length > 0) {
@@ -287,36 +327,13 @@ export class StoryService {
       }
     }
 
-    for (const firestoreInstance of [db, contentDb]) {
-      try {
-        const snap = await getDocs(collection(firestoreInstance, 'categories'));
-        snap.forEach((d) => {
-          const data = d.data();
-          const key = stripZeroWidth(data.slug || d.id);
-          if (!key || key === 'all') return;
-          if (isDocDeleted(data)) {
-            deletedKeys.add(key.toLowerCase());
-            deletedKeys.add(stripZeroWidth(d.id).toLowerCase());
-            catMap.delete(key);
-            catMap.delete(d.id);
-            return;
-          }
-          if (deletedKeys.has(key.toLowerCase()) || deletedKeys.has(d.id.toLowerCase())) {
-            return;
-          }
-          const prev = catMap.get(key);
-          catMap.set(key, {
-            id: d.id,
-            slug: key,
-            name: data.name || prev?.name || key,
-            sinhalaName: data.sinhalaName || data.name || prev?.sinhalaName || key,
-            description: data.description || prev?.description || '',
-            storyCount: Math.max(Number(prev?.storyCount) || 0, Number(data.storyCount) || 0),
-          });
-        });
-      } catch {
-        // Ignore individual replica error
-      }
+    const delta = readLocalDelta();
+    for (const delKey of delta.deletedCategoryKeys) {
+      deletedKeys.add(delKey.toLowerCase());
+      catMap.delete(delKey);
+    }
+    for (const [k, cat] of Object.entries(delta.upsertedCategories)) {
+      catMap.set(k, cat);
     }
 
     this.categoriesCache = Array.from(catMap.values()).filter(
@@ -395,7 +412,7 @@ export class StoryService {
   }
 
   /**
-   * Fetches complete, multi-paragraph story content on both Cloudflare Pages and Express/Firestore
+   * Fetches complete, multi-paragraph story content on both Cloudflare Pages (via 2MB chunks) and Express
    */
   static async getStoryBySlug(slug: string): Promise<Story | null> {
     if (!slug) return null;
@@ -420,9 +437,9 @@ export class StoryService {
       }
     }
 
-    // 2. Find story in live stories list
+    // 2. Find story metadata + chunkIndex in catalog
     const all = (await this.fetchAllLiveStories()) as (Story & { chunkIndex?: number })[];
-    let found = all.find(
+    const found = all.find(
       (s) =>
         stripZeroWidth(s.slug).toLowerCase() === decodedSlug ||
         stripZeroWidth(s.id).toLowerCase() === decodedSlug ||
@@ -434,85 +451,64 @@ export class StoryService {
       return found;
     }
 
-    // 3. On Cloudflare Pages: load from static chunk (/api-data/chunks/chunk-N.json) or /api-data/firestore-sync.json
+    // 3. On Cloudflare Pages: load from static chunk (/api-data/chunks/chunk-N.json)
     if (typeof window !== 'undefined') {
-      const targetChunk = typeof found?.chunkIndex === 'number' ? found.chunkIndex : null;
-      if (targetChunk !== null && !this.loadedChunks.has(targetChunk)) {
-        const chunkPayload = await fetchJsonSafe(`/api-data/chunks/chunk-${targetChunk}.json`);
-        if (chunkPayload && Array.isArray(chunkPayload.stories)) {
-          this.loadedChunks.add(targetChunk);
-          for (const raw of chunkPayload.stories) {
-            const norm = normalizeStoryDoc(raw.id || raw.slug, raw);
-            if (norm.fullContent && norm.fullContent.length > 500) {
-              this.contentByIdCache.set(norm.id.toLowerCase(), norm);
-              this.contentByIdCache.set(norm.slug.toLowerCase(), norm);
+      const chunksToCheck =
+        typeof found?.chunkIndex === 'number'
+          ? [found.chunkIndex]
+          : [0, 1, 2, 3, 4, 5];
+
+      for (const cIdx of chunksToCheck) {
+        if (!this.loadedChunks.has(cIdx)) {
+          const chunkPayload = await fetchJsonSafe(`/api-data/chunks/chunk-${cIdx}.json`);
+          if (chunkPayload && Array.isArray(chunkPayload.stories)) {
+            this.loadedChunks.add(cIdx);
+            for (const raw of chunkPayload.stories) {
+              const norm = normalizeStoryDoc(raw.id || raw.slug, raw);
+              if (norm.fullContent && norm.fullContent.length > 500) {
+                this.contentByIdCache.set(norm.id.toLowerCase(), norm);
+                this.contentByIdCache.set(norm.slug.toLowerCase(), norm);
+              }
             }
           }
-          const fromChunk =
-            this.contentByIdCache.get(decodedSlug) ||
-            (found ? this.contentByIdCache.get(found.id.toLowerCase()) : undefined);
-          if (fromChunk && fromChunk.fullContent && fromChunk.fullContent.length > 500) {
-            return found ? { ...found, ...fromChunk, fullContent: fromChunk.fullContent, content: fromChunk.fullContent } : fromChunk;
-          }
         }
-      }
-
-      // If chunk index wasn't known, scan chunks 0..5 or firestore-sync.json
-      const syncPayload = await fetchJsonSafe('/api-data/firestore-sync.json');
-      if (syncPayload && Array.isArray(syncPayload.stories)) {
-        for (const raw of syncPayload.stories) {
-          const norm = normalizeStoryDoc(raw.id || raw.slug, raw);
-          if (norm.fullContent && norm.fullContent.length > 500) {
-            this.contentByIdCache.set(norm.id.toLowerCase(), norm);
-            this.contentByIdCache.set(norm.slug.toLowerCase(), norm);
-          }
-        }
-        const fromSync =
+        const fromChunk =
           this.contentByIdCache.get(decodedSlug) ||
           (found ? this.contentByIdCache.get(found.id.toLowerCase()) : undefined);
-        if (fromSync && fromSync.fullContent && fromSync.fullContent.length > 500) {
-          return found ? { ...found, ...fromSync, fullContent: fromSync.fullContent, content: fromSync.fullContent } : fromSync;
+        if (fromChunk && fromChunk.fullContent && fromChunk.fullContent.length > 500) {
+          return found
+            ? {
+                ...found,
+                ...fromChunk,
+                fullContent: fromChunk.fullContent,
+                content: fromChunk.fullContent,
+              }
+            : fromChunk;
         }
       }
     }
 
-    // 4. Also check Firestore collections directly (for newly created admin stories on Cloudflare Pages)
+    // 4. Fallback to Firestore with a strict 2.5s timeout for newly created admin stories
     const targetId = found?.id || decodedSlug;
     let bestFirestoreStory: Story | null = found || null;
 
     for (const firestoreInstance of [contentDb, db]) {
-      for (const colName of ['stories', 'posts']) {
-        try {
-          const directSnap = await getDoc(doc(firestoreInstance, colName, targetId));
-          if (directSnap.exists() && !isDocDeleted(directSnap.data())) {
-            const normalized = normalizeStoryDoc(directSnap.id, directSnap.data());
-            const prevLen = (bestFirestoreStory?.fullContent || '').length;
-            if ((normalized.fullContent || '').length > prevLen) {
-              bestFirestoreStory = bestFirestoreStory
-                ? { ...bestFirestoreStory, ...normalized, fullContent: normalized.fullContent, content: normalized.fullContent }
-                : normalized;
-            }
-          }
-
-          const q = query(
-            collection(firestoreInstance, colName),
-            where('slug', '==', found?.slug || slug)
-          );
-          const qSnap = await getDocs(q);
-          if (!qSnap.empty) {
-            const d = qSnap.docs[0];
-            if (!isDocDeleted(d.data())) {
-              const normalized = normalizeStoryDoc(d.id, d.data());
-              const prevLen = (bestFirestoreStory?.fullContent || '').length;
-              if ((normalized.fullContent || '').length > prevLen) {
-                bestFirestoreStory = bestFirestoreStory
-                  ? { ...bestFirestoreStory, ...normalized, fullContent: normalized.fullContent, content: normalized.fullContent }
-                  : normalized;
+      const directSnap = await withTimeout(
+        getDoc(doc(firestoreInstance, 'stories', targetId)),
+        2500
+      );
+      if (directSnap && directSnap.exists() && !isDocDeleted(directSnap.data())) {
+        const normalized = normalizeStoryDoc(directSnap.id, directSnap.data());
+        const prevLen = (bestFirestoreStory?.fullContent || '').length;
+        if ((normalized.fullContent || '').length > prevLen) {
+          bestFirestoreStory = bestFirestoreStory
+            ? {
+                ...bestFirestoreStory,
+                ...normalized,
+                fullContent: normalized.fullContent,
+                content: normalized.fullContent,
               }
-            }
-          }
-        } catch {
-          // Continue to next Firestore collection
+            : normalized;
         }
       }
     }
@@ -525,7 +521,7 @@ export class StoryService {
   }
 
   /**
-   * Create a new story in Firestore and server sync store
+   * Create a new story in Firestore, local delta store, and server sync store
    */
   static async createStory(input: {
     title: string;
@@ -582,6 +578,10 @@ export class StoryService {
       updatedDate: now,
     };
 
+    const delta = readLocalDelta();
+    delta.upsertedStories[storyId] = newStory;
+    writeLocalDelta(delta);
+
     if (typeof window !== 'undefined') {
       await fetch('/api/firestore/story', {
         method: 'POST',
@@ -591,11 +591,7 @@ export class StoryService {
     }
 
     for (const instance of [contentDb, db]) {
-      try {
-        await setDoc(doc(instance, 'stories', storyId), newStory, { merge: true });
-      } catch {
-        // continue
-      }
+      await withTimeout(setDoc(doc(instance, 'stories', storyId), newStory, { merge: true }), 2500);
     }
 
     if (this.storiesCache) {
@@ -608,7 +604,7 @@ export class StoryService {
   }
 
   /**
-   * Update an existing story in Firestore and server sync store
+   * Update an existing story in Firestore, local delta store, and server sync store
    */
   static async updateStory(
     existingStory: Story,
@@ -666,6 +662,10 @@ export class StoryService {
       updatedDate: new Date().toISOString(),
     };
 
+    const delta = readLocalDelta();
+    delta.upsertedStories[storyId] = updatedStory;
+    writeLocalDelta(delta);
+
     if (typeof window !== 'undefined') {
       await fetch('/api/firestore/story', {
         method: 'POST',
@@ -675,11 +675,10 @@ export class StoryService {
     }
 
     for (const instance of [contentDb, db]) {
-      try {
-        await setDoc(doc(instance, 'stories', storyId), updatedStory, { merge: true });
-      } catch {
-        // continue
-      }
+      await withTimeout(
+        setDoc(doc(instance, 'stories', storyId), updatedStory, { merge: true }),
+        2500
+      );
     }
 
     if (this.storiesCache) {
@@ -694,7 +693,7 @@ export class StoryService {
   }
 
   /**
-   * Delete an existing story from Firestore and server sync store
+   * Delete an existing story from Firestore, local delta store, and server sync store
    */
   static async deleteStory(story: Story): Promise<void> {
     const storyId = story.id;
@@ -708,6 +707,16 @@ export class StoryService {
       updatedDate: new Date().toISOString(),
     };
 
+    const delta = readLocalDelta();
+    delete delta.upsertedStories[storyId];
+    if (!delta.deletedStoryKeys.includes(storyId)) {
+      delta.deletedStoryKeys.push(storyId);
+    }
+    if (story.slug && !delta.deletedStoryKeys.includes(story.slug)) {
+      delta.deletedStoryKeys.push(story.slug);
+    }
+    writeLocalDelta(delta);
+
     if (typeof window !== 'undefined') {
       await fetch(`/api/firestore/story/${encodeURIComponent(storyId)}`, {
         method: 'DELETE',
@@ -715,17 +724,9 @@ export class StoryService {
     }
 
     for (const instance of [contentDb, db]) {
-      try {
-        await setDoc(doc(instance, 'stories', storyId), tombstone, { merge: true });
-      } catch {
-        // ignore
-      }
+      await withTimeout(setDoc(doc(instance, 'stories', storyId), tombstone, { merge: true }), 2000);
     }
-    try {
-      await deleteDoc(doc(db, 'stories', storyId));
-    } catch {
-      // ignore
-    }
+    await withTimeout(deleteDoc(doc(db, 'stories', storyId)), 2000);
 
     if (this.storiesCache) {
       this.storiesCache = this.storiesCache.filter(
@@ -737,7 +738,7 @@ export class StoryService {
   }
 
   /**
-   * Add a new category to Firestore and server sync store
+   * Add a new category to Firestore, local delta store, and server sync store
    */
   static async addCategory(input: {
     name: string;
@@ -766,6 +767,11 @@ export class StoryService {
       deleted: false,
     };
 
+    const delta = readLocalDelta();
+    delta.upsertedCategories[cleanSlug] = catDoc;
+    delta.deletedCategoryKeys = delta.deletedCategoryKeys.filter((k) => k !== cleanSlug);
+    writeLocalDelta(delta);
+
     if (typeof window !== 'undefined') {
       await fetch('/api/firestore/category', {
         method: 'POST',
@@ -775,11 +781,7 @@ export class StoryService {
     }
 
     for (const instance of [contentDb, db]) {
-      try {
-        await setDoc(doc(instance, 'categories', cleanSlug), catDoc, { merge: true });
-      } catch {
-        // ignore
-      }
+      await withTimeout(setDoc(doc(instance, 'categories', cleanSlug), catDoc, { merge: true }), 2000);
     }
 
     this.categoriesCache = null;
@@ -787,12 +789,21 @@ export class StoryService {
   }
 
   /**
-   * Delete a category from Firestore and server sync store
+   * Delete a category from Firestore, local delta store, and server sync store
    */
   static async deleteCategory(category: Category): Promise<Category[]> {
     const keysToDelete = Array.from(
       new Set([category.id, category.slug].filter(Boolean) as string[])
     );
+
+    const delta = readLocalDelta();
+    for (const key of keysToDelete) {
+      delete delta.upsertedCategories[key];
+      if (!delta.deletedCategoryKeys.includes(key)) {
+        delta.deletedCategoryKeys.push(key);
+      }
+    }
+    writeLocalDelta(delta);
 
     for (const key of keysToDelete) {
       if (typeof window !== 'undefined') {
@@ -809,17 +820,9 @@ export class StoryService {
         deleted: true,
       };
       for (const instance of [contentDb, db]) {
-        try {
-          await setDoc(doc(instance, 'categories', key), tombstone, { merge: true });
-        } catch {
-          // ignore
-        }
+        await withTimeout(setDoc(doc(instance, 'categories', key), tombstone, { merge: true }), 2000);
       }
-      try {
-        await deleteDoc(doc(db, 'categories', key));
-      } catch {
-        // ignore
-      }
+      await withTimeout(deleteDoc(doc(db, 'categories', key)), 2000);
     }
 
     this.categoriesCache = null;
@@ -872,7 +875,10 @@ export class StoryService {
     const categories = await this.getCategories(true);
 
     for (const cat of categories) {
-      await setDoc(doc(db, 'categories', cat.id || cat.slug || 'romantic'), cat, { merge: true });
+      await withTimeout(
+        setDoc(doc(db, 'categories', cat.id || cat.slug || 'romantic'), cat, { merge: true }),
+        3000
+      );
     }
 
     const batchSize = 20;
@@ -902,7 +908,7 @@ export class StoryService {
           { merge: true }
         );
       }
-      await batch.commit();
+      await withTimeout(batch.commit(), 5000);
       synced += chunk.length;
       if (onProgress) onProgress(synced, all.length);
     }

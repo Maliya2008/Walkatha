@@ -29,8 +29,6 @@ function readSyncStore(): SyncStore {
   return { stories: [], categories: [] };
 }
 
-const publicSyncFilePath = path.resolve(process.cwd(), 'public', 'api-data', 'firestore-sync.json');
-
 function stripZW(val: unknown): string {
   return String(val || '')
     .replace(/[\u200B-\u200D\uFEFF]/g, '')
@@ -43,13 +41,7 @@ function writeSyncStore(store: SyncStore): void {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
-    const serialized = JSON.stringify(store);
-    fs.writeFileSync(syncFilePath, serialized, 'utf8');
-    const pubDir = path.dirname(publicSyncFilePath);
-    if (!fs.existsSync(pubDir)) {
-      fs.mkdirSync(pubDir, { recursive: true });
-    }
-    fs.writeFileSync(publicSyncFilePath, serialized, 'utf8');
+    fs.writeFileSync(syncFilePath, JSON.stringify(store), 'utf8');
   } catch (err) {
     console.error('[Walkathawa Store Write Error]:', err);
   }

@@ -3,12 +3,7 @@ import { Story } from '../../types/story';
 import { StoryService } from '../../services/storyService';
 import { SeoService } from '../../services/seoService';
 import { StoryCard } from './StoryCard';
-import {
-  TripleInlineBanners320x50,
-  SixInlineBanners320x50,
-  DualSkyscraperInline160x600,
-  SMART_LINK_URL,
-} from '../common/AdUnits';
+import { TripleInlineBanners320x50, SMART_LINK_URL } from '../common/AdUnits';
 
 interface StoryReaderProps {
   slug: string;
@@ -118,9 +113,6 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
-      {/* Top Banner Cluster above the fold */}
-      <SixInlineBanners320x50 label="reader-top" />
-
       {/* Breadcrumb Navigation for SEO & UX */}
       <nav
         aria-label="Breadcrumb"
@@ -175,7 +167,7 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
         </div>
 
         <div className="p-5 sm:p-8">
-          <header className="pb-5 mb-5 border-b border-slate-200 dark:border-[#1e2d52]">
+          <header className="pb-5 mb-6 border-b border-slate-200 dark:border-[#1e2d52]">
             <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400 mb-2">
               <a
                 href={`/category/${encodeURIComponent(story.category || 'romantic')}`}
@@ -210,38 +202,19 @@ export const StoryReader: React.FC<StoryReaderProps> = ({
             </h1>
           </header>
 
-          {/* Pre-content inline 320x50 banners */}
-          <div className="mb-5">
-            <TripleInlineBanners320x50 label="reader-intro" />
-          </div>
-
-          {/* Complete Multi-Paragraph Story Body with inline banner strips every 2 paragraphs */}
-          <div className="space-y-5 text-base sm:text-lg leading-relaxed text-slate-800 dark:text-slate-200 select-text whitespace-pre-line">
+          {/* Complete Multi-Paragraph Story Body with ONLY one clean 3x 320x50 banner strip in the middle */}
+          <div className="space-y-4 text-base sm:text-lg leading-relaxed text-slate-800 dark:text-slate-200 select-text whitespace-pre-line">
             <h2 className="sr-only">{story.title} - සම්පූර්ණ සිංහල කතාව</h2>
-            {paragraphs.map((para, idx) => {
-              const showInlineStrip = (idx + 1) % 2 === 0 && idx < paragraphs.length - 1;
-              const isMidpoint = idx === midpoint - 1;
-
-              return (
-                <React.Fragment key={idx}>
-                  <p className="leading-[1.95] tracking-normal break-words">{para}</p>
-                  {(showInlineStrip || isMidpoint) && (
-                    <div className="my-5 py-2 border-y border-slate-100 dark:border-[#1a2747]">
-                      <TripleInlineBanners320x50 label={`reader-para-${idx + 1}`} />
-                      {isMidpoint && (
-                        <DualSkyscraperInline160x600 label="reader-midpoint-sky" />
-                      )}
-                    </div>
-                  )}
-                </React.Fragment>
-              );
-            })}
-          </div>
-
-          {/* Post-story banner cluster */}
-          <div className="mt-6 pt-4 border-t border-slate-100 dark:border-[#1a2747]">
-            <SixInlineBanners320x50 label="reader-bottom" />
-            <DualSkyscraperInline160x600 label="reader-bottom-sky" />
+            {paragraphs.map((para, idx) => (
+              <React.Fragment key={idx}>
+                <p className="leading-[1.95] tracking-normal break-words">{para}</p>
+                {idx === midpoint - 1 && (
+                  <div className="my-6 py-2 border-y border-slate-100 dark:border-[#1a2747]">
+                    <TripleInlineBanners320x50 label="reader-middle" />
+                  </div>
+                )}
+              </React.Fragment>
+            ))}
           </div>
 
           {/* Smart Link CTA */}

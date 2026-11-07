@@ -82,12 +82,67 @@ async function run() {
     categoriesMap.set(c.slug, c);
   }
 
-  // 1. Load from server-data/firestore-sync.json first
+  // Remove any _redirects file that conflicts with Cloudflare Wrangler single-page-application mode
+  const redirectsPath = path.join(publicDir, '_redirects');
+  if (fs.existsSync(redirectsPath)) {
+    try {
+      fs.unlinkSync(redirectsPath);
+    } catch {}
+  }
+
+  // 1. Load from server-data/firestore-sync.json first and generate static catalog + 2MB chunks for Cloudflare Pages
   if (fs.existsSync(syncFilePath)) {
     try {
       const syncData = JSON.parse(fs.readFileSync(syncFilePath, 'utf8'));
       const syncStories = Array.isArray(syncData.stories) ? syncData.stories : [];
       const syncCats = Array.isArray(syncData.categories) ? syncData.categories : [];
+
+      const CHUNK_SIZE = 105;
+      const apiDataDir = path.join(publicDir, 'api-data');
+      const chunksDir = path.join(apiDataDir, 'chunks');
+      fs.mkdirSync(chunksDir, { recursive: true });
+
+      const compactStories = syncStories
+        .filter((s) => !isDeleted(s))
+        .map((s, idx) => {
+          const chunkIndex = Math.floor(idx / CHUNK_SIZE);
+          const copy = {
+            ...s,
+            id: stripZeroWidth(s.id || s.slug),
+            slug: stripZeroWidth(s.slug || s.id),
+            title: stripZeroWidth(s.title || 'සිංහල වැල කතා'),
+            chunkIndex,
+          };
+          delete copy.content;
+          return copy;
+        });
+
+      const catalogStories = compactStories.map((s) => {
+        const meta = { ...s };
+        delete meta.fullContent;
+        return meta;
+      });
+
+      fs.writeFileSync(
+        path.join(apiDataDir, 'catalog.json'),
+        JSON.stringify({
+          updatedAt: syncData.updatedAt || new Date().toISOString(),
+          totalStories: catalogStories.length,
+          categories: syncCats,
+          stories: catalogStories,
+        }),
+        'utf8'
+      );
+
+      const totalChunks = Math.ceil(compactStories.length / CHUNK_SIZE);
+      for (let c = 0; c < totalChunks; c++) {
+        const slice = compactStories.slice(c * CHUNK_SIZE, (c + 1) * CHUNK_SIZE);
+        fs.writeFileSync(
+          path.join(chunksDir, `chunk-${c}.json`),
+          JSON.stringify({ chunkIndex: c, stories: slice }),
+          'utf8'
+        );
+      }
 
       for (const s of syncStories) {
         const rawSlug = stripZeroWidth(s.slug || s.id || '');

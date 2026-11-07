@@ -14,7 +14,6 @@ import { testConnection } from './firebase';
 import {
   SideBannerColumn,
   PopunderLoader,
-  StickyBottomBannerBar,
   triggerSmartLinkOnInteraction,
 } from './components/common/AdUnits';
 
@@ -252,7 +251,7 @@ export function App() {
     );
   }
 
-  const sideBannerCount = viewMode === 'home' || viewMode === 'reader' ? 5 : 3;
+  const sideBannerCount = viewMode === 'home' ? 5 : 3;
 
   return (
     <div className="min-h-screen flex flex-col bg-[#f8fafc] dark:bg-[#090e1d] text-[#0f172a] dark:text-slate-100 transition-colors duration-200">
@@ -338,8 +337,6 @@ export function App() {
         onSelectCategory={handleSelectCategory}
         onNavigateStatic={(page) => navigateTo(`/${page}`)}
       />
-
-      <StickyBottomBannerBar />
     </div>
   );
 }

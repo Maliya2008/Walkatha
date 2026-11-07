@@ -47,10 +47,20 @@ export const replicaApp = getApps().some((a) => a.name === 'content-replica')
 
 export let analytics: ReturnType<typeof getAnalytics> | null = null;
 if (typeof window !== 'undefined') {
+  (window as any).dataLayer = Array.isArray((window as any).dataLayer)
+    ? (window as any).dataLayer
+    : [];
   isSupported()
     .then((supported) => {
       if (supported) {
-        analytics = getAnalytics(app);
+        (window as any).dataLayer = Array.isArray((window as any).dataLayer)
+          ? (window as any).dataLayer
+          : [];
+        try {
+          analytics = getAnalytics(app);
+        } catch {
+          // Ignore analytics initialization errors in restricted environments
+        }
       }
     })
     .catch(() => {

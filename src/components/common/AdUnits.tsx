@@ -89,18 +89,18 @@ export function resetAdNetworkState(): void {
     for (const key of Object.keys(window)) {
       if (
         !baselineWindowKeys.has(key) &&
-        !/^(React|__vite|firebase|google|atOptions|webpack|on|webkit|moz|chrome)/i.test(key)
+        /^(pop|pndr|_pop|__pop|ahura|brij|ad_|ads_|click_|pu_)/i.test(key) &&
+        !/^(dataLayer|gtag|gaData|google|firebase|React|__vite|atOptions)/i.test(key)
       ) {
         try {
           delete (window as any)[key];
         } catch {
-          try {
-            (window as any)[key] = undefined;
-          } catch {
-            // ignore non-configurable globals
-          }
+          // ignore non-configurable globals
         }
       }
+    }
+    if (!Array.isArray((window as any).dataLayer)) {
+      (window as any).dataLayer = [];
     }
   } catch {
     // ignore

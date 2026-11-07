@@ -1,6 +1,10 @@
 import React from 'react';
 import { Category } from '../../types/story';
-import { TripleInlineBanners320x50, SMART_LINK_URL } from '../common/AdUnits';
+import {
+  SixInlineBanners320x50,
+  DualSkyscraperInline160x600,
+  SMART_LINK_URL,
+} from '../common/AdUnits';
 
 interface FooterProps {
   categories: Category[];
@@ -12,8 +16,9 @@ export const Footer: React.FC<FooterProps> = ({ onNavigateStatic }) => {
   return (
     <footer className="bg-white dark:bg-[#0b1224] border-t border-slate-200 dark:border-[#1c2b4f] mt-12 transition-colors">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-6">
-        {/* Three 320x50 Banners in Footer */}
-        <TripleInlineBanners320x50 label="footer" />
+        {/* High-Impression Footer Banner Cluster */}
+        <SixInlineBanners320x50 label="footer" />
+        <DualSkyscraperInline160x600 label="footer-sky" />
 
         <div className="text-xs text-slate-600 dark:text-slate-400">
           <div>

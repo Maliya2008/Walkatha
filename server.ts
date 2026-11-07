@@ -29,13 +29,27 @@ function readSyncStore(): SyncStore {
   return { stories: [], categories: [] };
 }
 
+const publicSyncFilePath = path.resolve(process.cwd(), 'public', 'api-data', 'firestore-sync.json');
+
+function stripZW(val: unknown): string {
+  return String(val || '')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .trim();
+}
+
 function writeSyncStore(store: SyncStore): void {
   try {
     const dir = path.dirname(syncFilePath);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
-    fs.writeFileSync(syncFilePath, JSON.stringify(store), 'utf8');
+    const serialized = JSON.stringify(store);
+    fs.writeFileSync(syncFilePath, serialized, 'utf8');
+    const pubDir = path.dirname(publicSyncFilePath);
+    if (!fs.existsSync(pubDir)) {
+      fs.mkdirSync(pubDir, { recursive: true });
+    }
+    fs.writeFileSync(publicSyncFilePath, serialized, 'utf8');
   } catch (err) {
     console.error('[Walkathawa Store Write Error]:', err);
   }
@@ -87,16 +101,16 @@ async function startServer() {
   });
 
   app.get('/api/firestore/story/:slug', (req, res) => {
-    const slug = decodeURIComponent(req.params.slug || '').trim().toLowerCase();
+    const slug = stripZW(decodeURIComponent(req.params.slug || '')).toLowerCase();
     const store = readSyncStore();
     const found = store.stories.find(
       (s) =>
         !s.isDeleted &&
         !s.deleted &&
         s.published !== false &&
-        (String(s.slug || '').toLowerCase() === slug ||
-          String(s.id || '').toLowerCase() === slug ||
-          decodeURIComponent(String(s.slug || '')).toLowerCase() === slug)
+        (stripZW(s.slug).toLowerCase() === slug ||
+          stripZW(s.id).toLowerCase() === slug ||
+          stripZW(decodeURIComponent(String(s.slug || ''))).toLowerCase() === slug)
     );
     if (!found) {
       return res.status(404).json({ error: 'Story not found' });

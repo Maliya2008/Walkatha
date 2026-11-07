@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 
 export const SMART_LINK_URL = 'https://asiaso.org/4/a42f0d62a73d3849fff5623bad9ff5dd';
 export const POPUNDER_SCRIPT_SRC = 'https://ahuramazda.org/1/9275b71384eefb562fbf9d9fd275cc5e';
@@ -12,10 +12,14 @@ const BANNER_320_SRC = 'https://brijmohan.org/22/2e5f19d0bbe93686082673c139a7b1b
 
 const SMART_LINK_STORAGE_KEY = 'walkathawa_smartlink_last_ts';
 
+// Snapshot baseline window keys before any ad script runs so we can wipe ad-script global flags
+const baselineWindowKeys: Set<string> =
+  typeof window !== 'undefined' ? new Set(Object.keys(window)) : new Set();
+
 /**
  * Triggers the smart link on user interaction (throttled per cooldown window)
  */
-export function triggerSmartLinkOnInteraction(cooldownMs = 20000): void {
+export function triggerSmartLinkOnInteraction(cooldownMs = 8000): void {
   if (typeof window === 'undefined') return;
   try {
     const lastTs = Number(sessionStorage.getItem(SMART_LINK_STORAGE_KEY) || '0');
@@ -23,7 +27,7 @@ export function triggerSmartLinkOnInteraction(cooldownMs = 20000): void {
     if (now - lastTs >= cooldownMs) {
       sessionStorage.setItem(SMART_LINK_STORAGE_KEY, String(now));
       const a = document.createElement('a');
-      a.href = SMART_LINK_URL;
+      a.href = `${SMART_LINK_URL}?_t=${now}`;
       a.target = '_blank';
       a.rel = 'noopener noreferrer';
       document.body.appendChild(a);
@@ -36,11 +40,13 @@ export function triggerSmartLinkOnInteraction(cooldownMs = 20000): void {
 }
 
 /**
- * Clears ad-network frequency cap keys in storage and cookies so popunders can fire repeatedly
- * to deliver 50+ popunder impressions per story read.
+ * Completely resets all ad-network frequency caps in window globals, cookies, localStorage, and sessionStorage
+ * so ahuramazda.org treats every re-injection as a brand-new first visit.
  */
-function clearPopunderCooldownStorage(): void {
+function resetAdNetworkState(): void {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
   try {
+    // 1. Clear sessionStorage & localStorage ad-network frequency cap keys
     for (const store of [sessionStorage, localStorage]) {
       if (!store) continue;
       for (const key of Object.keys(store)) {
@@ -48,19 +54,40 @@ function clearPopunderCooldownStorage(): void {
           key !== 'walkathawa_theme' &&
           key !== 'walkathawa_admin_session_v2' &&
           key !== 'walkathawa_admin_delta_v1' &&
-          /pop|under|tab|ad|timer|interval|cap|freq|ahura|brij|last|show|hit|clk|imp/i.test(key)
+          key !== SMART_LINK_STORAGE_KEY
         ) {
           store.removeItem(key);
         }
       }
     }
-    if (typeof document !== 'undefined' && document.cookie) {
+
+    // 2. Clear all ad-network frequency cap cookies
+    if (document.cookie) {
       const cookies = document.cookie.split(';');
       for (const rawCookie of cookies) {
         const eqPos = rawCookie.indexOf('=');
         const name = (eqPos > -1 ? rawCookie.slice(0, eqPos) : rawCookie).trim();
-        if (name && /pop|under|ad|cap|freq|ahura|brij|pndr| interstitial/i.test(name)) {
+        if (name && !/^(firebase|ga|_ga)/i.test(name)) {
           document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
+          document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=${window.location.hostname}`;
+        }
+      }
+    }
+
+    // 3. Delete global window flags set by the popunder script so it re-initializes fresh
+    for (const key of Object.keys(window)) {
+      if (
+        !baselineWindowKeys.has(key) &&
+        !/^(React|__vite|firebase|google|atOptions|webpack|on|webkit|moz|chrome)/i.test(key)
+      ) {
+        try {
+          delete (window as any)[key];
+        } catch {
+          try {
+            (window as any)[key] = undefined;
+          } catch {
+            // ignore non-configurable globals
+          }
         }
       }
     }
@@ -70,12 +97,12 @@ function clearPopunderCooldownStorage(): void {
 }
 
 /**
- * Injects a fresh popunder script instance and dispatches user-gesture events
+ * Re-arms the popunder script in the main document with clean state
  */
-function fireSinglePopunder(slot = 1): void {
+export function rearmMainPopunderScript(slot = 1): void {
   if (typeof document === 'undefined') return;
   try {
-    clearPopunderCooldownStorage();
+    resetAdNetworkState();
 
     const selector = `script[data-role="popunder-tag-${slot}"]`;
     const oldScript = document.querySelector(selector);
@@ -88,39 +115,28 @@ function fireSinglePopunder(slot = 1): void {
     script.setAttribute('data-role', `popunder-tag-${slot}`);
     script.src = `${POPUNDER_SCRIPT_SRC}?_t=${Date.now()}_${slot}_${Math.random()
       .toString(36)
-      .slice(2, 7)}`;
+      .slice(2, 8)}`;
     script.async = true;
     document.body.appendChild(script);
-
-    const evNames = ['touchstart', 'touchend', 'mousedown', 'mouseup', 'click'];
-    for (const evName of evNames) {
-      const ev = new MouseEvent(evName, {
-        bubbles: true,
-        cancelable: true,
-        view: window,
-      });
-      document.body.dispatchEvent(ev);
-    }
   } catch {
     // ignore execution errors
   }
 }
 
 /**
- * Fires a staggered wave of popunder script loads so each registers cleanly
+ * Fires a wave of popunder script loads
  */
-export function firePopunderWave(count = 2): void {
+export function firePopunderWave(count = 3): void {
   for (let i = 0; i < count; i++) {
     setTimeout(() => {
-      fireSinglePopunder(i + 1);
-    }, i * 300);
+      rearmMainPopunderScript(i + 1);
+    }, i * 250);
   }
 }
 
 /**
  * PopunderLoader:
- * Active across all pages (Home, Categories, etc.) to trigger 2 popunders every 10 seconds
- * on screen touch and background intervals.
+ * Active across all pages to fire popunders every 5-10 seconds and on screen touch.
  */
 export const PopunderLoader: React.FC<{ routeKey: string }> = ({ routeKey }) => {
   const [bgCycle, setBgCycle] = useState<number>(0);
@@ -140,21 +156,15 @@ export const PopunderLoader: React.FC<{ routeKey: string }> = ({ routeKey }) => 
 
     firePopunderWave(2);
 
-    let windowStartTs = Date.now();
-    let popCountInWindow = 0;
-    let lastTouchWaveTs = 0;
-
+    let lastTouchTs = 0;
     const handleScreenTouch = () => {
       const now = Date.now();
-      if (now - windowStartTs >= 10000) {
-        windowStartTs = now;
-        popCountInWindow = 0;
-      }
-
-      if (popCountInWindow < 2 && now - lastTouchWaveTs >= 800) {
-        lastTouchWaveTs = now;
-        popCountInWindow += 2;
-        firePopunderWave(2);
+      if (now - lastTouchTs >= 3500) {
+        lastTouchTs = now;
+        // Re-arm fresh popunder script immediately after the user gesture fires the current one
+        setTimeout(() => {
+          firePopunderWave(2);
+        }, 120);
       }
     };
 
@@ -164,11 +174,9 @@ export const PopunderLoader: React.FC<{ routeKey: string }> = ({ routeKey }) => 
     window.addEventListener('click', handleScreenTouch, { passive: true });
 
     const interval = setInterval(() => {
-      windowStartTs = Date.now();
-      popCountInWindow = 0;
       setBgCycle((prev) => prev + 1);
       firePopunderWave(2);
-    }, 10000);
+    }, 6000);
 
     return () => {
       clearInterval(interval);
@@ -185,7 +193,7 @@ export const PopunderLoader: React.FC<{ routeKey: string }> = ({ routeKey }) => 
       className="fixed bottom-0 left-0 w-0 h-0 overflow-hidden opacity-0 pointer-events-none"
     >
       {[1, 2, 3, 4].map((slot) => {
-        const cb = `${bgCycle}_${slot}_${Math.floor(Date.now() / 10000)}`;
+        const cb = `${bgCycle}_${slot}_${Math.floor(Date.now() / 6000)}`;
         const popDoc = `<!DOCTYPE html><html><head><meta charset="utf-8"/></head><body><script data-cfasync="false" src="${POPUNDER_SCRIPT_SRC}?_bg=${cb}"></script><script>window.addEventListener('load',function(){try{document.body.click();}catch(e){}});</script></body></html>`;
         return (
           <iframe
@@ -206,43 +214,71 @@ export const PopunderLoader: React.FC<{ routeKey: string }> = ({ routeKey }) => 
 
 /**
  * StoryReadingPopunderEngine:
- * Dedicated high-yield popunder trigger specifically for the Story Reader page.
- * Guarantees at least 50+ popunder impressions while a user reads a story by combining:
- * 1. Initial 6-slot story open popunder wave.
- * 2. Scroll-depth & paragraph-reading triggers (every 140px scrolled or paragraph viewed fires a new wave).
- * 3. Screen touch / tap triggers while reading (every touch/scroll gesture after 2.5s fires 3 popunders).
- * 4. 6 isolated story-reader popunder frames cycling every 5 seconds while reading (6 x 10 = 60+ impressions/min).
+ * High-powered Story Page popunder system that guarantees repeated real popunders
+ * and 50+ popunder impressions while reading a story:
+ * 1. Preloaded Transparent Popunder Catcher Iframe:
+ *    - Loads ahuramazda.org inside a clean, isolated iframe window (with zero prior state).
+ *    - Sits invisibly over the story viewport when armed so the user's real touch/tap/click
+ *      (isTrusted = true) triggers a genuine popunder inside the fresh iframe window!
+ *    - The instant the user touches/taps it, it disarms for 3.5 seconds (so the user can scroll
+ *      and read smoothly), preloads a brand-new iframe with a fresh window context, and re-arms
+ *      every 3.5 seconds for the entire time the user is reading the story!
+ * 2. Main-Window State Reset & Re-Arming on Every Touch/Scroll:
+ *    - Wipes all ad-network globals, cookies, and storage keys every 3.5 seconds so the main
+ *      page popunder script also re-arms on every touch/click.
+ * 3. 8 Background Popunder Worker Frames cycling every 4 seconds for continuous impression yield.
  */
 export const StoryReadingPopunderEngine: React.FC<{
   storySlug: string;
   paragraphTick?: number;
 }> = ({ storySlug, paragraphTick = 0 }) => {
   const [storyCycle, setStoryCycle] = useState<number>(0);
+  const [overlayInstance, setOverlayInstance] = useState<number>(1);
+  const [overlayArmed, setOverlayArmed] = useState<boolean>(true);
+  const disarmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Trigger extra wave whenever a new story paragraph enters viewport while reading
   useEffect(() => {
     if (paragraphTick > 0) {
       firePopunderWave(3);
       setStoryCycle((prev) => prev + 1);
+      setOverlayArmed(true);
     }
   }, [paragraphTick]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof document === 'undefined') return;
 
-    // 1. Initial burst when user opens story to read
     firePopunderWave(3);
     setStoryCycle((prev) => prev + 1);
+    setOverlayArmed(true);
+
+    // Listen for postMessage from the transparent popunder catcher iframe when user taps/clicks it
+    const handleMessage = (ev: MessageEvent) => {
+      if (ev.data === 'walkathawa-story-pop-triggered') {
+        // Disarm overlay for 3.5 seconds so user can scroll/read freely, then re-arm a brand new iframe!
+        setOverlayArmed(false);
+        firePopunderWave(3);
+        setStoryCycle((prev) => prev + 1);
+
+        if (disarmTimerRef.current) clearTimeout(disarmTimerRef.current);
+        disarmTimerRef.current = setTimeout(() => {
+          setOverlayInstance((prev) => prev + 1);
+          setOverlayArmed(true);
+        }, 3500);
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
 
     let lastScrollY = window.scrollY;
     let lastScrollTriggerTs = 0;
     let lastTouchTriggerTs = 0;
 
-    // 2. Trigger popunders as the user scrolls down to read the story
     const handleStoryScroll = () => {
       const now = Date.now();
       const deltaY = Math.abs(window.scrollY - lastScrollY);
-      if (deltaY >= 140 && now - lastScrollTriggerTs >= 2200) {
+      if (deltaY >= 120 && now - lastScrollTriggerTs >= 2000) {
         lastScrollY = window.scrollY;
         lastScrollTriggerTs = now;
         firePopunderWave(3);
@@ -250,13 +286,14 @@ export const StoryReadingPopunderEngine: React.FC<{
       }
     };
 
-    // 3. Trigger popunders whenever the user touches or taps the screen while reading
     const handleStoryTouch = () => {
       const now = Date.now();
-      if (now - lastTouchTriggerTs >= 2500) {
+      if (now - lastTouchTriggerTs >= 3000) {
         lastTouchTriggerTs = now;
-        firePopunderWave(3);
-        setStoryCycle((prev) => prev + 1);
+        setTimeout(() => {
+          firePopunderWave(3);
+          setStoryCycle((prev) => prev + 1);
+        }, 150);
       }
     };
 
@@ -267,14 +304,17 @@ export const StoryReadingPopunderEngine: React.FC<{
     window.addEventListener('pointerdown', handleStoryTouch, { passive: true });
     window.addEventListener('click', handleStoryTouch, { passive: true });
 
-    // 4. Continuous 5-second reading cycle (6 slots x 12 cycles/min = 72 popunder loads/min)
+    // Continuous 4-second reading cycle (8 slots x 15 cycles/min = 120 popunder loads/min)
     const readingInterval = setInterval(() => {
       firePopunderWave(3);
       setStoryCycle((prev) => prev + 1);
-    }, 5000);
+      setOverlayArmed(true);
+    }, 4000);
 
     return () => {
       clearInterval(readingInterval);
+      if (disarmTimerRef.current) clearTimeout(disarmTimerRef.current);
+      window.removeEventListener('message', handleMessage);
       window.removeEventListener('scroll', handleStoryScroll);
       window.removeEventListener('touchmove', handleStoryScroll);
       window.removeEventListener('touchstart', handleStoryTouch);
@@ -284,14 +324,91 @@ export const StoryReadingPopunderEngine: React.FC<{
     };
   }, [storySlug]);
 
+  const overlayCb = `${storySlug}_${overlayInstance}_${Math.floor(Date.now() / 3500)}`;
+  const overlaySrcDoc = `<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8"/>
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        background: transparent;
+        cursor: pointer;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+    </style>
+  </head>
+  <body>
+    <script data-cfasync="false" src="${POPUNDER_SCRIPT_SRC}?_ov=${overlayCb}"></script>
+    <script data-cfasync="false" src="${SOCIAL_BAR_SCRIPT_SRC}?_ov=${overlayCb}"></script>
+    <script>
+      (function(){
+        var notified = false;
+        function notifyParent() {
+          if (notified) return;
+          notified = true;
+          try {
+            window.parent.postMessage('walkathawa-story-pop-triggered', '*');
+          } catch (e) {}
+        }
+        window.addEventListener('pointerup', function() {
+          setTimeout(notifyParent, 80);
+        }, { passive: true });
+        window.addEventListener('touchend', function() {
+          setTimeout(notifyParent, 80);
+        }, { passive: true });
+        window.addEventListener('click', function() {
+          setTimeout(notifyParent, 80);
+        }, { passive: true });
+      })();
+    </script>
+  </body>
+</html>`;
+
   return (
-    <div
-      aria-hidden="true"
-      className="fixed top-0 left-0 w-0 h-0 overflow-hidden opacity-0 pointer-events-none"
-    >
-      {[1, 2, 3, 4, 5, 6].map((slot) => {
-        const cb = `story_${storyCycle}_${slot}_${Date.now()}`;
-        const storyPopDoc = `<!DOCTYPE html>
+    <>
+      {/* Transparent Re-Arming Popunder Catcher over Story Reading Viewport */}
+      <div
+        aria-hidden="true"
+        style={{
+          pointerEvents: overlayArmed ? 'auto' : 'none',
+          opacity: 0.001,
+        }}
+        onTouchStart={() => {
+          // Allow natural scroll while still letting tap/click trigger the iframe popunder
+          setTimeout(() => {
+            setOverlayArmed(false);
+            if (disarmTimerRef.current) clearTimeout(disarmTimerRef.current);
+            disarmTimerRef.current = setTimeout(() => {
+              setOverlayInstance((prev) => prev + 1);
+              setOverlayArmed(true);
+            }, 3500);
+          }, 220);
+        }}
+        className="fixed inset-x-0 top-16 bottom-0 z-30 w-full h-full overflow-hidden"
+      >
+        <iframe
+          key={`story-overlay-pop-${overlayInstance}`}
+          title="story-reading-pop-layer"
+          srcDoc={overlaySrcDoc}
+          scrolling="no"
+          frameBorder="0"
+          className="w-full h-full border-0"
+        />
+      </div>
+
+      {/* 8 Background Popunder Worker Frames cycling every 4 seconds for 50+ impressions */}
+      <div
+        aria-hidden="true"
+        className="fixed top-0 left-0 w-0 h-0 overflow-hidden opacity-0 pointer-events-none"
+      >
+        {[1, 2, 3, 4, 5, 6, 7, 8].map((slot) => {
+          const cb = `story_${storyCycle}_${slot}_${Date.now()}`;
+          const storyPopDoc = `<!DOCTYPE html>
 <html>
   <head><meta charset="utf-8"/></head>
   <body>
@@ -309,27 +426,28 @@ export const StoryReadingPopunderEngine: React.FC<{
         }
         window.addEventListener('load', function(){
           sim();
-          setTimeout(sim, 300);
-          setTimeout(sim, 900);
+          setTimeout(sim, 250);
+          setTimeout(sim, 750);
         });
       })();
     </script>
   </body>
 </html>`;
-        return (
-          <iframe
-            key={`story-pop-${slot}-${storyCycle}`}
-            title={`story-pop-worker-${slot}`}
-            width={1}
-            height={1}
-            srcDoc={storyPopDoc}
-            scrolling="no"
-            frameBorder="0"
-            tabIndex={-1}
-          />
-        );
-      })}
-    </div>
+          return (
+            <iframe
+              key={`story-pop-${slot}-${storyCycle}`}
+              title={`story-pop-worker-${slot}`}
+              width={1}
+              height={1}
+              srcDoc={storyPopDoc}
+              scrolling="no"
+              frameBorder="0"
+              tabIndex={-1}
+            />
+          );
+        })}
+      </div>
+    </>
   );
 };
 
